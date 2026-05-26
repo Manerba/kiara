@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kiara-db"
+version = "0.0.1"
+description = "KIara DB — Repository-Layer und Connection-Management"
+license = "AGPL-3.0-or-later"
+requires-python = ">=3.10"
+dependencies = [
+    "psycopg2-binary",
+]

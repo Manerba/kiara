@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csp-nonce" content="{{ csp_nonce }}">
+    <title>KIara - Anmeldung</title>
+    <link rel="stylesheet" href="/static/ui_core/css/tokens.css">
+    <link rel="stylesheet" href="/static/ui_core/css/theme.css">
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/login.css">
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-title">KIara</div>
+        <div class="login-subtitle">Bitte anmelden</div>
+
+        <div class="login-error" id="loginError"></div>
+
+        <form id="loginForm">
+            <div class="login-field">
+                <label for="loginUsername">Benutzername</label>
+                <input type="text" id="loginUsername" name="username" autocomplete="username" autofocus>
+            </div>
+
+            <div class="login-field">
+                <label for="loginPassword">Passwort</label>
+                <input type="password" id="loginPassword" name="password" autocomplete="current-password">
+            </div>
+
+            <button class="login-btn" id="loginBtn" type="button">Anmelden</button>
+        </form>
+    </div>
+
+    <script nonce="{{ csp_nonce }}">
+        let _raw = null;
+        try { _raw = localStorage.getItem('kiara-theme'); } catch (e) { _raw = null; }
+        const savedTheme = ['light','dark','kontrast'].includes(_raw) ? _raw : 'light';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+
+        const usernameInput = document.getElementById('loginUsername');
+        const passwordInput = document.getElementById('loginPassword');
+        const loginBtn = document.getElementById('loginBtn');
+        const errorDiv = document.getElementById('loginError');
+
+        usernameInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') passwordInput.focus();
+        });
+
+        passwordInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') doLogin();
+        });
+
+        loginBtn.addEventListener('click', doLogin);
+
+        async function doLogin() {
+            const username = usernameInput.value.trim();
+            const password = passwordInput.value;
+
+            if (!username || !password) {
+                showError('Bitte Benutzername und Passwort eingeben.');
+                return;
+            }
+
+            loginBtn.disabled = true;
+            loginBtn.textContent = 'Anmeldung...';
+            errorDiv.style.display = 'none';
+
+            try {
+                const resp = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                    body: JSON.stringify({ username, password }),
+                });
+
+                if (!resp.ok) {
+                    const data = await resp.json().catch(() => ({}));
+                    if (resp.status === 429) {
+                        const retryAfter = parseInt(resp.headers.get('Retry-After') || '10', 10);
+                        startCountdown(retryAfter, data.detail || 'Zu viele Fehlversuche.');
+                        return;
+                    }
+                    throw new Error(data.detail || 'Anmeldung fehlgeschlagen');
+                }
+
+                const result = await resp.json();
+                if (result.csrf_token && window.SharedUi && window.SharedUi._config) {
+                    window.SharedUi._config().csrfTokenValue = result.csrf_token;
+                }
+
+                if (result.user && result.user.is_admin) {
+                    // Admin-Konten duerfen die User-UI nicht nutzen — Session hart abdrehen.
+                    const logoutHeaders = window.SharedUi && window.SharedUi.fetch && window.SharedUi.fetch.csrfHeaders
+                        ? window.SharedUi.fetch.csrfHeaders()
+                        : { 'X-Requested-With': 'XMLHttpRequest' };
+                    if (result.csrf_token) {
+                        logoutHeaders['X-CSRF-Token'] = result.csrf_token;
+                    }
+                    await fetch('/api/auth/logout', { method: 'POST', headers: logoutHeaders });
+                    throw new Error('Anmeldung fehlgeschlagen');
+                }
+
+                window.location.href = '/chat';
+            } catch (error) {
+                showError(error.message);
+                loginBtn.disabled = false;
+                loginBtn.textContent = 'Anmelden';
+            }
+        }
+
+        function startCountdown(seconds, msg) {
+            loginBtn.disabled = true;
+            usernameInput.disabled = true;
+            passwordInput.disabled = true;
+            showError(msg);
+            let remaining = seconds;
+            loginBtn.textContent = `Gesperrt (${remaining}s)`;
+            const iv = setInterval(() => {
+                remaining--;
+                if (remaining <= 0) {
+                    clearInterval(iv);
+                    loginBtn.disabled = false;
+                    usernameInput.disabled = false;
+                    passwordInput.disabled = false;
+                    loginBtn.textContent = 'Anmelden';
+                    errorDiv.style.display = 'none';
+                } else {
+                    loginBtn.textContent = `Gesperrt (${remaining}s)`;
+                }
+            }, 1000);
+        }
+
+        function showError(msg) {
+            errorDiv.textContent = msg;
+            errorDiv.style.display = 'block';
+        }
+    </script>
+    <script src="/static/ui_core/js/core.js"></script>
+    <script src="/static/ui_core/js/theme.js"></script>
+    <script src="/static/ui_core/js/fetch.js"></script>
+    <script src="/static/js/kiara_bootstrap.js"></script>
+</body>
+</html>

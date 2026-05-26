@@ -1,0 +1,518 @@
+{% extends "base.html" %}
+
+{% block title %}KIara Wiki — Guide: Tools &amp; Integrationen{% endblock %}
+
+{% block breadcrumb %}
+<a href="/wiki/">Wiki</a> &rsaquo; <span>Guide: Tools &amp; Integrationen</span>
+{% endblock %}
+
+{% block content %}
+<h1>Tools &amp; Integrationen</h1>
+
+<p class="wiki-intro">
+    Der Tools-Tab verbindet KIara mit externen Systemen: ERP-Datenbanken, MCP-Clients
+    (VS Code, Cursor, Claude Desktop), Dokumenten-Workflows und OnlyOffice. Er ist in
+    4 Sub-Tabs gegliedert.
+</p>
+
+<nav class="wiki-toc">
+    <h3>Inhalt</h3>
+    <ol>
+        <li><a href="#erp">ERP-Tools</a>
+            <ol>
+                <li><a href="#erp-connections">Verbindungen</a></li>
+                <li><a href="#erp-tools">Registrierte Tools</a></li>
+                <li><a href="#erp-permissions">Berechtigungen</a></li>
+                <li><a href="#erp-legacy">Legacy-Konfiguration</a></li>
+            </ol>
+        </li>
+        <li><a href="#mcp">MCP / API-Keys</a>
+            <ol>
+                <li><a href="#mcp-server">MCP-Server Status</a></li>
+                <li><a href="#mcp-keys">API-Keys</a></li>
+                <li><a href="#mcp-config">Client-Konfiguration</a></li>
+            </ol>
+        </li>
+        <li><a href="#workflows">Workflows</a></li>
+        <li><a href="#onlyoffice">OnlyOffice</a></li>
+        <li><a href="#api-endpoints">API-Endpunkte</a> (Verweis auf API-Katalog)</li>
+    </ol>
+</nav>
+
+<!-- ============================= -->
+<!-- ERP-TOOLS                     -->
+<!-- ============================= -->
+<h2 id="erp">Sub-Tab: ERP-Tools</h2>
+
+<p>
+    ERP-Tools ermöglichen dem LLM, das ERP-System live abzufragen (Auftragsstatus,
+    Lagerbestände, Kundeninfo, Fertigungsstatus). Der Sub-Tab hat drei Bereiche:
+    Verbindungen, registrierte Tools und Berechtigungen.
+</p>
+
+<!-- --- Connections --- -->
+<h3 id="erp-connections">Verbindungen</h3>
+
+<p>
+    ERP-Verbindungen definieren, wie KIara auf die ERP-Datenbank zugreift. Mehrere
+    Verbindungen können parallel konfiguriert werden (z.B. Produktion und Test).
+</p>
+
+<h4>Verbindungs-Tabelle</h4>
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Spalte</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr><td><strong>Name</strong></td><td>Frei wählbarer Anzeigename (z.B. &raquo;Odoo Produktion&laquo;).</td></tr>
+        <tr><td><strong>Typ</strong></td><td>Konnektor-Typ (z.B. Odoo, SQL).</td></tr>
+        <tr><td><strong>URL / Host</strong></td><td>Verbindungsziel (maskiert wenn Passwort-Feld).</td></tr>
+        <tr><td><strong>Status</strong></td><td>Letzter Test: &raquo;OK&laquo; (grün), &raquo;Fehler&laquo; (rot), &raquo;Nicht getestet&laquo;.</td></tr>
+        <tr><td><strong>Aktionen</strong></td><td>Test, Bearbeiten, Löschen.</td></tr>
+    </tbody>
+</table>
+
+<h4>Verbindung erstellen / bearbeiten</h4>
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Feld</th><th>Typ</th><th>Pflicht</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>Name</code></td>
+            <td>Text</td>
+            <td>Ja</td>
+            <td>Anzeigename für die Verbindung.</td>
+        </tr>
+        <tr>
+            <td><code>Typ</code></td>
+            <td>Dropdown</td>
+            <td>Ja</td>
+            <td>Konnektor-Typ — wird dynamisch aus der Connection-Registry geladen.</td>
+        </tr>
+        <tr>
+            <td><em>Typ-spezifische Felder</em></td>
+            <td>variabel</td>
+            <td>variabel</td>
+            <td>
+                Werden dynamisch anhand des gewählten Typs generiert.
+                Typische Felder: URL, API-Key, Benutzername, Passwort, Datenbank.
+                Passwort-Felder werden verschlüsselt gespeichert.
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box">
+    <strong>Tipp:</strong> Immer zuerst &raquo;Verbindung testen&laquo; klicken,
+    bevor gespeichert wird. Der Test erstellt eine temporäre Verbindung, prüft
+    die Erreichbarkeit und entfernt sie wieder — unabhängig von der gespeicherten Config.
+</div>
+
+<!-- --- Tools --- -->
+<h3 id="erp-tools">Registrierte Tools</h3>
+
+<p>
+    Zeigt alle im System registrierten Tools. Jedes ERP-Tool kann einer
+    bestimmten Verbindung zugewiesen werden.
+</p>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Spalte</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr><td><strong>Name</strong></td><td>Technischer Toolname (z.B. <code>erp_order_status</code>).</td></tr>
+        <tr><td><strong>Beschreibung</strong></td><td>Was das Tool macht.</td></tr>
+        <tr><td><strong>Typ</strong></td><td>Badge: <em>Builtin</em> (Systemtools) oder <em>ERP</em> (ERP-spezifisch).</td></tr>
+        <tr><td><strong>Bestätigung</strong></td><td>Ob das Tool eine Bestätigung vom Benutzer erfordert.</td></tr>
+        <tr><td><strong>ERP-Quelle</strong></td><td>
+            Dropdown zur Zuweisung einer Verbindung. <code>Standard-Backend</code> = globale Config.
+            Nur für nicht-Builtin-Tools verfügbar.
+        </td></tr>
+    </tbody>
+</table>
+
+<h4>Verfügbare Tools</h4>
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Tool</th><th>Kategorie</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr><td><code>search_documents</code></td><td>Builtin</td><td>Dokumentensuche in der Wissensbasis.</td></tr>
+        <tr><td><code>calculate</code></td><td>Builtin</td><td>Mathematische Berechnungen.</td></tr>
+        <tr><td><code>erp_order_status</code></td><td>ERP</td><td>Auftragsstatus im ERP abfragen.</td></tr>
+        <tr><td><code>erp_stock_level</code></td><td>ERP</td><td>Lagerbestand prüfen.</td></tr>
+        <tr><td><code>erp_customer_info</code></td><td>ERP</td><td>Kundeninformationen abrufen.</td></tr>
+        <tr><td><code>erp_production_status</code></td><td>ERP</td><td>Fertigungsauftragsstatus prüfen.</td></tr>
+        <tr><td><code>generate_status_mail</code></td><td>Action</td><td>Status-Mail generieren.</td></tr>
+        <tr><td><code>generate_checklist</code></td><td>Action</td><td>Checkliste erstellen.</td></tr>
+        <tr><td><code>summarize_document</code></td><td>Workflow</td><td>Dokument zusammenfassen.</td></tr>
+        <tr><td><code>generate_from_template</code></td><td>Workflow</td><td>Aus Jinja2-Template generieren.</td></tr>
+        <tr><td><code>export_document</code></td><td>Workflow</td><td>Dokument als DOCX/PDF exportieren.</td></tr>
+    </tbody>
+</table>
+
+<!-- --- Permissions --- -->
+<h3 id="erp-permissions">Berechtigungen</h3>
+
+<p>
+    Die Berechtigungsmatrix steuert, welche LDAP-Gruppen welche ERP-Tools nutzen dürfen.
+    Builtin-Tools (search_documents, calculate) stehen allen Benutzern zur Verfügung
+    und erscheinen nicht in der Matrix.
+</p>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Achse</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr><td><strong>Zeilen</strong></td><td>LDAP-Gruppen (importiert über Benutzerverwaltung).</td></tr>
+        <tr><td><strong>Spalten</strong></td><td>ERP-Tools (alle nicht-Builtin-Tools).</td></tr>
+        <tr><td><strong>Zellen</strong></td><td>Checkboxes: Haken = Gruppe darf das Tool nutzen.</td></tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box">
+    <strong>Tipp:</strong> Ohne konfigurierte Berechtigungen haben alle Benutzer Zugriff auf
+    alle Tools. Sobald mindestens eine Gruppe einem Tool zugewiesen ist, wird die
+    Berechtigung für dieses Tool erzwungen — nur Mitglieder der zugewiesenen Gruppen
+    können es nutzen.
+</div>
+
+<!-- --- Legacy --- -->
+<h3 id="erp-legacy">Legacy ERP-Backend-Konfiguration</h3>
+
+<p>
+    Ausgeklappt unter &raquo;Erweitert&laquo; — für direkte SQL-Verbindungen ohne das
+    Connection-Registry-System. Wird durch das moderne Verbindungssystem ersetzt,
+    bleibt aber als Fallback verfügbar.
+</p>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Feld</th><th>Typ</th><th>Standard</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>Backend</code></td>
+            <td>Dropdown</td>
+            <td><code>mock</code></td>
+            <td><code>mock</code> = Testdaten (Entwicklung), <code>sql</code> = Live-Datenbank.</td>
+        </tr>
+        <tr>
+            <td><code>SQL-DSN</code></td>
+            <td>Text</td>
+            <td>—</td>
+            <td>Verbindungsstring (nur bei Backend=sql). Wird verschlüsselt gespeichert.</td>
+        </tr>
+        <tr>
+            <td><code>SQL-Treiber</code></td>
+            <td>Dropdown</td>
+            <td><code>auto</code></td>
+            <td>auto, mssql, postgresql, mysql.</td>
+        </tr>
+    </tbody>
+</table>
+
+<h4>Tabellen-Mapping (pro Entity)</h4>
+<p>
+    Für jede ERP-Entity (Aufträge, Artikel, Kunden, Fertigungsaufträge)
+    werden Tabelle, ID-Spalte und Spalten-Mapping konfiguriert:
+</p>
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Feld</th><th>Typ</th><th>Beschreibung</th><th>Beispiel</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>Tabelle/View</code></td>
+            <td>Text</td>
+            <td>Name der Datenbanktabelle oder View.</td>
+            <td><code>v_auftraege</code></td>
+        </tr>
+        <tr>
+            <td><code>ID-Spalte</code></td>
+            <td>Text</td>
+            <td>Primärschlüssel-Spalte.</td>
+            <td><code>Auftragsnummer</code></td>
+        </tr>
+        <tr>
+            <td><code>Spalten-Mapping</code></td>
+            <td>Textarea (JSON)</td>
+            <td>Zuordnung: interner Feldname → DB-Spaltenname.</td>
+            <td><code>{"order_id": "Auftragsnummer", "customer": "Kundenname", "status": "Status"}</code></td>
+        </tr>
+    </tbody>
+</table>
+
+<!-- ============================= -->
+<!-- MCP                           -->
+<!-- ============================= -->
+<h2 id="mcp">Sub-Tab: MCP / API-Keys</h2>
+
+<p>
+    MCP (Model Context Protocol) erlaubt externen KI-Clients, die KIara-Wissensbasis
+    über API-Keys abzufragen. Antworten werden vom lokalen LLM generiert — keine
+    Roh-Chunks verlassen das System.
+</p>
+
+<!-- --- Server --- -->
+<h3 id="mcp-server">MCP-Server Status</h3>
+
+<p>
+    Ein Status-Banner zeigt den aktuellen Zustand des MCP-Servers:
+</p>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Status</th><th>Banner</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Aktiv</strong></td>
+            <td>Grün</td>
+            <td>
+                MCP-Server läuft. Zeigt Port, PID, Uptime, Endpunkt-URL und
+                Embedding-Modell.
+            </td>
+        </tr>
+        <tr>
+            <td><strong>Aktiviert, nicht aktiv</strong></td>
+            <td>Orange</td>
+            <td>MCP ist konfiguriert, aber der Service (<code>kiara-mcp.service</code>) läuft nicht.</td>
+        </tr>
+        <tr>
+            <td><strong>Deaktiviert</strong></td>
+            <td>Grau</td>
+            <td>MCP-Server ist ausgeschaltet.</td>
+        </tr>
+    </tbody>
+</table>
+
+<p>
+    Der Toggle-Button aktiviert/deaktiviert den MCP-Server.
+</p>
+
+<div class="wiki-tip-box">
+    <strong>Tipp:</strong> Der MCP-Server läuft als eigener systemd-Service
+    (<code>kiara-mcp.service</code>) auf Port 8503 (Standard). Der Endpunkt ist:
+    <code>http://&lt;hostname&gt;:8503/mcp</code>
+</div>
+
+<!-- --- Keys --- -->
+<h3 id="mcp-keys">API-Keys</h3>
+
+<h4>Key erstellen</h4>
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Feld</th><th>Typ</th><th>Pflicht</th><th>Beschreibung</th><th>Empfehlung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>Name</code></td>
+            <td>Text</td>
+            <td>Ja</td>
+            <td>Anzeigename für den Key.</td>
+            <td>Sprechend benennen: <code>VS Code Andreas</code>, <code>Cursor Server</code>.</td>
+        </tr>
+        <tr>
+            <td><code>Benutzer</code></td>
+            <td>Dropdown</td>
+            <td>Ja</td>
+            <td>Benutzer, dem der Key zugeordnet wird. Bestimmt die Zugriffsrechte (Datenquellen).</td>
+            <td>Jedem Benutzer einen eigenen Key zuweisen — so sind Zugriffe nachvollziehbar.</td>
+        </tr>
+        <tr>
+            <td><code>Ablaufdatum</code></td>
+            <td>Datum</td>
+            <td>Nein</td>
+            <td>Optionales Ablaufdatum. Nach Ablauf ist der Key gesperrt.</td>
+            <td>Für temporäre Zugriffe (Workshops, Tests) ein Datum setzen.</td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box wiki-tip-warning">
+    <strong>Achtung:</strong> Der vollständige API-Key wird <strong>nur einmal</strong>
+    nach dem Erstellen angezeigt (Prefix: <code>orag_</code>). Danach ist nur noch der
+    Prefix sichtbar. Key sofort kopieren!
+</div>
+
+<h4>Key-Tabelle</h4>
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Spalte</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr><td><strong>Name</strong></td><td>Anzeigename.</td></tr>
+        <tr><td><strong>Key</strong></td><td>Prefix (<code>orag_...</code>), monospace.</td></tr>
+        <tr><td><strong>Benutzer</strong></td><td>Zugeordneter Benutzer.</td></tr>
+        <tr><td><strong>Erstellt</strong></td><td>Erstellungsdatum.</td></tr>
+        <tr><td><strong>Letzter Zugriff</strong></td><td>Letzter API-Aufruf oder &raquo;–&laquo;.</td></tr>
+        <tr><td><strong>Ablauf</strong></td><td>Ablaufdatum oder &raquo;unbegrenzt&laquo;.</td></tr>
+        <tr><td><strong>Status</strong></td><td>Badge: &raquo;Aktiv&laquo; (grün) oder &raquo;Gesperrt&laquo; (rot).</td></tr>
+        <tr><td><strong>Aktionen</strong></td><td>Sperren/Aktivieren, Löschen.</td></tr>
+    </tbody>
+</table>
+
+<!-- --- Client-Config --- -->
+<h3 id="mcp-config">Client-Konfiguration</h3>
+
+<p>
+    Nach Aktivierung des MCP-Servers zeigt der Tab Konfigurationsbeispiele für
+    gängige KI-Clients. Der Endpunkt-Typ ist <code>streamable-http</code>.
+</p>
+
+<h4>VS Code / Cursor</h4>
+<pre class="wiki-code-block"><code>{
+  "servers": {
+    "kiara": {
+      "type": "streamable-http",
+      "url": "http://HOSTNAME:8503/mcp",
+      "headers": {
+        "Authorization": "Bearer orag_..."
+      }
+    }
+  }
+}</code></pre>
+
+<h4>Claude Code / Claude Desktop</h4>
+<pre class="wiki-code-block"><code>{
+  "mcpServers": {
+    "kiara": {
+      "type": "streamable-http",
+      "url": "http://HOSTNAME:8503/mcp",
+      "headers": {
+        "Authorization": "Bearer orag_..."
+      }
+    }
+  }
+}</code></pre>
+
+<div class="wiki-tip-box">
+    <strong>Tipp — Sicherheitsmodell:</strong> Der MCP-Server liefert <em>keine Roh-Chunks</em>
+    an externe Clients. Stattdessen wird die Anfrage intern über die KIara-Pipeline verarbeitet
+    und das LLM generiert eine Antwort. Die Daten bleiben im System — nur die Antwort verlässt es.
+    Zugriffsrechte werden über den zugeordneten Benutzer des API-Keys durchgesetzt.
+</div>
+
+<!-- ============================= -->
+<!-- WORKFLOWS                     -->
+<!-- ============================= -->
+<h2 id="workflows">Sub-Tab: Workflows</h2>
+
+<p>
+    Workflows verwalten Dokumenten-Templates (Jinja2) für Checklisten, Protokolle und
+    Statusmails. Das LLM kann diese Templates über Tools ausfüllen und als DOCX/PDF exportieren.
+</p>
+
+<h3>Dokumenten-Templates</h3>
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Spalte</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr><td><strong>Name</strong></td><td>Template-Name.</td></tr>
+        <tr><td><strong>Beschreibung</strong></td><td>Kurzbeschreibung des Templates.</td></tr>
+        <tr><td><strong>Variablen</strong></td><td>Kommaseparierte Liste der Template-Variablen (z.B. <code>customer_name, order_id, date</code>).</td></tr>
+    </tbody>
+</table>
+
+<h3>Exporte</h3>
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Spalte</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr><td><strong>Dateiname</strong></td><td>Name der exportierten Datei.</td></tr>
+        <tr><td><strong>Format</strong></td><td>DOCX oder PDF.</td></tr>
+        <tr><td><strong>Größe</strong></td><td>Dateigröße in KB.</td></tr>
+        <tr><td><strong>Erstellt</strong></td><td>Erstellungsdatum.</td></tr>
+        <tr><td><strong>Aktionen</strong></td><td>Download, Löschen.</td></tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box">
+    <strong>Tipp:</strong> Templates werden im Chat über das Tool
+    <code>generate_from_template</code> aufgerufen. Der Benutzer kann z.B. sagen:
+    &raquo;Erstelle eine Checkliste für Auftrag 12345&laquo; — das LLM wählt das
+    passende Template, füllt die Variablen und exportiert das Dokument.
+</div>
+
+<!-- ============================= -->
+<!-- ONLYOFFICE                    -->
+<!-- ============================= -->
+<h2 id="onlyoffice">Sub-Tab: OnlyOffice</h2>
+
+<p>
+    OnlyOffice ermöglicht Benutzern, Dokumente aus Suchergebnissen direkt im Browser
+    zu öffnen und zu bearbeiten (DOCX, XLSX, PPTX, ODT, ODS, ODP, TXT, CSV).
+</p>
+
+<h3>Konfiguration</h3>
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Feld</th><th>Typ</th><th>Pflicht</th><th>Beschreibung</th><th>Empfehlung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>Document Server URL</code></td>
+            <td>Text</td>
+            <td>Ja</td>
+            <td>URL des OnlyOffice Document Servers.</td>
+            <td>
+                Beispiel: <code>https://onlyoffice.firma.local</code><br>
+                Standard-Ports: 8443 (HTTPS), 8080 (HTTP).
+            </td>
+        </tr>
+        <tr>
+            <td><code>JWT Secret</code></td>
+            <td>Passwort</td>
+            <td>Ja</td>
+            <td>
+                JWT-Secret für die Kommunikation mit dem Document Server.
+                Muss mit der Konfiguration des Servers übereinstimmen.
+                Wird verschlüsselt gespeichert.
+            </td>
+            <td>
+                Zu finden in der OnlyOffice-Config:
+                <code>/etc/onlyoffice/documentserver/default.json</code> → <code>services.CoAuthoring.secret.session.string</code>.
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<h3>Aktionen</h3>
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Button</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr><td><strong>Speichern</strong></td><td>Speichert URL und JWT-Secret.</td></tr>
+        <tr><td><strong>Verbindung testen</strong></td><td>Prüft Erreichbarkeit und JWT-Validierung.</td></tr>
+        <tr><td><strong>Konfiguration löschen</strong></td><td>Entfernt die OnlyOffice-Integration.</td></tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box">
+    <strong>Tipp:</strong> Der OnlyOffice Document Server muss als Docker-Container
+    laufen und vom Browser des Benutzers <em>und</em> vom KIara-Server erreichbar sein
+    (bidirektionale Kommunikation für Collaborative Editing).
+</div>
+
+<!-- ============================= -->
+<!-- API (Verweis)                 -->
+<!-- ============================= -->
+<h2 id="api-endpoints">API-Endpunkte</h2>
+
+<p>
+    Die vollständige API-Referenz wird dynamisch aus der Admin-Registry generiert:
+</p>
+<ul class="wiki-examples">
+    <li><a href="/wiki/api/tools">Tools-API</a> — ERP-Verbindungen, Tool-Zuweisung, Berechtigungen, ERP-Config</li>
+    <li><a href="/wiki/api/mcp">MCP-API</a> — Server-Status, Toggle, API-Keys</li>
+    <li><a href="/wiki/api/workflows">Workflows-API</a> — Templates, Exporte</li>
+</ul>
+
+{% endblock %}

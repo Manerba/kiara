@@ -1,0 +1,237 @@
+{% extends "base.html" %}
+
+{% block title %}KIara Wiki — Guide: Late Chunking{% endblock %}
+
+{% block breadcrumb %}
+<a href="/wiki/">Wiki</a> &rsaquo; <span>Guide: Late Chunking</span>
+{% endblock %}
+
+{% block content %}
+<h1>Late Chunking</h1>
+
+<p class="wiki-intro">
+    Late Chunking erzeugt kontextbewusste Embeddings, indem das gesamte Dokument
+    durch den Transformer geschickt und erst danach pro Chunk ein Vektor erzeugt wird.
+    Dadurch traegt jeder Chunk-Vektor den Kontext des gesamten Dokuments.
+</p>
+
+<nav class="wiki-toc">
+    <h3>Inhalt</h3>
+    <ol>
+        <li><a href="#was-ist-late-chunking">Was ist Late Chunking?</a></li>
+        <li><a href="#wann-hilft-es">Wann hilft es?</a></li>
+        <li><a href="#voraussetzungen">Voraussetzungen</a></li>
+        <li><a href="#aktivierung">Aktivierung</a></li>
+        <li><a href="#wechselwirkung">Wechselwirkung mit Contextual Retrieval</a></li>
+        <li><a href="#fallback">Fallback-Verhalten</a></li>
+        <li><a href="#speicherbedarf">Speicherbedarf</a></li>
+    </ol>
+</nav>
+
+<!-- ============================= -->
+<!-- WAS IST LATE CHUNKING         -->
+<!-- ============================= -->
+<h2 id="was-ist-late-chunking">Was ist Late Chunking?</h2>
+
+<p>
+    Beim Standard-Embedding wird jeder Chunk isoliert durch das Embedding-Modell
+    geschickt &mdash; der resultierende Vektor kennt nur den Text innerhalb des Chunks.
+    Referenzen auf andere Dokumentteile (Pronomen, Rueckverweise, Fachbegriffe)
+    gehen verloren.
+</p>
+
+<p>
+    Late Chunking loest dieses Problem in zwei Schritten:
+</p>
+
+<ol>
+    <li>Das <strong>gesamte Dokument</strong> wird durch den Transformer geschickt,
+        sodass jedes Token den vollen Dokumentkontext sieht.</li>
+    <li>Erst danach wird pro Chunk ein Vektor erzeugt (<strong>Mean-Pooling</strong>
+        ueber die Token des jeweiligen Segments).</li>
+</ol>
+
+<p>
+    Das Ergebnis: Jeder Chunk-Vektor traegt den Kontext des gesamten Dokuments,
+    obwohl er nur einen Abschnitt repraesentiert.
+</p>
+
+<table class="wiki-param-table">
+    <thead><tr><th>Methode</th><th>Kontext pro Chunk</th><th>Qualitaet</th></tr></thead>
+    <tbody>
+        <tr>
+            <td><strong>Standard-Embedding</strong></td>
+            <td>Nur der Chunk-Text selbst</td>
+            <td>Gut fuer eigenstaendige Abschnitte</td>
+        </tr>
+        <tr>
+            <td><strong>Late Chunking</strong></td>
+            <td>Gesamtes Dokument (via Transformer-Attention)</td>
+            <td>Besser bei Pronomen, Referenzen, Fachbegriffen</td>
+        </tr>
+    </tbody>
+</table>
+
+<!-- ============================= -->
+<!-- WANN HILFT ES                 -->
+<!-- ============================= -->
+<h2 id="wann-hilft-es">Wann hilft es?</h2>
+
+<h3>Pronomen-Aufloesung</h3>
+<p>
+    Beispiel: <em>&bdquo;Die Firma Meier GmbH hat ihren Sitz in Stuttgart.
+    <strong>Sie</strong> beschaeftigt 120 Mitarbeiter.&ldquo;</em>
+</p>
+<p>
+    Beim Standard-Embedding weiss der Vektor des zweiten Chunks nicht, dass
+    &bdquo;Sie&ldquo; = &bdquo;Meier GmbH&ldquo; ist. Mit Late Chunking schon &mdash;
+    der Transformer hat beide Saetze im Kontext gesehen.
+</p>
+
+<h3>Dokumentweite Zusammenhaenge</h3>
+<p>
+    Fachbegriffe, die nur einmal definiert und spaeter referenziert werden,
+    profitieren ebenfalls: Der Vektor eines referenzierenden Chunks enthaelt
+    die Information der Definition.
+</p>
+
+<div class="wiki-tip-box">
+    <strong>Validiert:</strong> +6.6% Cosine-Similarity bei Pronomen-Aufloesung
+    im Machbarkeitstest (Phase 18a).
+</div>
+
+<!-- ============================= -->
+<!-- VORAUSSETZUNGEN               -->
+<!-- ============================= -->
+<h2 id="voraussetzungen">Voraussetzungen</h2>
+
+<table class="wiki-param-table">
+    <thead><tr><th>Voraussetzung</th><th>Details</th></tr></thead>
+    <tbody>
+        <tr>
+            <td><strong>Embedding-Modell</strong></td>
+            <td><code>nomic-embed-text</code> oder <code>bge-m3</code>
+                &mdash; nur diese Modelle unterstuetzen Late Chunking</td>
+        </tr>
+        <tr>
+            <td><strong>KIron Endpoint</strong></td>
+            <td>Der Embedding-Service (KIron) muss den Endpoint
+                <code>/api/embed_late</code> bereitstellen</td>
+        </tr>
+        <tr>
+            <td><strong>Cloud-Provider</strong></td>
+            <td>Nicht verfuegbar fuer OpenAI, Voyage oder andere
+                Cloud-Embedding-APIs</td>
+        </tr>
+    </tbody>
+</table>
+
+<!-- ============================= -->
+<!-- AKTIVIERUNG                   -->
+<!-- ============================= -->
+<h2 id="aktivierung">Aktivierung</h2>
+
+<p>Late Chunking kann auf zwei Wegen aktiviert werden:</p>
+
+<ol>
+    <li><strong>Admin-UI:</strong> Tab <strong>KI</strong> &rarr;
+        <strong>Indexierung</strong> &rarr; Toggle
+        <strong>&bdquo;Late Chunking aktivieren&ldquo;</strong></li>
+    <li><strong>Config-Datei:</strong></li>
+</ol>
+
+<pre class="wiki-code-block"><code># /etc/kiara/kiara.yaml
+enrichment:
+  late_chunking: true       # Default: false</code></pre>
+
+<div class="wiki-tip-box wiki-tip-warning">
+    <strong>Wichtig:</strong> Die Aenderung gilt nur fuer <strong>zukuenftige</strong>
+    Indexierungen. Bestehende Chunks werden nicht automatisch neu embedded &mdash;
+    dafuer ist ein Re-Index der betroffenen Datenquellen erforderlich.
+</div>
+
+<!-- ============================= -->
+<!-- WECHSELWIRKUNG                -->
+<!-- ============================= -->
+<h2 id="wechselwirkung">Wechselwirkung mit Contextual Retrieval</h2>
+
+<p>
+    Contextual Retrieval und Late Chunking ergaenzen sich &mdash; sie optimieren
+    unterschiedliche Retrieval-Pfade:
+</p>
+
+<table class="wiki-param-table">
+    <thead><tr><th>Feature</th><th>Optimiert</th><th>Mechanismus</th></tr></thead>
+    <tbody>
+        <tr>
+            <td><strong>Contextual Retrieval</strong></td>
+            <td>BM25-Index (Keyword-Suche)</td>
+            <td>LLM-generierter Kontext-Prefix mit neuen Keywords</td>
+        </tr>
+        <tr>
+            <td><strong>Late Chunking</strong></td>
+            <td>Vektor-Embeddings (semantische Suche)</td>
+            <td>Dokumentweiter Transformer-Kontext im Vektor</td>
+        </tr>
+    </tbody>
+</table>
+
+<p>
+    <strong>Beide zusammen</strong> bilden die optimale Kombination: Jeder
+    Retrieval-Pfad (BM25 und Vektor) profitiert von seiner jeweiligen Staerke.
+    Es gibt keine Konflikte oder Wechselwirkungen zwischen den beiden Features.
+</p>
+
+<!-- ============================= -->
+<!-- FALLBACK                      -->
+<!-- ============================= -->
+<h2 id="fallback">Fallback-Verhalten</h2>
+
+<p>
+    Late Chunking ist robust gegen Ausfaelle &mdash; bei Problemen wird automatisch
+    auf Standard-Embedding zurueckgefallen:
+</p>
+
+<table class="wiki-param-table">
+    <thead><tr><th>Situation</th><th>Verhalten</th></tr></thead>
+    <tbody>
+        <tr>
+            <td>KIron-Endpoint <code>/api/embed_late</code> nicht erreichbar</td>
+            <td>Automatischer Fallback auf Standard-Embedding</td>
+        </tr>
+        <tr>
+            <td>Embedding-Modell nicht unterstuetzt</td>
+            <td>Standard-Embedding (kein Late-Chunking-Versuch)</td>
+        </tr>
+        <tr>
+            <td>Dokument laenger als Kontextfenster</td>
+            <td>Chunks jenseits des Fensters erhalten Standard-Embeddings</td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box">
+    <strong>Hinweis:</strong> Der Fallback erfolgt lautlos &mdash; die Indexierung
+    wird nicht unterbrochen. Im Job-Log wird vermerkt, welche Dateien per
+    Fallback verarbeitet wurden.
+</div>
+
+<!-- ============================= -->
+<!-- SPEICHERBEDARF                -->
+<!-- ============================= -->
+<h2 id="speicherbedarf">Speicherbedarf</h2>
+
+<p>
+    Late Chunking erzeugt <strong>keinen zusaetzlichen Speicherbedarf</strong>.
+    Die resultierenden Vektoren haben die gleiche Dimension wie beim
+    Standard-Embedding (768 fuer <code>nomic-embed-text</code>) und werden
+    in derselben Qdrant-Collection gespeichert.
+</p>
+
+<p>
+    Es werden keine zusaetzlichen Collections, Indizes oder Datenbank-Tabellen
+    angelegt. Die einzige Aenderung ist die <em>Qualitaet</em> der Vektoren,
+    nicht deren Anzahl oder Groesse.
+</p>
+
+{% endblock %}

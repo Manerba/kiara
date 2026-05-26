@@ -1,0 +1,201 @@
+#!/bin/bash
+set -e
+
+case "$1" in
+    configure)
+        # Migrate chromadb backend to qdrant in existing config
+        if grep -q 'backend:.*chromadb' /etc/kiara/kiara.yaml 2>/dev/null; then
+            sed -i 's/backend:.*chromadb/backend: qdrant/' /etc/kiara/kiara.yaml
+            echo "HINWEIS: VectorDB-Backend von chromadb auf qdrant umgestellt."
+            echo "Bitte pruefen Sie /etc/kiara/kiara.yaml"
+        fi
+
+        # Create kiara system user
+        if ! id -u kiara >/dev/null 2>&1; then
+            useradd --system --home-dir /opt/kiara --shell /usr/sbin/nologin kiara
+        fi
+
+        # Create directories with proper ownership. /opt/kiara and the
+        # watcher state are root-owned because root systemd units execute
+        # code from /opt/kiara and consume /var/lib/kiara/worker_death_watcher.
+        mkdir -p \
+            /var/lib/kiara/backups \
+            /var/lib/kiara/chromadb \
+            /var/lib/kiara/exports \
+            /var/lib/kiara/mail-cache \
+            /var/lib/kiara/sql-cache \
+            /var/lib/kiara/vectordb \
+            /var/lib/kiara/webcrawler-cache \
+            /var/lib/kiara/worker_death_watcher
+        mkdir -p /opt/kiara/.cache
+        chown root:kiara /var/lib/kiara
+        chmod 1775 /var/lib/kiara
+        for runtime_dir in backups chromadb exports mail-cache sql-cache vectordb webcrawler-cache; do
+            chown -R kiara:kiara "/var/lib/kiara/$runtime_dir"
+        done
+        chown -R root:root /var/lib/kiara/worker_death_watcher
+        chmod 0700 /var/lib/kiara/worker_death_watcher
+        chown -R root:root /opt/kiara
+        chmod -R u=rwX,go=rX /opt/kiara
+        chown -R kiara:kiara /opt/kiara/.cache
+        chmod -R u=rwX,g=rX,o= /opt/kiara/.cache
+        mkdir -p /etc/kiara
+        # Log-Verzeichnis (konsolidierter Logpfad /var/log/kiara/kiara.log)
+        mkdir -p /var/log/kiara
+        chown -R kiara:kiara /var/log/kiara
+
+        # Config is installed by dpkg and protected via conffiles.
+        # No manual copy needed here.
+
+        # Create a fresh trusted Python venv before executing any
+        # /opt/kiara/venv/bin/* path. Older installations had a kiara-writable
+        # venv, so chown alone would not make its contents trustworthy.
+        systemctl stop kiara-worker-death-watcher.service 2>/dev/null || true
+
+        VENV_FINAL=/opt/kiara/venv
+        VENV_BUILD=/opt/kiara/venv.build.$$
+        VENV_OLD=/opt/kiara/venv.old.$$
+
+        rewrite_venv_shebangs() {
+            find "$VENV_FINAL/bin" -maxdepth 1 -type f -print0 | while IFS= read -r -d '' script; do
+                first_line=$(head -n 1 "$script" 2>/dev/null || true)
+                case "$first_line" in
+                    "#!$VENV_BUILD"/bin/python*)
+                        sed -i "1s|^#!$VENV_BUILD/bin/python[^[:space:]]*|#!$VENV_FINAL/bin/python3|" "$script"
+                        ;;
+                esac
+            done
+        }
+
+        rm -rf "$VENV_BUILD" "$VENV_OLD"
+        python3 -m venv "$VENV_BUILD"
+        PIP="$VENV_BUILD/bin/pip"
+        "$PIP" install --upgrade pip --quiet
+        # Reihenfolge kritisch: torch+torchvision CPU-only ZUERST, sonst koennte eine
+        # transitive Dep aus requirements.lock die CUDA-Variante ziehen und ein
+        # nachgelagertes "pip install torch --index-url cpu" waere no-op. KIara-Appliances
+        # haben keine GPU — spart ~1.5 GB CUDA-Wheels und schlankt das deb/ISO entsprechend.
+        # torchvision MUSS dabei sein: transformers.PreTrainedModel laedt lazy
+        # torchvision::nms — sonst RuntimeError beim sentence-transformers-Import.
+        "$PIP" install torch torchvision \
+            --index-url https://download.pytorch.org/whl/cpu \
+            --upgrade --quiet
+        # Orphaned CUDA-/triton-Pakete UNCONDITIONAL entfernen (analog deploy.sh) —
+        # eine transitive Dependency darf keine GPU-Bibliotheken im neu
+        # aufgebauten venv liegen lassen.
+        nvidia_pkgs=$("$PIP" list 2>/dev/null | awk 'tolower($1) ~ /^(nvidia-|triton$)/ {print $1}')
+        if [ -n "$nvidia_pkgs" ]; then
+            "$PIP" uninstall -y $nvidia_pkgs --quiet
+        fi
+        "$PIP" install -r /opt/kiara/requirements.lock --quiet
+        "$PIP" install --no-deps /opt/kiara/packages/kiara-anonymizer/ --quiet
+        "$PIP" install --no-deps /opt/kiara/packages/kiara-db/ --quiet
+        "$PIP" install --no-deps /opt/kiara/packages/kiara-ingestion-core/ --quiet
+        "$PIP" install --no-deps /opt/kiara/packages/kiara-document-loaders/ --quiet
+        "$PIP" install --no-deps /opt/kiara --quiet
+
+        for svc in \
+            kiara.service \
+            kiara-admin.service \
+            kiara-admin-chat.service \
+            kiara-worker.service \
+            kiara-worker-death-watcher.service; do
+            if systemctl is-active --quiet "$svc" 2>/dev/null; then
+                systemctl stop "$svc" || true
+            fi
+        done
+
+        if [ -d "$VENV_FINAL" ]; then
+            mv "$VENV_FINAL" "$VENV_OLD"
+        fi
+        if ! mv "$VENV_BUILD" "$VENV_FINAL"; then
+            if [ -d "$VENV_OLD" ]; then
+                mv "$VENV_OLD" "$VENV_FINAL"
+            fi
+            exit 1
+        fi
+        rm -rf "$VENV_OLD"
+        rewrite_venv_shebangs
+
+        chown -R root:root /opt/kiara
+        chmod -R u=rwX,go=rX /opt/kiara
+        chown -R kiara:kiara /opt/kiara/.cache
+        chmod -R u=rwX,g=rX,o= /opt/kiara/.cache
+        chown kiara:kiara /etc/kiara/kiara.yaml
+        chmod 0640 /etc/kiara/kiara.yaml
+
+        # Sudoers: mount/umount/install/mkdir/rmdir/cron/davfs helpers without password for kiara user
+        cat > /etc/sudoers.d/kiara-mount <<'SUDOERS'
+# KIara: SMB/WebDAV mount without password
+# install/mkdir/rmdir eingeschraenkt auf /mnt/kiara-* (Privilege-Escalation-Schutz)
+# Cron-Schreibpfad ist atomar: tee -> chown/chmod -> mv auf /etc/cron.d/kiara
+kiara ALL=(root) NOPASSWD: /usr/bin/mount, /usr/bin/umount, /bin/mount, /bin/umount, /usr/sbin/mount.cifs, /usr/bin/install -d -m 0750 /mnt/kiara-*, /bin/install -d -m 0750 /mnt/kiara-*, /usr/bin/mkdir -p /mnt/kiara-*, /bin/mkdir -p /mnt/kiara-*, /usr/bin/rmdir /mnt/kiara-*, /bin/rmdir /mnt/kiara-*
+kiara ALL=(root) NOPASSWD: /usr/bin/tee /etc/cron.d/kiara, /usr/bin/tee /etc/cron.d/kiara.tmp.*, /usr/bin/chown root\:root /etc/cron.d/kiara.tmp.*, /usr/bin/chmod 0644 /etc/cron.d/kiara, /usr/bin/chmod 0644 /etc/cron.d/kiara.tmp.*, /usr/bin/mv /etc/cron.d/kiara.tmp.* /etc/cron.d/kiara, /usr/bin/rm -f /etc/cron.d/kiara.tmp.*
+kiara ALL=(root) NOPASSWD: /usr/bin/tee /etc/davfs2/secrets, /bin/cat /etc/davfs2/secrets, /usr/bin/cat /etc/davfs2/secrets, /usr/bin/chmod 0600 /etc/davfs2/secrets
+SUDOERS
+        chmod 0440 /etc/sudoers.d/kiara-mount
+
+        # sudoers fuer Admin-Chat Service-Management
+        cat > /etc/sudoers.d/kiara-admin-chat << 'SUDOERS'
+kiara ALL=(root) NOPASSWD: /usr/bin/systemctl restart kiara.service
+kiara ALL=(root) NOPASSWD: /usr/bin/systemctl restart kiara-admin.service
+kiara ALL=(root) NOPASSWD: /usr/bin/systemctl restart kiara-worker.service
+kiara ALL=(root) NOPASSWD: /usr/bin/systemctl restart kiara-mcp.service
+kiara ALL=(root) NOPASSWD: /usr/bin/systemctl restart kiara-admin-chat.service
+kiara ALL=(root) NOPASSWD: /usr/bin/journalctl --no-pager --output=short-iso -u kiara.service *
+kiara ALL=(root) NOPASSWD: /usr/bin/journalctl --no-pager --output=short-iso -u kiara-admin.service *
+kiara ALL=(root) NOPASSWD: /usr/bin/journalctl --no-pager --output=short-iso -u kiara-worker.service *
+kiara ALL=(root) NOPASSWD: /usr/bin/journalctl --no-pager --output=short-iso -u kiara-mcp.service *
+kiara ALL=(root) NOPASSWD: /usr/bin/journalctl --no-pager --output=short-iso -u kiara-admin-chat.service *
+SUDOERS
+        chmod 0440 /etc/sudoers.d/kiara-admin-chat
+
+        # Initialize database and default admin user
+        su -s /bin/bash kiara -c '/opt/kiara/venv/bin/kiara init-db' 2>/dev/null || true
+
+        # Enable and start services
+        systemctl daemon-reload
+        systemctl enable kiara.service kiara-admin.service kiara-worker.service kiara-admin-chat.service kiara-worker-death-watcher.service
+        # Beim Upgrade restart, beim Frischinstall start — try-restart deckt beides ab.
+        systemctl try-restart kiara.service kiara-admin.service kiara-worker.service kiara-admin-chat.service kiara-worker-death-watcher.service || true
+        systemctl start kiara.service kiara-admin.service kiara-worker.service kiara-admin-chat.service kiara-worker-death-watcher.service
+
+        # Detect IP for URL display
+        KIARA_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+        KIARA_IP=${KIARA_IP:-localhost}
+
+        echo ""
+        echo "========================================="
+        echo " KIara erfolgreich installiert!"
+        echo "========================================="
+        echo ""
+        echo "  Chat-UI:   http://${KIARA_IP}:8501"
+        echo "  Admin-UI:  http://${KIARA_IP}:8502"
+        echo ""
+        echo "  Login:     admin / admin"
+        echo "  (Passwort nach dem ersten Login aendern!)"
+        echo ""
+        echo "  Config:    /etc/kiara/kiara.yaml"
+        echo "  Logs:      journalctl -u kiara -f"
+        echo "  CLI:       /opt/kiara/venv/bin/kiara --help"
+        echo ""
+        echo "  WICHTIG: Vor der ersten Nutzung:"
+        echo "    1. /etc/kiara/kiara.yaml anpassen"
+        echo "       (Ollama-URL, Wissensbasis-Pfad)"
+        echo "       Fuer Reverse-Proxy/Cross-Origin zusaetzlich:"
+        echo "         web:"
+        echo "           trusted_origins:"
+        echo "             - https://proxy.example.com"
+        echo "       admin_chat.cors_origins wird nicht mehr verwendet."
+        echo "    2. Wissensbasis mounten/bereitstellen"
+        echo "    3. Index aufbauen: /opt/kiara/venv/bin/kiara index"
+        echo ""
+        echo "  Claude Code: /opt/kiara/CLAUDE.md enthaelt alle"
+        echo "  Informationen fuer KI-gestuetzte Administration."
+        echo ""
+        ;;
+esac
+
+#DEBHELPER#
+
+exit 0

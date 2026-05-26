@@ -1,0 +1,28 @@
+[Unit]
+Description=KIara Admin Chat Service
+After=network.target postgresql.service
+Wants=kiara-admin.service
+OnFailure=kiara-failure-logger@%n.service
+
+[Service]
+Type=simple
+User=kiara
+Group=kiara
+WorkingDirectory=/opt/kiara
+ExecStart=/opt/kiara/venv/bin/uvicorn kiara.web.admin_chat_app:app --host 0.0.0.0 --port 8503
+Restart=on-failure
+RestartSec=10s
+Environment=KIARA_CONFIG=/etc/kiara/kiara.yaml
+
+# Security-Hardening (identisch mit kiara-admin.service)
+ProtectHome=true
+PrivateTmp=true
+# NoNewPrivileges deaktiviert: Worker/Admin-Pfade nutzen sudo (mount/install/systemctl-restart/davfs-tee)
+NoNewPrivileges=false
+ProtectSystem=full
+ReadWritePaths=/etc/kiara /var/lib/kiara /var/log/kiara /etc/davfs2
+MemoryDenyWriteExecute=false
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

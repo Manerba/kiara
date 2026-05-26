@@ -1,0 +1,710 @@
+{% extends "base.html" %}
+
+{% block title %}KIara Wiki — Guide: Jobs{% endblock %}
+
+{% block breadcrumb %}
+<a href="/wiki/">Wiki</a> &rsaquo; <span>Guide: Jobs</span>
+{% endblock %}
+
+{% block content %}
+<h1>Jobs</h1>
+
+<p class="wiki-intro">
+    Jobs sind Indexierungs-Aufträge, die die Ingestion-Pipeline ausführen. Jeder Job
+    verarbeitet eine Datenquelle: Dateien scannen, laden, in Chunks zerlegen und als
+    Vektoren speichern. Jobs werden sequentiell abgearbeitet, um GPU-Konkurrenz zu vermeiden.
+</p>
+
+<nav class="wiki-toc">
+    <h3>Inhalt</h3>
+    <ol>
+        <li><a href="#uebersicht">Übersicht &amp; Tabelle</a></li>
+        <li><a href="#status">Job-Status</a></li>
+        <li><a href="#steuerung">Steuerung: Pause, Abbruch, Löschen</a></li>
+        <li><a href="#pipeline">Pipeline-Phasen</a></li>
+        <li><a href="#detail-panel">Detail-Panel &amp; Statistiken</a></li>
+        <li><a href="#file-logs">Datei-Protokoll</a></li>
+        <li><a href="#resume">Resume-Ketten &amp; Auto-Recovery</a></li>
+        <li><a href="#ghost">Ghost-Erkennung</a></li>
+        <li><a href="#cleanup">Historie bereinigen</a></li>
+        <li><a href="#worker">Worker-Service</a></li>
+        <li><a href="#constants">Konfiguration &amp; Konstanten</a></li>
+        <li><a href="#api-endpoints">API-Endpunkte</a> (Verweis auf API-Katalog)</li>
+        <li><a href="#troubleshooting">Troubleshooting</a></li>
+    </ol>
+</nav>
+
+<!-- ============================= -->
+<!-- ÜBERSICHT                     -->
+<!-- ============================= -->
+<h2 id="uebersicht">Übersicht &amp; Tabelle</h2>
+
+<p>
+    Der Jobs-Tab zeigt alle Indexierungs-Aufträge: wartend, laufend, abgeschlossen und
+    fehlgeschlagen. Es gibt keine Sub-Tabs — alles ist in einer zentralen Tabelle mit
+    Filter-Leiste zusammengefasst.
+</p>
+
+<h3>Filter-Leiste</h3>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Filter</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr><td><strong>Alle</strong></td><td>Zeigt alle Jobs (Standard).</td></tr>
+        <tr><td><strong>Laufend</strong></td><td>Nur Jobs mit Status <code>running</code> (inkl. pausierte).</td></tr>
+        <tr><td><strong>Ausstehend</strong></td><td>Jobs in der Warteschlange (<code>pending</code>).</td></tr>
+        <tr><td><strong>Erfolgreich</strong></td><td>Abgeschlossene Jobs (<code>success</code>).</td></tr>
+        <tr><td><strong>Fehlgeschlagen</strong></td><td>Jobs mit Fehler (<code>error</code>).</td></tr>
+        <tr><td><strong>Abgebrochen</strong></td><td>Manuell abgebrochene Jobs (<code>cancelled</code>).</td></tr>
+    </tbody>
+</table>
+
+<h3>Tabellen-Spalten</h3>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Spalte</th><th>Beschreibung</th><th>Hinweis</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Datenquelle</strong></td>
+            <td>Name der zugehörigen Datenquelle.</td>
+            <td>Sortierbar.</td>
+        </tr>
+        <tr>
+            <td><strong>Embedding</strong></td>
+            <td>Verwendetes Embedding-Modell (z.B. <code>nomic-embed-text</code>, <code>voyage-ai</code>).</td>
+            <td>Sortierbar.</td>
+        </tr>
+        <tr>
+            <td><strong>Typ</strong></td>
+            <td>
+                <span class="wiki-http-badge wiki-http-post">Inkr.</span> = Inkrementell (nur neue/geänderte Dateien).<br>
+                <span class="wiki-http-badge wiki-http-put">Voll</span> = Voll-Indexierung (alle Dateien neu).
+            </td>
+            <td>Sortierbar.</td>
+        </tr>
+        <tr>
+            <td><strong>Status</strong></td>
+            <td>Aktueller Status als farbiges Badge. Siehe <a href="#status">Job-Status</a>.</td>
+            <td>Sortierbar.</td>
+        </tr>
+        <tr>
+            <td><strong>Dateien</strong></td>
+            <td>
+                Fortschrittsanzeige: verarbeitete / gesamte Dateien mit Fortschrittsbalken.<br>
+                Bei Parallel-Scan: Zwei Balken — Download-Fortschritt (orange) + Ingestion (blau).
+            </td>
+            <td>Zeigt bei laufenden Jobs auch die aktuelle Datei an.</td>
+        </tr>
+        <tr>
+            <td><strong>Restzeit</strong></td>
+            <td>Geschätzte verbleibende Zeit (ETA), berechnet aus Verarbeitungsrate.</td>
+            <td>Nur bei laufenden Jobs sichtbar.</td>
+        </tr>
+        <tr>
+            <td><strong>Gestartet</strong></td>
+            <td>Zeitpunkt des Jobstarts.</td>
+            <td>Sortierbar. Format: <code>dd.mm hh:mm</code></td>
+        </tr>
+        <tr>
+            <td><strong>Dauer</strong></td>
+            <td>Bisherige oder finale Laufzeit.</td>
+            <td>Bei Resume-Ketten: Gesamtdauer aller Jobs im Tooltip.</td>
+        </tr>
+        <tr>
+            <td><strong>Auslöser</strong></td>
+            <td>Wer den Job ausgelöst hat: <em>manual</em>, <em>cron</em> oder <em>api</em>.</td>
+            <td>Sortierbar.</td>
+        </tr>
+        <tr>
+            <td><strong>Aktionen</strong></td>
+            <td>Kontextabhängige Buttons (siehe <a href="#steuerung">Steuerung</a>).</td>
+            <td>—</td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box">
+    <strong>Tipp:</strong> Die Tabelle aktualisiert sich bei laufenden Jobs automatisch
+    alle 3 Sekunden (Polling). Das Polling stoppt automatisch nach 3 Zyklen ohne aktive Jobs.
+</div>
+
+<!-- ============================= -->
+<!-- STATUS                        -->
+<!-- ============================= -->
+<h2 id="status">Job-Status</h2>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Status</th><th>Badge</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>pending</code></td>
+            <td><span class="wiki-status-neutral">Ausstehend</span> (grau)</td>
+            <td>Job wartet in der Warteschlange. Wird automatisch gestartet, sobald kein anderer Job läuft.</td>
+        </tr>
+        <tr>
+            <td><code>running</code></td>
+            <td><span class="wiki-status-bullish">Laufend</span> (grün)</td>
+            <td>Job wird gerade verarbeitet. Fortschrittsbalken und Restzeit sichtbar.</td>
+        </tr>
+        <tr>
+            <td><code>running</code> + pausiert</td>
+            <td><span class="wiki-status-unclear">Pausiert</span> (orange)</td>
+            <td>Job ist pausiert. Kann fortgesetzt werden — die Pipeline hält beim nächsten Kontrollpunkt an.</td>
+        </tr>
+        <tr>
+            <td><code>success</code></td>
+            <td><span class="wiki-status-bullish">Erfolgreich</span> (grün)</td>
+            <td>Job ist abgeschlossen. Statistiken und Datei-Protokoll verfügbar.</td>
+        </tr>
+        <tr>
+            <td><code>error</code></td>
+            <td><span class="wiki-status-bearish">Fehler</span> (rot)</td>
+            <td>Job ist fehlgeschlagen. Fehlermeldung im Detail-Panel sichtbar.</td>
+        </tr>
+        <tr>
+            <td><code>cancelled</code></td>
+            <td><span class="wiki-status-unclear">Abgebrochen</span> (orange)</td>
+            <td>Job wurde manuell abgebrochen. Bereits verarbeitete Dateien behalten ihren Hash.</td>
+        </tr>
+        <tr>
+            <td>Ghost</td>
+            <td><span class="wiki-status-bearish">Ghost</span> (rot)</td>
+            <td>Spezialfall: Job steht als <code>running</code> in der DB, aber der Worker-Prozess ist nicht mehr aktiv. Siehe <a href="#ghost">Ghost-Erkennung</a>.</td>
+        </tr>
+    </tbody>
+</table>
+
+<h3>Status-Übergänge</h3>
+
+<pre class="wiki-code-block"><code>pending ──→ running ──→ success
+              │    │
+              │    └──→ error
+              │    │
+              │    └──→ cancelled (manuell)
+              │
+              └──→ cancelled (aus Warteschlange entfernt)
+
+error ──→ (Auto-Resume) ──→ pending (neuer Job mit resumed_from_job)
+
+Alle End-Status (success/error/cancelled) ──→ (manuell löschen)</code></pre>
+
+<!-- ============================= -->
+<!-- STEUERUNG                     -->
+<!-- ============================= -->
+<h2 id="steuerung">Steuerung: Pause, Abbruch, Löschen</h2>
+
+<p>
+    Die verfügbaren Aktionen hängen vom aktuellen Status ab:
+</p>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Status</th><th>Verfügbare Aktionen</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>running</code></td>
+            <td>
+                <strong>&#9208; Pause</strong> &nbsp; <strong>&#10006; Abbrechen</strong>
+            </td>
+            <td>
+                <strong>Pause:</strong> Unterbricht die Pipeline nach dem aktuellen Batch.
+                Der Job bleibt als <code>running</code> in der DB, wird aber als &raquo;Pausiert&laquo; angezeigt.<br>
+                <strong>Abbrechen:</strong> Stoppt den Job endgültig. Bestätigung erforderlich.
+            </td>
+        </tr>
+        <tr>
+            <td><code>running</code> (pausiert)</td>
+            <td>
+                <strong>&#9654; Fortsetzen</strong> &nbsp; <strong>&#10006; Abbrechen</strong>
+            </td>
+            <td>
+                <strong>Fortsetzen:</strong> Hebt die Pause auf — der Worker setzt die Verarbeitung fort.
+            </td>
+        </tr>
+        <tr>
+            <td><code>pending</code></td>
+            <td><strong>&#10006; Abbrechen</strong></td>
+            <td>Entfernt den Job aus der Warteschlange.</td>
+        </tr>
+        <tr>
+            <td><code>success / error / cancelled</code></td>
+            <td><strong>&#128465; Löschen</strong></td>
+            <td>Löscht den Job-Eintrag und seine Datei-Protokolle aus der Datenbank. Bestätigung erforderlich.</td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box">
+    <strong>Tipp:</strong> Die Steuerung erfolgt über die Datenbank-Spalte <code>requested_action</code>
+    — das macht sie prozessunabhängig. Wenn der Worker-Prozess neustartet, erkennt er die
+    angeforderte Aktion und führt sie aus.
+</div>
+
+<!-- ============================= -->
+<!-- PIPELINE                      -->
+<!-- ============================= -->
+<h2 id="pipeline">Pipeline-Phasen</h2>
+
+<p>
+    Jeder Job durchläuft eine mehrstufige Pipeline. Die aktuelle Phase ist im Detail-Panel
+    und im Fortschrittsbalken sichtbar.
+</p>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>#</th><th>Phase</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>1</td>
+            <td><strong>Scanning</strong></td>
+            <td>
+                Dateien auflisten und File-Hashes berechnen. Bei Parallel-Scan (IMAP/Exchange)
+                läuft der Download im Hintergrund weiter während Phase 2+ bereits beginnt.
+            </td>
+        </tr>
+        <tr>
+            <td>2</td>
+            <td><strong>Diff-Berechnung</strong></td>
+            <td>
+                Vergleicht die neuen Hashes mit den gespeicherten. Bestimmt welche Dateien
+                neu, geändert oder gelöscht sind. Bei Voll-Indexierung: alle Dateien.
+            </td>
+        </tr>
+        <tr>
+            <td>3</td>
+            <td><strong>Loading</strong></td>
+            <td>
+                Dateien laden und in Text konvertieren. Nutzt den passenden Loader:
+                PDF, DOCX, XLSX, Markdown, Plaintext, oder DDU (Docling) falls aktiviert.
+            </td>
+        </tr>
+        <tr>
+            <td>4</td>
+            <td><strong>VLM</strong> (optional)</td>
+            <td>
+                Bilder durch das Vision Language Model beschreiben lassen. Nur wenn VLM
+                für die Datenquelle aktiviert ist.
+            </td>
+        </tr>
+        <tr>
+            <td>5</td>
+            <td><strong>Chunking</strong></td>
+            <td>
+                Text in Chunks zerlegen gemäß der konfigurierten Chunk-Strategie.
+                Auto-Detection erkennt den Dokumenttyp automatisch.
+            </td>
+        </tr>
+        <tr>
+            <td>6</td>
+            <td><strong>Embedding</strong></td>
+            <td>
+                Chunks vektorisieren (Embedding-Modell) und in Qdrant speichern.
+                Verarbeitung in Batches (konfigurierbar, Standard: 100).
+            </td>
+        </tr>
+        <tr>
+            <td>7</td>
+            <td><strong>Finalisierung</strong></td>
+            <td>
+                Statistiken schreiben, Caches aktualisieren, Job-Status auf
+                <code>success</code> oder <code>error</code> setzen.
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box">
+    <strong>Tipp — Parallel-Scan:</strong> E-Mail-Konnektoren (IMAP, Exchange) nutzen
+    Parallel-Scan: Während Mails heruntergeladen werden, beginnt die Ingestion bereits
+    mit den fertigen Dateien. In der UI sind dann zwei Fortschrittsbalken sichtbar:
+    orange (Download) und blau (Verarbeitung).
+</div>
+
+<!-- ============================= -->
+<!-- DETAIL-PANEL                  -->
+<!-- ============================= -->
+<h2 id="detail-panel">Detail-Panel &amp; Statistiken</h2>
+
+<p>
+    Klick auf den Expand-Button einer Zeile öffnet das Detail-Panel mit ausführlichen
+    Statistiken zum Job.
+</p>
+
+<h3>Ergebnis-Statistik</h3>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Wert</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr><td><strong>Dateien gesamt</strong></td><td>Gesamtzahl der Dateien im Scan.</td></tr>
+        <tr><td><strong>Verarbeitet</strong></td><td>Erfolgreich geladene und gechunkte Dateien.</td></tr>
+        <tr><td><strong>Übersprungen</strong></td><td>Übersprungen (Hash unverändert bei inkrementeller Indexierung).</td></tr>
+        <tr><td><strong>Gelöscht</strong></td><td>Dateien, die nicht mehr existieren — deren Chunks wurden entfernt.</td></tr>
+        <tr><td><strong>Chunks erzeugt</strong></td><td>Gesamtzahl der neu erzeugten Text-Chunks.</td></tr>
+        <tr><td><strong>Fehler</strong></td><td>Dateien, bei denen ein Fehler aufgetreten ist (Details im Datei-Protokoll).</td></tr>
+    </tbody>
+</table>
+
+<h3>Feature-Details (bedingt)</h3>
+
+<p>Werden nur angezeigt, wenn die jeweilige Funktion aktiv war:</p>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Wert</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr><td><strong>DDU Dateien</strong></td><td>Dateien, die über Docling Document Understanding verarbeitet wurden.</td></tr>
+        <tr><td><strong>DDU Fallback</strong></td><td>Dateien, bei denen DDU fehlschlug und der Standard-Loader als Fallback genutzt wurde.</td></tr>
+        <tr><td><strong>VLM Chunks</strong></td><td>Durch das Vision Language Model erzeugte Bild-Beschreibungen.</td></tr>
+        <tr><td><strong>Graph Entitäten / Relationen</strong></td><td>Im Wissensgraph extrahierte Entitäten und Beziehungen.</td></tr>
+        <tr><td><strong>Vektoren (DS)</strong></td><td>Anzahl der Vektoren für diese Datenquelle in Qdrant.</td></tr>
+        <tr><td><strong>Vektoren (gesamt)</strong></td><td>Gesamtzahl aller Vektoren in der Qdrant-Collection.</td></tr>
+    </tbody>
+</table>
+
+<!-- ============================= -->
+<!-- DATEI-PROTOKOLL               -->
+<!-- ============================= -->
+<h2 id="file-logs">Datei-Protokoll</h2>
+
+<p>
+    Im Detail-Panel eines abgeschlossenen Jobs kann das Datei-Protokoll geladen werden.
+    Es zeigt für jede verarbeitete Datei den Status, Parser, Chunks und eventuelle Fehler.
+</p>
+
+<h3>Filter</h3>
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Filter</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr><td><strong>Alle</strong></td><td>Alle Dateien.</td></tr>
+        <tr><td><strong>Erfolg</strong></td><td>Erfolgreich verarbeitete Dateien.</td></tr>
+        <tr><td><strong>Fehler</strong></td><td>Dateien mit Fehlern (mit Fehlermeldung und Phase).</td></tr>
+        <tr><td><strong>Übersprungen</strong></td><td>Dateien, die übersprungen wurden (z.B. nicht unterstütztes Format).</td></tr>
+        <tr><td><strong>Suchfeld</strong></td><td>Freitext-Suche im Dateinamen (mit Debouncing).</td></tr>
+    </tbody>
+</table>
+
+<h3>Spalten</h3>
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Spalte</th><th>Beschreibung</th><th>Sortierbar</th></tr>
+    </thead>
+    <tbody>
+        <tr><td><strong>Datei</strong></td><td>Dateiname (vollständiger Pfad im Tooltip).</td><td>Ja</td></tr>
+        <tr><td><strong>Größe</strong></td><td>Dateigröße (KB/MB).</td><td>Ja</td></tr>
+        <tr><td><strong>Parser</strong></td><td>Verwendeter Parser (pdf, docx, plain, ddu, ...). Markierung &raquo;(FB)&laquo; bei Fallback.</td><td>Ja</td></tr>
+        <tr><td><strong>Chunks</strong></td><td>Anzahl erzeugter Chunks.</td><td>Ja</td></tr>
+        <tr><td><strong>Strategie</strong></td><td>Erkannte Chunk-Strategie (code, markdown, narrative).</td><td>Nein</td></tr>
+        <tr><td><strong>Dauer</strong></td><td>Verarbeitungszeit (ms oder s).</td><td>Ja</td></tr>
+        <tr><td><strong>Status</strong></td><td>success (grün), error (rot), skipped (grau).</td><td>Ja</td></tr>
+    </tbody>
+</table>
+
+<p>
+    Bei Dateien mit Status <code>error</code> wird eine zusätzliche Zeile mit der
+    Fehlermeldung und der betroffenen Phase angezeigt (z.B. <code>[loading]</code>,
+    <code>[vlm]</code>, <code>[chunking]</code>, <code>[embedding]</code>).
+</p>
+
+<div class="wiki-tip-box">
+    <strong>Tipp:</strong> Das Datei-Protokoll wird lazy-loaded — es wird erst beim Öffnen
+    vom Server geholt, nicht bei jedem Tabellen-Refresh. Die Info-Leiste zeigt
+    die Gesamt-Chunk-Anzahl und die durchschnittliche Verarbeitungsdauer pro Datei.
+</div>
+
+<!-- ============================= -->
+<!-- RESUME                        -->
+<!-- ============================= -->
+<h2 id="resume">Resume-Ketten &amp; Auto-Recovery</h2>
+
+<p>
+    Wenn ein Job durch einen Crash oder Service-Neustart unterbrochen wird, erstellt
+    der Worker beim Neustart automatisch einen <strong>Resume-Job</strong>. Dieser
+    setzt die Verarbeitung dort fort, wo der vorherige Job aufgehört hat
+    (inkrementell über File-Hashes).
+</p>
+
+<h3>Wie es funktioniert</h3>
+<ol class="wiki-examples">
+    <li>Job #42 läuft, Worker stürzt ab → Status wird auf <code>error</code> gesetzt</li>
+    <li>Worker startet neu, erkennt den &raquo;stale&laquo; Job</li>
+    <li>Neuer Job #43 wird mit <code>resumed_from_job = 42</code> eingereiht</li>
+    <li>Job #43 verarbeitet nur noch die fehlenden Dateien (Hash-basiert)</li>
+</ol>
+
+<h3>Darstellung in der UI</h3>
+<ul class="wiki-examples">
+    <li><strong>Status-Badge:</strong> Zeigt <em>&raquo;2× Restart&laquo;</em> neben dem Status (als kleine Badge)</li>
+    <li><strong>Dauer:</strong> Gesamtdauer aller Jobs der Kette im Tooltip (z.B. <em>&raquo;45m 30s (ges.)&laquo;</em>)</li>
+    <li><strong>Detail-Panel:</strong> Zeigt eine Verlaufs-Tabelle mit allen Jobs der Kette: ID, Status, Zeitpunkte, Dauer, Fehler</li>
+</ul>
+
+<div class="wiki-tip-box">
+    <strong>Tipp:</strong> Resume-Ketten sind kein Grund zur Sorge — sie zeigen, dass das
+    System sich selbst heilt. Ein einzelner Restart ist bei langen Indexierungen (mehrere Stunden)
+    normal, z.B. nach einem geplanten Service-Neustart.
+</div>
+
+<!-- ============================= -->
+<!-- GHOST                         -->
+<!-- ============================= -->
+<h2 id="ghost">Ghost-Erkennung</h2>
+
+<p>
+    Ein <strong>Ghost-Job</strong> ist ein Job, der in der Datenbank als <code>running</code>
+    steht, aber dessen Worker-Prozess nicht mehr aktiv ist. Das kann passieren, wenn der
+    Worker-Service abgestürzt ist, ohne den Job-Status zu aktualisieren.
+</p>
+
+<h3>Erkennung</h3>
+<p>Ein Job gilt als Ghost, wenn:</p>
+<ul class="wiki-examples">
+    <li>Status = <code>running</code> in der DB</li>
+    <li>Letzter Heartbeat älter als <strong>300 Sekunden</strong> (5 Minuten), ODER</li>
+    <li>Kein Heartbeat vorhanden UND <code>started_at</code> älter als <strong>60 Sekunden</strong></li>
+</ul>
+
+<h3>Heartbeat-System</h3>
+<p>
+    Der Worker schreibt alle 30 Sekunden einen Zeitstempel in <code>stats_json.heartbeat</code>.
+    Bleibt dieser Zeitstempel aus, erkennt die UI den Job als Ghost.
+</p>
+
+<h3>Was tun bei Ghost-Jobs?</h3>
+<ol class="wiki-examples">
+    <li>Prüfen ob der Worker-Service läuft: <code>systemctl status kiara-worker</code></li>
+    <li>Falls gestoppt: Neustart mit <code>systemctl start kiara-worker</code></li>
+    <li>Der Worker erkennt den Ghost beim Start automatisch und startet einen Resume-Job</li>
+    <li>Falls kein Auto-Resume: Job manuell abbrechen und neu starten</li>
+</ol>
+
+<!-- ============================= -->
+<!-- CLEANUP                       -->
+<!-- ============================= -->
+<h2 id="cleanup">Historie bereinigen</h2>
+
+<p>
+    Der Button <strong>&raquo;Historie bereinigen&laquo;</strong> in der Filter-Leiste löscht
+    abgeschlossene Jobs, die älter als eine konfigurierbare Anzahl von Tagen sind.
+</p>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Feld</th><th>Standard</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>Tage</code></td>
+            <td><code>30</code></td>
+            <td>
+                Jobs mit <code>finished_at</code> älter als N Tage werden gelöscht.
+                Betrifft nur End-Status (<code>success</code>, <code>error</code>, <code>cancelled</code>).
+                Laufende und ausstehende Jobs sind nicht betroffen.
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box">
+    <strong>Tipp:</strong> Regelmäßiges Bereinigen hält die Job-Tabelle übersichtlich.
+    Die Datei-Protokolle (File-Logs) werden zusammen mit dem Job gelöscht — bei vielen
+    Jobs mit vielen Dateien kann das die Datenbankgröße merklich reduzieren.
+</div>
+
+<!-- ============================= -->
+<!-- WORKER                        -->
+<!-- ============================= -->
+<h2 id="worker">Worker-Service</h2>
+
+<p>
+    Der Worker läuft als eigenständiger systemd-Service (<code>kiara-worker.service</code>)
+    und ist für die Abarbeitung der Job-Queue verantwortlich.
+</p>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Eigenschaft</th><th>Wert</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Service</strong></td>
+            <td><code>kiara-worker.service</code></td>
+            <td>systemd-Unit, gesteuert über <code>systemctl</code>.</td>
+        </tr>
+        <tr>
+            <td><strong>Poll-Intervall</strong></td>
+            <td>2 Sekunden</td>
+            <td>Wie oft die Queue auf neue Jobs geprüft wird.</td>
+        </tr>
+        <tr>
+            <td><strong>Concurrency</strong></td>
+            <td>1 (sequentiell)</td>
+            <td>Nur ein Job gleichzeitig — verhindert GPU-Konkurrenz beim Embedding.</td>
+        </tr>
+        <tr>
+            <td><strong>Heartbeat</strong></td>
+            <td>alle 30 Sekunden</td>
+            <td>Schreibt Zeitstempel in <code>stats_json</code> für Ghost-Erkennung.</td>
+        </tr>
+        <tr>
+            <td><strong>Stale-Recovery</strong></td>
+            <td>Beim Start</td>
+            <td>Erkennt Ghost-Jobs und startet automatische Resume-Jobs.</td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box wiki-tip-warning">
+    <strong>Achtung:</strong> Vor einem Neustart von <code>kiara-worker</code> immer prüfen,
+    ob ein Job läuft! Ein harter Restart während einer Indexierung führt zu einem Ghost-Job,
+    der beim nächsten Start zwar automatisch fortgesetzt wird, aber unnötige Wartezeit verursacht.
+</div>
+
+<!-- ============================= -->
+<!-- KONSTANTEN                    -->
+<!-- ============================= -->
+<h2 id="constants">Konfiguration &amp; Konstanten</h2>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Konstante</th><th>Wert</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>INGESTION_WORKER_POLL_INTERVAL</code></td>
+            <td>2s</td>
+            <td>Sekunden zwischen Queue-Checks des Workers.</td>
+        </tr>
+        <tr>
+            <td><code>INGESTION_HEARTBEAT_TIMEOUT</code></td>
+            <td>300s</td>
+            <td>Maximales Alter des Heartbeats bevor ein Job als Ghost gilt.</td>
+        </tr>
+        <tr>
+            <td><code>INGESTION_STARTUP_GRACE</code></td>
+            <td>60s</td>
+            <td>Karenzzeit für frisch gestartete Jobs ohne Heartbeat.</td>
+        </tr>
+        <tr>
+            <td><code>INGESTION_MAX_CONSECUTIVE_ERRORS</code></td>
+            <td>10</td>
+            <td>Circuit-Breaker: Pipeline bricht nach 10 aufeinanderfolgenden Fehlern ab.</td>
+        </tr>
+        <tr>
+            <td><code>HASH_CHECKPOINT_INTERVAL</code></td>
+            <td>100</td>
+            <td>Alle 100 Dateien werden die Hashes persistiert (Crash-Schutz).</td>
+        </tr>
+        <tr>
+            <td><code>BACKEND_WAIT_INTERVAL_SECS</code></td>
+            <td>5s</td>
+            <td>Wartezeit vor Retry bei Backend-Fehlern (Ollama, DDU).</td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box">
+    <strong>Tipp:</strong> Diese Werte sind in <code>kiara/shared/constants.py</code> definiert
+    und können für Spezialfälle angepasst werden. Der Circuit-Breaker (10 Fehler) ist bewusst
+    konservativ — er verhindert, dass ein defektes DDU-Backend stundenlang Timeouts produziert.
+</div>
+
+<!-- ============================= -->
+<!-- API (Verweis)                 -->
+<!-- ============================= -->
+<h2 id="api-endpoints">API-Endpunkte</h2>
+
+<p>
+    Die vollständige API-Referenz für Jobs wird dynamisch aus der
+    Admin-Registry generiert und ist im API-Katalog verfügbar:
+</p>
+<ul class="wiki-examples">
+    <li><a href="/wiki/api/jobs">Jobs-API</a> — Jobs auflisten, starten, pausieren, abbrechen, löschen, Historie bereinigen, Datei-Protokolle</li>
+</ul>
+
+<!-- ============================= -->
+<!-- TROUBLESHOOTING               -->
+<!-- ============================= -->
+<h2 id="troubleshooting">Troubleshooting</h2>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Problem</th><th>Mögliche Ursache</th><th>Lösung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>Job bleibt auf &raquo;Ausstehend&laquo;</td>
+            <td>Worker-Service läuft nicht, oder ein anderer Job blockiert die Queue.</td>
+            <td>
+                <code>systemctl status kiara-worker</code> prüfen.
+                Falls ein anderer Job hängt: diesen abbrechen oder den Worker neustarten.
+            </td>
+        </tr>
+        <tr>
+            <td>Job als &raquo;Ghost&laquo; markiert</td>
+            <td>Worker-Prozess wurde beendet während ein Job lief.</td>
+            <td>
+                Worker neustarten: <code>systemctl restart kiara-worker</code>.
+                Der Worker erstellt automatisch einen Resume-Job.
+            </td>
+        </tr>
+        <tr>
+            <td>Circuit-Breaker (10 Fehler in Folge)</td>
+            <td>Systematisches Problem: DDU nicht erreichbar, Embedding-Backend down, Berechtigungsfehler.</td>
+            <td>
+                Datei-Protokoll prüfen: Welche Phase? Welche Fehlermeldung?<br>
+                DDU: <code>systemctl status docling-proxy</code> auf gpu-server.local.<br>
+                Ollama: <code>curl http://gpu-server.local:11434/api/tags</code>.
+            </td>
+        </tr>
+        <tr>
+            <td>Fortschritt zählt nicht hoch</td>
+            <td>Job ist in der Hashing-Phase (Scan) — Progress wird erst nach dem Scan aktualisiert.</td>
+            <td>
+                Abwarten. Bei großen Datenquellen (>10.000 Dateien) kann die Scan-Phase
+                mehrere Minuten dauern, ohne dass der Fortschrittsbalken sich bewegt.
+            </td>
+        </tr>
+        <tr>
+            <td>Voll-Indexierung dauert sehr lange</td>
+            <td>Alle Dateien werden neu verarbeitet — bei DDU ca. 5-30s pro Datei.</td>
+            <td>
+                Inkrementelle Indexierung bevorzugen. Voll-Indexierung nur nach
+                Änderung der Chunk-Strategie oder DDU-Einstellung nötig.
+            </td>
+        </tr>
+        <tr>
+            <td>0 Chunks nach erfolgreichem Job</td>
+            <td>Alle Dateien übersprungen (Hashes unverändert) oder keine unterstützten Dateitypen.</td>
+            <td>
+                Datei-Protokoll prüfen. Falls alle <code>skipped</code>: Dateien haben sich nicht
+                geändert — das ist bei inkrementeller Indexierung normal.
+                Falls keine Dateien: Dateityp-Filter der Datenquelle prüfen.
+            </td>
+        </tr>
+        <tr>
+            <td>Pause reagiert nicht sofort</td>
+            <td>Der Worker prüft <code>requested_action</code> nur an definierten Kontrollpunkten (zwischen Batches).</td>
+            <td>Abwarten — die Pause wird spätestens nach dem aktuellen Batch wirksam (wenige Sekunden).</td>
+        </tr>
+        <tr>
+            <td>&raquo;Bereits ein aktiver Job&laquo;</td>
+            <td>Für diese Datenquelle läuft oder wartet bereits ein Job.</td>
+            <td>Pro Datenquelle kann nur ein Job gleichzeitig aktiv sein. Den bestehenden Job abwarten oder abbrechen.</td>
+        </tr>
+    </tbody>
+</table>
+
+{% endblock %}

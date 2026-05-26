@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kiara-anonymizer"
+version = "0.1.0"
+description = "Anonymisierungs-Kernlogik: Aho-Corasick, Regex-PII, ERP-Import, LLM-Detection"
+requires-python = ">=3.11"
+dependencies = [
+    "pyahocorasick",
+]
+
+[tool.setuptools.packages.find]
+include = ["kiara_anonymizer", "kiara_anonymizer.*"]

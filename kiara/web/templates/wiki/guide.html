@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% set tab_labels = {
+    'admin-chat': 'Admin-Chat',
+    'users': 'Benutzerverwaltung',
+    'datasources': 'Datenquellen',
+    'jobs': 'Jobs',
+    'vectordb': 'VektorDB',
+    'ki': 'KI',
+    'tools': 'Tools & Integrationen',
+    'compliance': 'Compliance',
+    'system': 'System',
+} %}
+
+{% set tab_label = tab_labels.get(tab, tab|capitalize) %}
+
+{% block title %}KIara Wiki — Guide: {{ tab_label }}{% endblock %}
+
+{% block breadcrumb %}
+<a href="/wiki/">Wiki</a> &rsaquo; <span>Guide: {{ tab_label }}</span>
+{% endblock %}
+
+{% block content %}
+<h1>{{ tab_label }}</h1>
+
+<div class="wiki-placeholder-box">
+    <p>
+        Die ausführliche Dokumentation für diesen Bereich wird in einem späteren Sprint ergänzt.
+    </p>
+    <p>
+        In der Zwischenzeit findest du im <a href="/wiki/api/">API-Katalog</a> die vollständige
+        Referenz aller Admin-Funktionen.
+    </p>
+    <p>
+        Tipp: Nutze den <strong>Info-Button</strong> &#9432; in der Sub-Tab-Leiste der Admin-UI
+        für eine Kurzübersicht des jeweiligen Bereichs.
+    </p>
+</div>
+{% endblock %}

@@ -1,0 +1,508 @@
+{% extends "base.html" %}
+
+{% block title %}KIara Wiki — Guide: Compliance{% endblock %}
+
+{% block breadcrumb %}
+<a href="/wiki/">Wiki</a> &rsaquo; <span>Guide: Compliance</span>
+{% endblock %}
+
+{% block content %}
+<h1>Compliance</h1>
+
+<p class="wiki-intro">
+    Der Compliance-Tab umfasst vier Bereiche: Anonymisierung (4-stufige Pipeline zum Schutz
+    sensibler Daten), Audit-Trail (durchsuchbares Protokoll aller KI-Anfragen), DSGVO-Berichte
+    (VVT und DSFA) und die Berechtigungsmatrix (Übersicht der effektiven Zugriffsrechte).
+</p>
+
+<nav class="wiki-toc">
+    <h3>Inhalt</h3>
+    <ol>
+        <li><a href="#anon">Anonymisierung</a>
+            <ol>
+                <li><a href="#anon-allgemein">Allgemeine Einstellungen</a></li>
+                <li><a href="#anon-erp">Schicht 1: ERP-Stammdaten (Aho-Corasick)</a></li>
+                <li><a href="#anon-ldap">Schicht 2: LDAP / Active Directory</a></li>
+                <li><a href="#anon-regex">Schicht 3: Regex-Muster</a></li>
+                <li><a href="#anon-llm">Schicht 4: LLM-Erkennung</a></li>
+                <li><a href="#anon-test">Test-Funktion</a></li>
+            </ol>
+        </li>
+        <li><a href="#audit">Audit-Trail</a></li>
+        <li><a href="#berichte">Berichte (VVT &amp; DSFA)</a></li>
+        <li><a href="#matrix">Berechtigungsmatrix</a></li>
+        <li><a href="#api-endpoints">API-Endpunkte</a> (Verweis auf API-Katalog)</li>
+    </ol>
+</nav>
+
+<!-- ============================= -->
+<!-- ANONYMISIERUNG                -->
+<!-- ============================= -->
+<h2 id="anon">Sub-Tab: Anonymisierung</h2>
+
+<p>
+    Vierstufige Anonymisierung zum Schutz sensibler Daten. Die Schichten werden
+    nacheinander ausgeführt — jede erkennt Entitäten, die vorherige Schichten
+    verpasst haben. Erkannte Entitäten werden durch deterministische Pseudonyme
+    ersetzt (z.B. <code>[KUNDE_001]</code>, <code>[IBAN_002]</code>).
+</p>
+
+<!-- --- Allgemein --- -->
+<h3 id="anon-allgemein">Allgemeine Einstellungen</h3>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Feld</th><th>Typ</th><th>Standard</th><th>Beschreibung</th><th>Empfehlung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>Anonymisierung aktivieren</code></td>
+            <td>Checkbox</td>
+            <td>An</td>
+            <td>Globale Aktivierung der gesamten Anonymisierungspipeline.</td>
+            <td><strong>Immer aktiviert lassen</strong>, insbesondere wenn Cloud-Backends konfiguriert sind.</td>
+        </tr>
+        <tr>
+            <td><code>Audit-Log aktivieren</code></td>
+            <td>Checkbox</td>
+            <td>An</td>
+            <td>Protokolliert jede Anonymisierung (Entitäten-Anzahl, Kategorien, Route).</td>
+            <td>Aktiviert lassen — nötig für DSGVO-Nachweispflicht.</td>
+        </tr>
+        <tr>
+            <td><code>Max. Content-Klasse für Cloud</code></td>
+            <td>Radio-Gruppe</td>
+            <td>LOW (3)</td>
+            <td>
+                Bestimmt, welche Inhalte an Cloud-LLMs gesendet werden dürfen:<br>
+                <strong>LOW (3):</strong> Nur technische Dokumentation.<br>
+                <strong>MEDIUM (2):</strong> + Einkauf/Logistik.<br>
+                <strong>HIGH (1):</strong> + Finanzen/Personal.
+            </td>
+            <td>
+                <strong>LOW empfohlen</strong> — minimiert das Risiko. Nur erhöhen,
+                wenn die Anonymisierung nachweislich greift und der Cloud-Provider
+                vertraglich abgesichert ist.
+            </td>
+        </tr>
+        <tr>
+            <td><code>Ausgeschlossene Begriffe</code></td>
+            <td>Textarea</td>
+            <td>(leer)</td>
+            <td>
+                Begriffe, die <em>nicht</em> anonymisiert werden sollen (einer pro Zeile).
+                Nützlich für Firmennamen, Produktbezeichnungen, Abteilungskürzel.
+            </td>
+            <td>Beispiel: <code>KIara</code>, <code>SAP</code>, <code>HR</code></td>
+        </tr>
+    </tbody>
+</table>
+
+<!-- --- Schicht 1 --- -->
+<h3 id="anon-erp">Schicht 1: ERP-Stammdaten (Aho-Corasick)</h3>
+
+<p>
+    Deterministischer Pattern-Matching-Algorithmus. Lädt Kunden, Lieferanten, Mitarbeiter
+    und Produkte aus CSV-Dateien und erkennt sie in &lt;10ms — auch bei 50.000+ Einträgen.
+</p>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Feld</th><th>Typ</th><th>Standard</th><th>Beschreibung</th><th>Empfehlung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>ERP-Import aktiv</code></td>
+            <td>Checkbox</td>
+            <td>Aus</td>
+            <td>Aktiviert den Aho-Corasick-Automaten für ERP-Stammdaten.</td>
+            <td>Aktivieren, sobald Stammdaten-CSVs bereitgestellt sind.</td>
+        </tr>
+        <tr>
+            <td><code>Stammdaten-Pfad</code></td>
+            <td>Text</td>
+            <td><code>/etc/kiara/stammdaten</code></td>
+            <td>Verzeichnis mit CSV/JSON-Dateien.</td>
+            <td>Standard belassen. Dateien dort ablegen.</td>
+        </tr>
+        <tr>
+            <td><code>Wortgrenzen-Prüfung</code></td>
+            <td>Checkbox</td>
+            <td>An</td>
+            <td>
+                Verhindert Teilübereinstimmungen:
+                &raquo;Mueller&laquo; wird nicht in &raquo;Benzmueller&laquo; erkannt.
+            </td>
+            <td><strong>Immer aktiviert lassen.</strong> Deaktivierung führt zu vielen False Positives.</td>
+        </tr>
+        <tr>
+            <td><code>Mindestlänge für Treffer</code></td>
+            <td>Zahl</td>
+            <td><code>3</code></td>
+            <td>Minimum Zeichenlänge für eine Erkennung (1–20).</td>
+            <td><strong>3</strong> ist ein guter Wert. Niedriger = mehr Treffer (inkl. False Positives).</td>
+        </tr>
+        <tr>
+            <td><code>Benutzerdefinierte Einträge</code></td>
+            <td>Textarea (JSON)</td>
+            <td><code>[]</code></td>
+            <td>
+                Zusätzliche Einträge im Format:<br>
+                <code>[{"text": "Firmenname", "type": "ORG", "key": "K-001"}]</code>
+            </td>
+            <td>Für Einträge, die nicht in den ERP-Stammdaten stehen.</td>
+        </tr>
+    </tbody>
+</table>
+
+<h4>Stammdaten-Format (CSV)</h4>
+
+<pre class="wiki-code-block"><code># Semikolon-getrennt, eine Entität pro Zeile
+# Spalten: key;type;value;variants
+K-12345;ORG;Schmidt GmbH;Schmidt|Fa. Schmidt
+L-67890;SUPPLIER;Mueller AG;Mueller AG|Fa. Mueller
+E-11111;EMPLOYEE;Max Mueller;Mueller, Max|Mueller
+P-99999;PRODUCT;Hydraulikzylinder HZ-50;HZ-50|Zylinder HZ50</code></pre>
+
+<div class="wiki-tip-box">
+    <strong>Tipp:</strong> Die Varianten-Spalte (Pipe-getrennt) ist entscheidend für die
+    Erkennungsrate. Typische Varianten: Abkürzungen, andere Schreibweisen, mit/ohne Rechtsform.
+    Der Aho-Corasick-Automat wird nach dem Laden der Stammdaten automatisch neu gebaut.
+</div>
+
+<!-- --- Schicht 2 --- -->
+<h3 id="anon-ldap">Schicht 2: LDAP / Active Directory</h3>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Feld</th><th>Typ</th><th>Standard</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>LDAP/AD-Mitarbeiter einbeziehen</code></td>
+            <td>Checkbox</td>
+            <td>An</td>
+            <td>
+                Lädt Vor-/Nachnamen aller LDAP-Benutzer in den Anonymisierungs-Automaten.
+                Erfordert eine konfigurierte LDAP-Verbindung
+                (siehe <a href="/wiki/guide/users#tab-ldap">Benutzerverwaltung → LDAP</a>).
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<!-- --- Schicht 3 --- -->
+<h3 id="anon-regex">Schicht 3: Regex-Muster</h3>
+
+<p>
+    Erkennt strukturierte personenbezogene Daten über reguläre Ausdrücke:
+    IBAN, Telefonnummern, E-Mail-Adressen, Steuer-IDs etc. Zusätzlich können
+    benutzerdefinierte Muster hinzugefügt werden.
+</p>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Feld</th><th>Typ</th><th>Beschreibung</th><th>Beispiel</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>Benutzerdefinierte Regex-Muster</code></td>
+            <td>Textarea (JSON)</td>
+            <td>
+                Array von Mustern im Format:<br>
+                <code>[{"name": "...", "pattern": "...", "type": "..."}]</code>
+            </td>
+            <td>
+<pre class="wiki-code-sample">[
+  {
+    "name": "Mitarbeiter-Nr",
+    "pattern": "MA-\\d{5}",
+    "type": "INTERNAL_CODE"
+  }
+]</pre>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<h4>Eingebaute Regex-Muster</h4>
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Muster</th><th>Erkennt</th><th>Pseudonym-Kategorie</th></tr>
+    </thead>
+    <tbody>
+        <tr><td>IBAN</td><td><code>DE89 3704 0044 0532 0130 00</code></td><td><code>[IBAN_001]</code></td></tr>
+        <tr><td>E-Mail</td><td><code>max.mueller@firma.de</code></td><td><code>[EMAIL_001]</code></td></tr>
+        <tr><td>Telefon</td><td><code>+49 171 1234567</code></td><td><code>[TELEFON_001]</code></td></tr>
+        <tr><td>Steuer-ID</td><td><code>DE123456789</code></td><td><code>[STEUER_ID_001]</code></td></tr>
+        <tr><td>IP-Adresse</td><td><code>192.168.1.100</code></td><td><code>[IP_001]</code></td></tr>
+    </tbody>
+</table>
+
+<!-- --- Schicht 4 --- -->
+<h3 id="anon-llm">Schicht 4: LLM-Erkennung</h3>
+
+<p>
+    Probabilistische PII-Erkennung durch ein Sprachmodell. Erkennt Entitäten,
+    die von den vorherigen Schichten verpasst wurden (z.B. unbekannte Personennamen,
+    Organisationen). Läuft nur auf noch nicht maskiertem Text.
+</p>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Feld</th><th>Typ</th><th>Standard</th><th>Beschreibung</th><th>Empfehlung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>LLM-Erkennung aktivieren</code></td>
+            <td>Checkbox</td>
+            <td>Aus</td>
+            <td>Aktiviert die 4. Anonymisierungsschicht.</td>
+            <td>Nur aktivieren wenn Cloud-Backends genutzt werden und maximale Anonymisierung nötig ist.</td>
+        </tr>
+        <tr>
+            <td><code>Modell</code></td>
+            <td>Text</td>
+            <td>(leer = Standard-LLM)</td>
+            <td>Optionales dediziertes Modell für die PII-Erkennung.</td>
+            <td>Leer lassen — das Standard-LLM ist meist ausreichend.</td>
+        </tr>
+        <tr>
+            <td><code>Confidence-Schwellwert</code></td>
+            <td>Zahl</td>
+            <td><code>0.7</code></td>
+            <td>Entitäten unter diesem Wert (0.0–1.0) werden verworfen.</td>
+            <td><strong>0.7</strong> ist ein guter Kompromiss. Höher = weniger False Positives, niedriger = mehr Recall.</td>
+        </tr>
+        <tr>
+            <td><code>Temperatur</code></td>
+            <td>Zahl</td>
+            <td><code>0.1</code></td>
+            <td>LLM-Temperatur. Niedrig = deterministischer.</td>
+            <td><strong>0.1</strong> — Anonymisierung soll reproduzierbar sein.</td>
+        </tr>
+        <tr>
+            <td><code>Timeout</code></td>
+            <td>Zahl</td>
+            <td><code>10</code></td>
+            <td>Maximale Wartezeit pro Anfrage (1–60 Sekunden).</td>
+            <td><strong>10s</strong> reicht für die meisten Texte.</td>
+        </tr>
+        <tr>
+            <td><code>Cache-Größe</code></td>
+            <td>Zahl</td>
+            <td><code>256</code></td>
+            <td>LRU-Cache für bereits analysierte Texte (0–10.000).</td>
+            <td><strong>256</strong>. Reduziert wiederholte LLM-Calls bei ähnlichen Anfragen.</td>
+        </tr>
+        <tr>
+            <td><code>Context-Window</code></td>
+            <td>Zahl</td>
+            <td><code>4096</code></td>
+            <td>Kontextfenster des LLMs für die PII-Erkennung (512–131.072).</td>
+            <td><strong>4096</strong> reicht für einzelne Benutzer-Anfragen.</td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box wiki-tip-warning">
+    <strong>Achtung:</strong> Die LLM-Erkennung erhöht die Latenz um <strong>1–5 Sekunden</strong>
+    pro Anfrage. Sie ist als letzte Verteidigungslinie gedacht, nicht als primäre
+    Erkennungsmethode. Für die meisten Installationen reichen die Schichten 1–3 aus.
+</div>
+
+<!-- --- Test --- -->
+<h3 id="anon-test">Test-Funktion</h3>
+
+<p>
+    Der Button &raquo;Anonymisierung testen...&laquo; öffnet ein Modal, in dem ein beliebiger
+    Text eingegeben und die Anonymisierungspipeline live getestet werden kann.
+</p>
+
+<p>Das Ergebnis zeigt:</p>
+<ul class="wiki-examples">
+    <li><strong>Anonymisierter Text:</strong> Alle Pseudonyme hervorgehoben</li>
+    <li><strong>Entitäten-Tabelle:</strong> Original → Pseudonym für jeden Treffer</li>
+    <li><strong>Statistik:</strong> Gesamtzahl erkannter Entitäten</li>
+</ul>
+
+<div class="wiki-tip-box">
+    <strong>Tipp:</strong> Vor dem Aktivieren der Cloud-Backends immer einen Anonymisierungstest
+    mit realistischem Text durchführen. Typischer Testtext: Ein internes Protokoll mit
+    Kundennamen, IBAN, E-Mail-Adressen und Mitarbeiternamen.
+</div>
+
+<!-- ============================= -->
+<!-- AUDIT-TRAIL                   -->
+<!-- ============================= -->
+<h2 id="audit">Sub-Tab: Audit-Trail</h2>
+
+<p>
+    Durchsuchbares Protokoll aller KI-Anfragen. Anfrageinhalte, Antworten,
+    Kontextverweise und Tool-Calls werden fuer Fehleranalyse und Qualitaetssicherung
+    im Klartext gespeichert.
+</p>
+
+<h3>Filter</h3>
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Filter</th><th>Typ</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr><td><strong>Von / Bis</strong></td><td>Datum</td><td>Zeitraum eingrenzen.</td></tr>
+        <tr><td><strong>Modus</strong></td><td>Button-Gruppe</td><td>Alle / Standard / Unchained / Agent.</td></tr>
+        <tr><td><strong>Route</strong></td><td>Button-Gruppe</td><td>Alle / Lokal / Cloud.</td></tr>
+        <tr><td><strong>Suche</strong></td><td>Text</td><td>Volltextsuche in Frage-Excerpts (ILIKE).</td></tr>
+    </tbody>
+</table>
+
+<h3>Tabellen-Spalten</h3>
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Spalte</th><th>Beschreibung</th><th>Sortierbar</th></tr>
+    </thead>
+    <tbody>
+        <tr><td><strong>ID</strong></td><td>Laufende Nummer.</td><td>Ja</td></tr>
+        <tr><td><strong>Zeitstempel</strong></td><td>Datum und Uhrzeit der Anfrage.</td><td>Ja</td></tr>
+        <tr><td><strong>Benutzer</strong></td><td>Benutzername des Anfragenden.</td><td>Ja</td></tr>
+        <tr><td><strong>Modus</strong></td><td>Badge: Standard (blau), Unchained (orange), Agent (lila).</td><td>Ja</td></tr>
+        <tr><td><strong>Route</strong></td><td>Badge: Lokal / Cloud / MCP.</td><td>Ja</td></tr>
+        <tr><td><strong>Chat-ID</strong></td><td>Zugehörige Chat-Session.</td><td>Nein</td></tr>
+        <tr><td><strong>Frage</strong></td><td>Gekürzt (max. 60 Zeichen).</td><td>Nein</td></tr>
+        <tr><td><strong>Dauer</strong></td><td>Verarbeitungszeit in ms.</td><td>Ja</td></tr>
+        <tr><td><strong>Detail</strong></td><td>Link zur Vollansicht (neuer Tab).</td><td>Nein</td></tr>
+    </tbody>
+</table>
+
+<h3>Detail-Ansicht (Expandable)</h3>
+<p>Klick auf eine Zeile zeigt (lazy-loaded):</p>
+<ul class="wiki-examples">
+    <li><strong>Prompt an KI-Backend:</strong> Der vollständige Prompt (bei Agent: Message-Array)</li>
+    <li><strong>Tool-Calls:</strong> Tool-Name, Iteration, Parameter (JSON), Ergebnis</li>
+    <li><strong>KI-Output:</strong> Vollständige Antwort</li>
+    <li><strong>Meta-Daten:</strong> Modell, Chunks, anonymisierte Entitäten, Dauer</li>
+    <li><strong>Cloud-Audit:</strong> Provider, Modell, Tokens (In/Out), Entitäten vor Cloud-Versand</li>
+</ul>
+
+<div class="wiki-tip-box">
+    <strong>Tipp:</strong> Die Detail-Ansicht gibt es auch als vollständige Seite
+    unter <code>/audit/{id}</code> — mit Form-View (strukturiert) und Raw-View
+    (expandierbarer JSON). Nützlich für die Fehleranalyse bei unerwarteten Antworten.
+</div>
+
+<!-- ============================= -->
+<!-- BERICHTE                      -->
+<!-- ============================= -->
+<h2 id="berichte">Sub-Tab: Berichte (VVT &amp; DSFA)</h2>
+
+<p>
+    Generiert DSGVO-konforme Berichte auf Knopfdruck, basierend auf der aktuellen
+    Systemkonfiguration.
+</p>
+
+<h3>KPI-Dashboard</h3>
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>KPI</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr><td><strong>Anfragen (30 Tage)</strong></td><td>Gesamtzahl der KI-Anfragen im letzten Monat.</td></tr>
+        <tr><td><strong>Cloud-Anteil</strong></td><td>Prozentsatz der Anfragen, die an Cloud-LLMs gerouted wurden.</td></tr>
+        <tr><td><strong>Anonymisierte Entitäten</strong></td><td>Gesamtzahl der in 30 Tagen anonymisierten Entitäten.</td></tr>
+        <tr><td><strong>Aktive Nutzer</strong></td><td>Anzahl unterschiedlicher Benutzer in 30 Tagen.</td></tr>
+    </tbody>
+</table>
+
+<h3>VVT — Verzeichnis der Verarbeitungstätigkeiten (DSGVO Art. 30)</h3>
+
+<p>
+    Der Button &raquo;VVT generieren&laquo; erstellt ein vollständiges Verzeichnis der
+    Verarbeitungstätigkeiten mit:
+</p>
+
+<ul class="wiki-examples">
+    <li><strong>Verarbeitungszweck</strong> und Rechtsgrundlage (Art. 6 Abs. 1 lit. f DSGVO)</li>
+    <li><strong>Betroffene Personen:</strong> Mitarbeiter, Kunden, Lieferanten</li>
+    <li><strong>Datenkategorien:</strong> Technische Dokumentation, Benutzeranfragen und Antworten im Klartext, Kontextverweise, Tool-Call-Protokolle, Nutzungsstatistiken</li>
+    <li><strong>Empfänger:</strong> Interne Mitarbeiter, ggf. Cloud-KI-Anbieter abhängig vom Backend-Flag: trusted kann Originaltext erhalten, nicht-trusted nutzt Anonymisierung/Restriction-Policy.</li>
+    <li><strong>Löschfristen:</strong> Für query_log, cloud_audit_log und audit_anonymization ist im aktuellen Build keine automatische Löschung aktiv; chat_messages sind durch Benutzer löschbar.</li>
+    <li><strong>TOM:</strong> Pseudonymisierung für nicht-trusted Datenpfade, Aho-Corasick, Inhaltsklassifizierung, RBAC/LDAP, HTTPS/TLS, Audit-Logging, Budget-Limitierung, lokale VectorDB</li>
+    <li><strong>Anonymisierungsverfahren:</strong> Deterministische Pseudonymisierung, Engine: Aho-Corasick + Regex-Fallback, 14 Kategorien</li>
+</ul>
+
+<h3>DSFA — Datenschutz-Folgenabschätzung (DSGVO Art. 35)</h3>
+
+<p>
+    Der Button &raquo;DSFA generieren&laquo; erstellt eine Risikoanalyse. Eine DSFA ist
+    erforderlich, wenn Cloud-KI-Backends konfiguriert sind.
+</p>
+
+<ul class="wiki-examples">
+    <li><strong>Erforderlichkeit:</strong> Ja (wenn Cloud aktiv) / Nein (rein lokal)</li>
+    <li><strong>Risiko-Katalog:</strong> Offenlegung von Originaltexten oder pseudonymisierten Daten, API-Key-Verlust, Datenverlust, Modell-Halluzination</li>
+    <li><strong>Pro Risiko:</strong> Eintrittswahrscheinlichkeit, Schwere, Maßnahmen</li>
+    <li><strong>Ergebnis:</strong> &raquo;AKZEPTABEL (mit Maßnahmen)&laquo;, &raquo;Bewertung erforderlich&laquo; bei trusted Cloud-Backends oder &raquo;Keine DSFA erforderlich&laquo;</li>
+</ul>
+
+<div class="wiki-tip-box">
+    <strong>Tipp:</strong> VVT und DSFA werden <em>dynamisch</em> aus der aktuellen
+    Systemkonfiguration generiert. Wenn z.B. ein Cloud-Backend hinzugefügt oder die
+    Anonymisierung geändert wird, ändern sich auch die Berichte. Es empfiehlt sich,
+    nach jeder wesentlichen Config-Änderung die Berichte neu zu generieren und zu archivieren.
+</div>
+
+<!-- ============================= -->
+<!-- BERECHTIGUNGSMATRIX           -->
+<!-- ============================= -->
+<h2 id="matrix">Sub-Tab: Berechtigungsmatrix</h2>
+
+<p>
+    Read-only-Übersicht der effektiven Zugriffsstruktur: Welche LDAP-Gruppe hat Zugriff
+    auf welche Datenquellen und welche Tools?
+</p>
+
+<h3>Matrix-Aufbau</h3>
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Achse</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Zeilen</strong></td>
+            <td>LDAP-Gruppen mit Mitglieder-Anzahl.</td>
+        </tr>
+        <tr>
+            <td><strong>Spalten (links)</strong></td>
+            <td>Datenquellen — Zugriff per Datenquellen-Zuweisung (siehe <a href="/wiki/guide/datasources#access-control">Datenquellen-Guide</a>).</td>
+        </tr>
+        <tr>
+            <td><strong>Spalten (rechts)</strong></td>
+            <td>Tools — Zugriff per Tool-Berechtigungen (siehe <a href="/wiki/guide/tools#erp-permissions">Tools-Guide</a>).</td>
+        </tr>
+        <tr>
+            <td><strong>Zellen</strong></td>
+            <td>&#10003; = Zugriff, &#8212; = kein Zugriff.</td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box">
+    <strong>Tipp:</strong> Die Matrix ist eine Zusammenführung aus zwei Quellen:
+    Datenquellen-Gruppen (konfiguriert im Datenquellen-Tab) und Tool-Berechtigungen
+    (konfiguriert im Tools-Tab). Änderungen werden <em>nicht</em> hier vorgenommen,
+    sondern in den jeweiligen Tabs. Die Matrix dient der Übersicht und Kontrolle.
+</div>
+
+<!-- ============================= -->
+<!-- API (Verweis)                 -->
+<!-- ============================= -->
+<h2 id="api-endpoints">API-Endpunkte</h2>
+
+<p>
+    Die vollständige API-Referenz wird dynamisch aus der Admin-Registry generiert:
+</p>
+<ul class="wiki-examples">
+    <li><a href="/wiki/api/compliance">Compliance-API</a> — Audit-Trail, Berichte (VVT/DSFA), Dashboard, Berechtigungsmatrix, Anonymisierungsstatistik</li>
+</ul>
+
+{% endblock %}

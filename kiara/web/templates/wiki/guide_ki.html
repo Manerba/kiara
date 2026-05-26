@@ -1,0 +1,975 @@
+{% extends "base.html" %}
+
+{% block title %}KIara Wiki — Guide: KI{% endblock %}
+
+{% block breadcrumb %}
+<a href="/wiki/">Wiki</a> &rsaquo; <span>Guide: KI</span>
+{% endblock %}
+
+{% block content %}
+<h1>KI</h1>
+
+<p class="wiki-intro">
+    Der KI-Tab konfiguriert alle KI-Komponenten: Embedding- und LLM-Backends, Ingestion-Parameter,
+    Retrieval-Strategie, Wissensgraph und Prompt-Templates. Er ist in 5 Sub-Tabs gegliedert.
+</p>
+
+<nav class="wiki-toc">
+    <h3>Inhalt</h3>
+    <ol>
+        <li><a href="#backends">Modelle &amp; Backend</a>
+            <ol>
+                <li><a href="#backend-kategorien">Kategorien &amp; Provider</a></li>
+                <li><a href="#backend-erstellen">Backend erstellen / bearbeiten</a></li>
+                <li><a href="#backend-test">Verbindungstests</a></li>
+            </ol>
+        </li>
+        <li><a href="#ingestion">Ingestion</a>
+            <ol>
+                <li><a href="#chunk-params">Chunk-Parameter</a></li>
+                <li><a href="#vlm-prompt">VLM-Prompt</a></li>
+                <li><a href="#blocklist">Ausgeschlossene Dateitypen</a></li>
+                <li><a href="#late-chunking">Late Chunking</a></li>
+            </ol>
+        </li>
+        <li><a href="#retrieval">Retrieval</a>
+            <ol>
+                <li><a href="#hybrid">Hybrid-Suche</a></li>
+                <li><a href="#reranking">Reranking</a></li>
+                <li><a href="#query-expansion">Query-Expansion</a></li>
+                <li><a href="#kontext-limits">Kontext-Limits &amp; weitere Optionen</a></li>
+            </ol>
+        </li>
+        <li><a href="#graph">Wissensgraph</a></li>
+        <li><a href="#chat">Chat (Prompt-Templates)</a>
+            <ol>
+                <li><a href="#template-typen">Template-Typen</a></li>
+                <li><a href="#template-platzhalter">Platzhalter</a></li>
+                <li><a href="#template-erstellen">Templates erstellen</a></li>
+            </ol>
+        </li>
+        <li><a href="#api-endpoints">API-Endpunkte</a> (Verweis auf API-Katalog)</li>
+    </ol>
+</nav>
+
+<!-- ============================= -->
+<!-- MODELLE & BACKEND             -->
+<!-- ============================= -->
+<h2 id="backends">Sub-Tab: Modelle &amp; Backend</h2>
+
+<p>
+    Zentrale Verwaltung aller KI-Backends. Jedes Backend hat eine Kategorie, einen Provider,
+    ein Modell und eine Priorität. KIara wählt automatisch das aktive Backend mit der
+    niedrigsten Priorität (1 = bevorzugt).
+</p>
+
+<!-- --- Kategorien --- -->
+<h3 id="backend-kategorien">Kategorien &amp; Provider</h3>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Kategorie</th><th>Provider</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Embedding</strong></td>
+            <td>Ollama, OpenAI, Voyage</td>
+            <td>
+                Vektorisierung von Text-Chunks für die Suche.
+                Bestimmt die Qdrant-Collection und Vektordimension.
+            </td>
+        </tr>
+        <tr>
+            <td><strong>LLM</strong></td>
+            <td>Ollama</td>
+            <td>
+                Lokales Sprachmodell für Antwortgenerierung (z.B. <code>qwen3:8b</code>).
+                Wird für Standard- und Agent-Modus verwendet.
+            </td>
+        </tr>
+        <tr>
+            <td><strong>Cloud</strong></td>
+            <td>Anthropic, OpenAI</td>
+            <td>
+                Cloud-basierte LLMs (Claude, GPT). Höhere Qualität, aber Kosten pro Token.
+                Wird als Alternative oder Fallback zum lokalen LLM konfiguriert.
+            </td>
+        </tr>
+        <tr>
+            <td><strong>VLM</strong></td>
+            <td>Ollama</td>
+            <td>
+                Vision Language Model für Bildbeschreibungen bei der Indexierung.
+                Wird nur bei aktiviertem VLM in der Datenquelle verwendet.
+            </td>
+        </tr>
+        <tr>
+            <td><strong>DDU</strong></td>
+            <td>Docling</td>
+            <td>
+                Deep Document Understanding — konvertiert PDF/Office-Dokumente über ein
+                Deep-Learning-Modell zu Markdown. Läuft als separater Service (Docling-Proxy).
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<h3>Backend-Tabelle — Spalten</h3>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Spalte</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr><td><strong>Name</strong></td><td>Frei wählbarer Anzeigename (z.B. &raquo;GPU-Server 1&laquo;).</td></tr>
+        <tr><td><strong>Kategorie</strong></td><td>Farbiges Badge: Embedding / LLM / Cloud / VLM / DDU.</td></tr>
+        <tr><td><strong>Provider</strong></td><td>Technischer Provider: Ollama, Anthropic, OpenAI, Voyage, Docling.</td></tr>
+        <tr><td><strong>Modell</strong></td><td>Modellname (z.B. <code>qwen3:8b</code>, <code>claude-sonnet-4-20250514</code>).</td></tr>
+        <tr><td><strong>URL</strong></td><td>Ollama-URL oder Cloud-Base-URL.</td></tr>
+        <tr><td><strong>Prio</strong></td><td>Priorität (1-100). Niedrig = bevorzugt.</td></tr>
+        <tr><td><strong>Status</strong></td><td>Letzter Verbindungstest: OK (grün) / Fehler (rot) / Nicht getestet.</td></tr>
+        <tr><td><strong>Aktiv</strong></td><td>Toggle: Ein/Aus.</td></tr>
+        <tr><td><strong>Aktionen</strong></td><td>Test, Bearbeiten, Löschen.</td></tr>
+    </tbody>
+</table>
+
+<!-- --- Erstellen --- -->
+<h3 id="backend-erstellen">Backend erstellen / bearbeiten</h3>
+
+<h4>Gemeinsame Felder (alle Kategorien)</h4>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Feld</th><th>Typ</th><th>Standard</th><th>Beschreibung</th><th>Empfehlung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>Name</code></td>
+            <td>Text</td>
+            <td>(auto)</td>
+            <td>Anzeigename für die Backend-Tabelle.</td>
+            <td>Sprechend benennen: <code>Ollama GPU-Server</code>, <code>Anthropic Claude</code>.</td>
+        </tr>
+        <tr>
+            <td><code>Priorität</code></td>
+            <td>Zahl</td>
+            <td><code>10</code></td>
+            <td>1 = höchste Priorität, 100 = niedrigste.</td>
+            <td>
+                Primäres Backend: <code>10</code>.
+                Fallback: <code>50</code>.
+                Nur bei Bedarf: <code>90</code>.
+            </td>
+        </tr>
+        <tr>
+            <td><code>Aktiv</code></td>
+            <td>Toggle</td>
+            <td>An</td>
+            <td>Deaktivierte Backends werden bei der Auswahl übersprungen.</td>
+            <td>Backends nicht löschen, sondern deaktivieren — so bleibt die Config erhalten.</td>
+        </tr>
+    </tbody>
+</table>
+
+<h4>Ollama-Backends (Embedding, LLM, VLM)</h4>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Feld</th><th>Typ</th><th>Beschreibung</th><th>Empfehlung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>Ollama URL</code></td>
+            <td>Text + Test-Button</td>
+            <td>URL des Ollama-Servers.</td>
+            <td>
+                Lokal: <code>http://localhost:11434</code><br>
+                Remote GPU: <code>http://gpu-server.local:11434</code>
+            </td>
+        </tr>
+        <tr>
+            <td><code>Modell</code></td>
+            <td>Dropdown / Text</td>
+            <td>
+                Nach erfolgreichem Test wird ein Dropdown mit verfügbaren Modellen angezeigt.
+                Alternativ: manuell eingeben.
+            </td>
+            <td>
+                Embedding: <code>nomic-embed-text</code><br>
+                LLM: <code>qwen3:8b</code><br>
+                VLM: je nach Verfügbarkeit
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<h4>Cloud-Backends (Anthropic, OpenAI)</h4>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Feld</th><th>Typ</th><th>Beschreibung</th><th>Empfehlung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>Base URL</code></td>
+            <td>Text</td>
+            <td>Optionale alternative API-URL (für Proxies oder Azure-Endpoints). Leer = Standard-API.</td>
+            <td>Normalerweise leer lassen.</td>
+        </tr>
+        <tr>
+            <td><code>API-Key</code></td>
+            <td>Passwort</td>
+            <td>API-Schlüssel. Wird AES-verschlüsselt gespeichert.</td>
+            <td>
+                Anthropic: Beginnt mit <code>sk-ant-</code>.<br>
+                OpenAI: Beginnt mit <code>sk-</code>.
+            </td>
+        </tr>
+        <tr>
+            <td><code>Modell</code></td>
+            <td>Dropdown / Text</td>
+            <td>Nach Test wird ein Dropdown mit verfügbaren Modellen angezeigt.</td>
+            <td>
+                Anthropic: <code>claude-sonnet-4-20250514</code><br>
+                OpenAI: <code>gpt-4o</code>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<h4>Cloud-Embedding (OpenAI, Voyage)</h4>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Feld</th><th>Typ</th><th>Beschreibung</th><th>Empfehlung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>API-Key</code></td>
+            <td>Passwort</td>
+            <td>API-Schlüssel des Embedding-Providers.</td>
+            <td>Voyage: Beginnt mit <code>pa-</code>.</td>
+        </tr>
+        <tr>
+            <td><code>Modell</code></td>
+            <td>Dropdown</td>
+            <td>Statische Modell-Liste (OpenAI: text-embedding-3-small/large, Voyage: voyage-3/lite).</td>
+            <td>Siehe <a href="/wiki/guide/vectordb#embedding-modelle">VektorDB-Guide: Embedding-Modelle</a>.</td>
+        </tr>
+    </tbody>
+</table>
+
+<h4>DDU (Docling)</h4>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Feld</th><th>Typ</th><th>Beschreibung</th><th>Empfehlung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>URL</code></td>
+            <td>Text</td>
+            <td>URL des Docling-Proxy-Services. Leer = lokale Installation.</td>
+            <td><code>http://gpu-server.local:5001</code> (Docling-Proxy auf dem GPU-Server).</td>
+        </tr>
+    </tbody>
+</table>
+
+<!-- --- Tests --- -->
+<h3 id="backend-test">Verbindungstests</h3>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Provider</th><th>Was wird getestet</th><th>Ergebnis bei Erfolg</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Ollama</strong></td>
+            <td>HTTP-Erreichbarkeit + Modell-Liste abfragen.</td>
+            <td>&raquo;Erreichbar (N Modelle)&laquo; + Dropdown wird befüllt.</td>
+        </tr>
+        <tr>
+            <td><strong>Anthropic / OpenAI (LLM)</strong></td>
+            <td>API-Key validieren + Modell-Liste abfragen.</td>
+            <td>Modell-Dropdown wird befüllt.</td>
+        </tr>
+        <tr>
+            <td><strong>OpenAI / Voyage (Embedding)</strong></td>
+            <td>Probe-Embedding generieren (validiert Key + Modell + Dimension).</td>
+            <td>Dimension wird angezeigt und validiert.</td>
+        </tr>
+        <tr>
+            <td><strong>Docling (DDU)</strong></td>
+            <td>Erreichbarkeit des Docling-Proxy prüfen.</td>
+            <td>&raquo;Verfügbar&laquo;.</td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box">
+    <strong>Tipp:</strong> Nach dem Erstellen eines Backends immer den Test-Button in der
+    Tabelle (&#8635;) klicken. Der Status wird gespeichert (<code>last_test_ok</code>,
+    <code>last_test_at</code>, <code>last_test_error</code>) und ist so auch später sichtbar.
+</div>
+
+<!-- ============================= -->
+<!-- INGESTION                     -->
+<!-- ============================= -->
+<h2 id="ingestion">Sub-Tab: Ingestion</h2>
+
+<p>
+    Globale Einstellungen für die Dokumenten-Indexierung. Diese Werte gelten als
+    Systemstandard — einzelne Datenquellen können sie überschreiben
+    (siehe <a href="/wiki/guide/datasources#ingestion-settings">Datenquellen-Guide</a>).
+</p>
+
+<!-- --- Chunks --- -->
+<h3 id="chunk-params">Chunk-Parameter</h3>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Feld</th><th>Typ</th><th>Standard</th><th>Beschreibung</th><th>Empfehlung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>Chunk-Größe</code></td>
+            <td>Zahl</td>
+            <td><code>1000</code></td>
+            <td>Maximale Zeichen pro Chunk (bei <code>custom</code>-Strategie).</td>
+            <td>
+                <strong>800–1200</strong> für die meisten Anwendungsfälle.
+                Zu kleine Chunks verlieren Kontext, zu große verwässern die Relevanz.
+            </td>
+        </tr>
+        <tr>
+            <td><code>Chunk-Overlap</code></td>
+            <td>Zahl</td>
+            <td><code>200</code></td>
+            <td>Überlappung zwischen aufeinanderfolgenden Chunks (Zeichen).</td>
+            <td>
+                <strong>10–20%</strong> der Chunk-Größe. Verhindert, dass relevante
+                Sätze an Chunk-Grenzen verloren gehen.
+            </td>
+        </tr>
+        <tr>
+            <td><code>Batch-Größe</code></td>
+            <td>Zahl</td>
+            <td><code>100</code></td>
+            <td>Chunks pro Batch beim Embedding-Upload.</td>
+            <td>
+                <strong>50–200</strong>. Größere Batches sind schneller, brauchen aber
+                mehr RAM/VRAM. Bei Cloud-Providern API-Limits beachten
+                (OpenAI: max 2048, Voyage: max 1000).
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<!-- --- VLM --- -->
+<h3 id="vlm-prompt">VLM-Prompt</h3>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Feld</th><th>Typ</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>VLM-Prompt</code></td>
+            <td>Textarea</td>
+            <td>
+                Prompt für die KI-Bildbeschreibung. Bestimmt, wie Bilder bei der
+                Indexierung beschrieben werden. Leer = Standard-Prompt.
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box">
+    <strong>Tipp — Standard-Prompt:</strong> Der Default-Prompt ist auf deutsche Sprache und
+    technische Inhalte optimiert (Zeichnungen, Typenschilder, Fotos). Er kann angepasst werden,
+    z.B. für medizinische Bilder oder spezifische Branchenanforderungen. Button
+    &raquo;Auf Standard zurücksetzen&laquo; stellt den Original-Prompt wieder her.
+</div>
+
+<!-- --- Blocklist --- -->
+<h3 id="blocklist">Ausgeschlossene Dateitypen</h3>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Feld</th><th>Typ</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>Blocklist</code></td>
+            <td>Textarea</td>
+            <td>
+                Eine Dateiendung pro Zeile (mit Punkt). Dateien mit diesen Endungen
+                werden bei aktiviertem &raquo;Alle Textdateien akzeptieren&laquo;
+                trotzdem übersprungen. Betrifft 70+ Endungen: Zertifikate, Archive,
+                Bilder, Audio/Video, Executables, Fonts, Datenbanken, temp-Dateien.
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box">
+    <strong>Tipp:</strong> Die Blocklist greift <em>nur</em> wenn die Datenquellen-Option
+    &raquo;Alle Textdateien akzeptieren&laquo; aktiv ist. Bei Standard-Dateityp-Erkennung
+    (ohne diese Option) werden ohnehin nur bekannte Formate (.pdf, .docx, .txt, ...) verarbeitet.
+</div>
+
+<!-- --- Late Chunking --- -->
+<h3 id="late-chunking">Late Chunking</h3>
+
+<p>
+    Late Chunking erzeugt kontextbewusste Embeddings, indem das gesamte Dokument
+    durch den Transformer geschickt und erst danach pro Chunk ein Vektor erzeugt
+    wird (Mean-Pooling ueber die Token des jeweiligen Segments). Dadurch traegt
+    jeder Chunk-Vektor den Kontext des gesamten Dokuments &mdash; Pronomen,
+    Rueckverweise und Fachbegriffe werden korrekt aufgeloest.
+</p>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Feld</th><th>Typ</th><th>Standard</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>Late Chunking aktivieren</code></td>
+            <td>Toggle</td>
+            <td>An</td>
+            <td>Globaler Schalter. Nur wirksam fuer unterstuetzte Embedding-Modelle
+                und Ollama-Provider. Nicht verfuegbar fuer Cloud-Embedding-APIs.</td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box wiki-tip-warning">
+    <strong>Wichtig:</strong> Aenderungen wirken sich nur auf zukuenftige Indexierungen aus.
+    Fuer bestehende Datenquellen ist ein Re-Index erforderlich.
+</div>
+
+<p>
+    Ausfuehrliche Dokumentation (Voraussetzungen, Fallback-Verhalten, Wechselwirkung
+    mit Contextual Retrieval, Speicherbedarf) im
+    <a href="/wiki/guide/late-chunking">eigenen Guide &raquo;Late Chunking&laquo;</a>.
+</p>
+
+<!-- ============================= -->
+<!-- RETRIEVAL                     -->
+<!-- ============================= -->
+<h2 id="retrieval">Sub-Tab: Retrieval</h2>
+
+<p>
+    Konfiguration der Suchstrategie: Wie werden relevante Chunks für eine Benutzer-Anfrage
+    gefunden? KIara unterstützt Vektor-Suche, optionale Hybrid-Suche (BM25/Elasticsearch),
+    Reranking und Query-Expansion.
+</p>
+
+<!-- --- Hybrid --- -->
+<h3 id="hybrid">Hybrid-Suche</h3>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Feld</th><th>Typ</th><th>Standard</th><th>Beschreibung</th><th>Empfehlung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>Methode</code></td>
+            <td>Dropdown</td>
+            <td><code>Keine</code></td>
+            <td>
+                Keyword-Suche zusätzlich zur Vektor-Suche.<br>
+                <strong>Keine:</strong> Nur Vektor-Suche (Qdrant).<br>
+                <strong>BM25 (In-Memory):</strong> Klassische Keyword-Suche, schnell, kein Extra-Service.<br>
+                <strong>Elasticsearch:</strong> Verteilte Volltextsuche mit Fuzzy-Matching.
+            </td>
+            <td>
+                <strong>Elasticsearch empfohlen</strong> für Produktionsumgebungen — skaliert
+                besser und bietet Fuzzy-Suche. BM25 ist gut für kleine Datenbestände oder Tests.
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<h4>Elasticsearch-Einstellungen (bei Auswahl &raquo;Elasticsearch&laquo;)</h4>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Feld</th><th>Typ</th><th>Standard</th><th>Beschreibung</th><th>Empfehlung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>URL</code></td>
+            <td>Text</td>
+            <td><code>http://localhost:9200</code></td>
+            <td>Elasticsearch-Server-URL.</td>
+            <td>Auf dem gleichen Host: Standard belassen.</td>
+        </tr>
+        <tr>
+            <td><code>Index-Name</code></td>
+            <td>Text</td>
+            <td><code>kiara</code></td>
+            <td>Name des ES-Index.</td>
+            <td>Standard belassen, außer mehrere KIara-Instanzen auf einem ES-Server laufen.</td>
+        </tr>
+        <tr>
+            <td><code>Fuzziness</code></td>
+            <td>Dropdown</td>
+            <td><code>Keine (exakt)</code></td>
+            <td>
+                Unscharfe Suche:<br>
+                <code>Keine</code> — Exakte Treffer.<br>
+                <code>AUTO</code> — Automatisch (empfohlen, längenabhängig).<br>
+                <code>1</code> — Max. 1 Zeichen Abweichung.<br>
+                <code>2</code> — Max. 2 Zeichen Abweichung.
+            </td>
+            <td>
+                <strong>AUTO empfohlen</strong> — toleriert Tippfehler ohne die Präzision
+                zu stark zu senken.
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<h4>Elasticsearch Index-Verwaltung</h4>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Button</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr><td><strong>Index aufbauen</strong></td><td>Löscht den bestehenden Index und baut ihn aus allen Qdrant-Chunks neu auf.</td></tr>
+        <tr><td><strong>Integrität prüfen</strong></td><td>Vergleicht eine 500er-Stichprobe zwischen ES und Qdrant.</td></tr>
+        <tr><td><strong>Index löschen</strong></td><td>Entfernt den ES-Index vollständig.</td></tr>
+    </tbody>
+</table>
+
+<h4>RRF-K (Reciprocal Rank Fusion)</h4>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Feld</th><th>Typ</th><th>Standard</th><th>Beschreibung</th><th>Empfehlung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>RRF-K</code></td>
+            <td>Zahl</td>
+            <td><code>60</code></td>
+            <td>
+                Glättungsparameter für die Rang-Fusion von Vektor-Suche und Keyword-Suche.
+                Höhere Werte gewichten die Rangfolge stärker, niedrigere die Score-Differenzen.
+            </td>
+            <td><strong>60</strong> ist der Standardwert aus der Literatur. Anpassung nur bei spezifischen Retrieval-Problemen.</td>
+        </tr>
+    </tbody>
+</table>
+
+<!-- --- Reranking --- -->
+<h3 id="reranking">Reranking</h3>
+
+<p>
+    Cross-Encoder Reranking sortiert die initialen Suchergebnisse nach semantischer
+    Relevanz um. Höherer Qualitätgewinn, aber zusätzliche Latenz.
+</p>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Feld</th><th>Typ</th><th>Standard</th><th>Beschreibung</th><th>Empfehlung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>Aktivieren</code></td>
+            <td>Checkbox</td>
+            <td>Aus</td>
+            <td>Cross-Encoder Reranking ein-/ausschalten.</td>
+            <td>Empfohlen, wenn Antwortqualität wichtiger als Latenz ist.</td>
+        </tr>
+        <tr>
+            <td><code>Rerank-Modell</code></td>
+            <td>Text</td>
+            <td><code>cross-encoder/ms-marco-MiniLM-L-6-v2</code></td>
+            <td>HuggingFace-Modellname des Cross-Encoders.</td>
+            <td>Das Standard-Modell bietet ein gutes Verhältnis aus Qualität und Geschwindigkeit.</td>
+        </tr>
+        <tr>
+            <td><code>Rerank Top-K</code></td>
+            <td>Zahl</td>
+            <td><code>5</code></td>
+            <td>Anzahl der Top-Chunks nach dem Reranking, die an das LLM weitergegeben werden.</td>
+            <td><strong>5–10</strong>. Mehr Chunks = mehr Kontext, aber auch mehr Rauschen.</td>
+        </tr>
+        <tr>
+            <td><code>Fetch-Multiplikator</code></td>
+            <td>Zahl</td>
+            <td><code>3</code></td>
+            <td>
+                Faktor für die initiale Suche: Top-K × Multiplikator Chunks werden
+                aus Qdrant geholt, dann reranked auf Top-K.
+            </td>
+            <td><strong>3</strong>. Höhere Werte verbessern die Recall-Rate, erhöhen aber die Reranking-Zeit.</td>
+        </tr>
+    </tbody>
+</table>
+
+<!-- --- Query-Expansion --- -->
+<h3 id="query-expansion">Query-Expansion</h3>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Feld</th><th>Typ</th><th>Standard</th><th>Beschreibung</th><th>Empfehlung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>Aktivieren</code></td>
+            <td>Checkbox</td>
+            <td>Aus</td>
+            <td>
+                Das LLM generiert alternative Formulierungen der Benutzer-Anfrage.
+                Diese werden parallel gesucht, die Ergebnisse vereinigt.
+            </td>
+            <td>
+                Hilfreich bei kurzen oder mehrdeutigen Anfragen. Erhöht die Latenz
+                um einen LLM-Call, verbessert aber die Abdeckung.
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<!-- --- Kontext --- -->
+<h3 id="kontext-limits">Kontext-Limits &amp; weitere Optionen</h3>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Feld</th><th>Typ</th><th>Standard</th><th>Bereich</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>Max. Kontext-Chunks</code></td>
+            <td>Zahl</td>
+            <td><code>80</code></td>
+            <td>5 – 500</td>
+            <td>
+                Obergrenze der Chunks im LLM-Kontext. Schützt vor Kontext-Überlauf
+                bei Modellen mit kleinem Context-Window.
+            </td>
+        </tr>
+        <tr>
+            <td><code>Agent-Deduplizierung</code></td>
+            <td>Checkbox</td>
+            <td>An</td>
+            <td>—</td>
+            <td>
+                Filtert doppelte Chunks im Agent-Tool-Loop. Verhindert, dass bei
+                mehreren Suchanfragen dieselben Chunks mehrfach im Kontext landen.
+            </td>
+        </tr>
+        <tr>
+            <td><code>Worker-Prozesse</code></td>
+            <td>Zahl</td>
+            <td><code>4</code></td>
+            <td>1 – 16</td>
+            <td>
+                Anzahl der Uvicorn-Worker für die Chat-UI.
+                Änderungen erfordern einen Service-Restart.
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box">
+    <strong>Tipp — Retrieval-Strategie zusammenstellen:</strong>
+    <ul>
+        <li><strong>Minimal (schnell):</strong> Nur Vektor-Suche, kein Reranking → niedrigste Latenz</li>
+        <li><strong>Standard:</strong> Vektor + Elasticsearch (Fuzziness: AUTO) + Reranking → gutes Gleichgewicht</li>
+        <li><strong>Maximal (Qualität):</strong> Vektor + ES + Reranking + Query-Expansion → beste Ergebnisse, höchste Latenz</li>
+    </ul>
+</div>
+
+<!-- ============================= -->
+<!-- WISSENSGRAPH                   -->
+<!-- ============================= -->
+<h2 id="graph">Sub-Tab: Wissensgraph</h2>
+
+<p>
+    GraphRAG ergänzt die Vektor-Suche um einen Wissensgraph mit Entitäten (Kunden, Artikel,
+    Aufträge, ...) und deren Beziehungen. Entitäten werden bei der Indexierung durch ein
+    LLM extrahiert und in PostgreSQL gespeichert.
+</p>
+
+<h3>Aktivierung</h3>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Feld</th><th>Typ</th><th>Standard</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>Wissensgraph aktivieren</code></td>
+            <td>Checkbox</td>
+            <td>Aus</td>
+            <td>Aktiviert die Graph-Traversal-Suche bei Benutzer-Anfragen.</td>
+        </tr>
+        <tr>
+            <td><code>Entity-Extraction bei Indexierung</code></td>
+            <td>Checkbox</td>
+            <td>An</td>
+            <td>
+                Extrahiert bei jeder Indexierung Entitäten und Relationen.
+                Erhöht die Indexierungszeit um ca. 1–2s pro Chunk (LLM-Call).
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<h3>Einstellungen</h3>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Feld</th><th>Typ</th><th>Standard</th><th>Bereich</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>Max. Traversierungstiefe</code></td>
+            <td>Zahl</td>
+            <td><code>2</code></td>
+            <td>1 – 4</td>
+            <td>Maximale Pfad-Tiefe bei der Graph-Suche (BFS).</td>
+        </tr>
+        <tr>
+            <td><code>Max. Chunks pro Graph-Query</code></td>
+            <td>Zahl</td>
+            <td><code>20</code></td>
+            <td>5 – 50</td>
+            <td>Obergrenze der Chunks, die aus dem Graph-Traversal zurückkommen.</td>
+        </tr>
+    </tbody>
+</table>
+
+<h3>KPI-Dashboard</h3>
+<p>
+    Das Dashboard aktualisiert sich automatisch alle 15 Sekunden und zeigt:
+</p>
+<ul class="wiki-examples">
+    <li><strong>Knoten gesamt / Kanten gesamt</strong></li>
+    <li><strong>Knoten nach Typ:</strong> Kunden, Lieferanten, Artikel, Aufträge, Fertigungsaufträge, Mitarbeiter, Dokumente, Themen, Chunks</li>
+    <li><strong>Kanten nach Beziehung:</strong> Dynamisch aus Graph-Daten</li>
+    <li><strong>ERP-Import / Extraction:</strong> Zähler der jeweiligen Quelle</li>
+</ul>
+
+<h3>Aktionen</h3>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Button</th><th>Beschreibung</th><th>Bestätigung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>ERP-Stammdaten importieren</strong></td>
+            <td>Importiert Kunden, Artikel, Aufträge etc. aus der ERP-Schnittstelle in den Graph.</td>
+            <td>Ja</td>
+        </tr>
+        <tr>
+            <td><strong>Graph leeren</strong></td>
+            <td>Löscht alle Knoten und Kanten. Kann nicht rückgängig gemacht werden.</td>
+            <td>Ja</td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box wiki-tip-warning">
+    <strong>Achtung:</strong> Der Wissensgraph erhöht die Indexierungszeit erheblich
+    (LLM-Call pro Chunk). Bei 10.000 Chunks und 2s/Extraction sind das ~5,5 Stunden
+    zusätzliche Indexierungszeit. Für die meisten Anwendungsfälle reicht die
+    Vektor-Suche allein — der Graph lohnt sich vor allem bei stark verknüpften
+    ERP-Daten (Kunden → Aufträge → Artikel).
+</div>
+
+<!-- ============================= -->
+<!-- CHAT (TEMPLATES)              -->
+<!-- ============================= -->
+<h2 id="chat">Sub-Tab: Chat (Prompt-Templates)</h2>
+
+<p>
+    Prompt-Templates steuern, wie das LLM Anfragen beantwortet. Jedes Template definiert
+    einen System-Prompt und einen Chain-Typ (Standard, Unchained, Agent). Benutzer können
+    im Chat-Dropdown zwischen den aktiven Templates wählen.
+</p>
+
+<h3>Template-Tabelle</h3>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Spalte</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr><td><strong>Name / Label</strong></td><td>Interner Name + Anzeige-Label. System-Templates sind mit Badge markiert.</td></tr>
+        <tr><td><strong>Typ</strong></td><td>Chain-Typ als Badge: Standard (blau), Unchained (orange), Agent (lila).</td></tr>
+        <tr><td><strong>Chat</strong></td><td>Toggle: Im Chat-Dropdown für Benutzer sichtbar.</td></tr>
+        <tr><td><strong>Aktiv</strong></td><td>Toggle: Template ist verwendbar.</td></tr>
+    </tbody>
+</table>
+
+<!-- --- Typen --- -->
+<h3 id="template-typen">Template-Typen (Chain-Types)</h3>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Typ</th><th>Beschreibung</th><th>RAG-Kontext</th><th>Tools</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Standard</strong></td>
+            <td>
+                Klassisches RAG: Frage → Retrieval → LLM-Antwort mit Kontext.
+                Das Standardverhalten für die meisten Anfragen.
+            </td>
+            <td>Ja</td>
+            <td>Nein</td>
+        </tr>
+        <tr>
+            <td><strong>Unchained</strong></td>
+            <td>
+                Direkt-LLM ohne RAG-Kontext. Das LLM antwortet nur aus seinem
+                Trainings-Wissen. Nützlich für allgemeine Fragen oder kreative Aufgaben.
+            </td>
+            <td>Nein</td>
+            <td>Nein</td>
+        </tr>
+        <tr>
+            <td><strong>Agent</strong></td>
+            <td>
+                ReAct-Agent mit Tool-Loop. Das LLM kann Tools aufrufen (Suche, ERP-Abfragen,
+                Berechnungen, ...) und iterativ eine Antwort erarbeiten.
+            </td>
+            <td>Via Tools</td>
+            <td>Ja</td>
+        </tr>
+    </tbody>
+</table>
+
+<!-- --- Platzhalter --- -->
+<h3 id="template-platzhalter">Platzhalter</h3>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Platzhalter</th><th>Chain-Typ</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>{context}</code></td>
+            <td>Standard (Pflicht)</td>
+            <td>Wird durch die gefundenen Kontext-Chunks ersetzt.</td>
+        </tr>
+        <tr>
+            <td><code>{question}</code></td>
+            <td>Standard (Pflicht)</td>
+            <td>Wird durch die Benutzer-Frage ersetzt.</td>
+        </tr>
+        <tr>
+            <td><code>{tools_prompt}</code></td>
+            <td>Agent (Pflicht)</td>
+            <td>Wird durch die Liste der verfügbaren Tools ersetzt.</td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box">
+    <strong>Tipp:</strong> Unchained-Templates haben keine Pflicht-Platzhalter — der gesamte
+    Prompt-Text wird direkt als System-Prompt an das LLM gesendet. Ideal für spezialisierte
+    Rollen (z.B. &raquo;Du bist ein IT-Helpdesk-Assistent&laquo;).
+</div>
+
+<!-- --- Erstellen --- -->
+<h3 id="template-erstellen">Templates erstellen</h3>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Feld</th><th>Typ</th><th>Pflicht</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>Interner Name</code></td>
+            <td>Text</td>
+            <td>Ja</td>
+            <td>Eindeutiger Bezeichner (z.B. <code>it_helpdesk</code>). Kann nachträglich nicht geändert werden.</td>
+        </tr>
+        <tr>
+            <td><code>Anzeige-Label</code></td>
+            <td>Text</td>
+            <td>Nein</td>
+            <td>Name im Chat-Dropdown (z.B. &raquo;IT-Helpdesk&laquo;).</td>
+        </tr>
+        <tr>
+            <td><code>Chain-Typ</code></td>
+            <td>Dropdown</td>
+            <td>Ja</td>
+            <td>Standard / Unchained / Agent.</td>
+        </tr>
+        <tr>
+            <td><code>Beschreibung</code></td>
+            <td>Text</td>
+            <td>Nein</td>
+            <td>Kurzbeschreibung für die Admin-UI.</td>
+        </tr>
+        <tr>
+            <td><code>Template-Inhalt</code></td>
+            <td>Textarea</td>
+            <td>Ja</td>
+            <td>Der System-Prompt mit Platzhaltern.</td>
+        </tr>
+        <tr>
+            <td><code>Als Chat-Modus anzeigen</code></td>
+            <td>Checkbox</td>
+            <td>Nein</td>
+            <td>Wenn aktiviert, erscheint das Template im Chat-Modus-Dropdown.</td>
+        </tr>
+    </tbody>
+</table>
+
+<h4>Erweiterte Felder (im Expand-Detail)</h4>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Feld</th><th>Typ</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>Antwort-Prompt</code> (nur Agent)</td>
+            <td>Textarea</td>
+            <td>Optionaler finaler Prompt, der nach allen Tool-Ergebnissen an das LLM gesendet wird.</td>
+        </tr>
+        <tr>
+            <td><code>Badge-Farbe</code></td>
+            <td>Text</td>
+            <td>Hex-Farbe für das Badge im Chat-Dropdown (z.B. <code>#ff6b35</code>).</td>
+        </tr>
+        <tr>
+            <td><code>Sortierung</code></td>
+            <td>Zahl</td>
+            <td>Reihenfolge im Chat-Dropdown (0 = oben).</td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box">
+    <strong>Tipp:</strong> System-Templates (<code>is_system=1</code>) können bearbeitet
+    aber nicht gelöscht werden. Das schützt die Standard-Prompts vor versehentlichem Löschen.
+    Eigene Templates können frei erstellt und gelöscht werden.
+</div>
+
+<!-- ============================= -->
+<!-- API (Verweis)                 -->
+<!-- ============================= -->
+<h2 id="api-endpoints">API-Endpunkte</h2>
+
+<p>
+    Die vollständige API-Referenz wird dynamisch aus der Admin-Registry generiert:
+</p>
+<ul class="wiki-examples">
+    <li><a href="/wiki/api/ki">KI-API</a> — Backends, Templates, Verbindungstests, Config</li>
+    <li><a href="/wiki/api/cloud">Cloud-API</a> — Cloud-Provider-spezifische Funktionen</li>
+    <li><a href="/wiki/api/elasticsearch">Elasticsearch-API</a> — Index-Verwaltung</li>
+</ul>
+
+{% endblock %}

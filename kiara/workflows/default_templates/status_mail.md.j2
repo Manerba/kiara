@@ -1,0 +1,37 @@
+{# description: Statusmail zu einem Auftrag #}
+{# variables: recipient_name, order_id, status, positions, delivery_date, sender_name, language #}
+{% if language == "en" %}
+Dear {{ recipient_name }},
+
+Regarding your order {{ order_id }}:
+
+Current status: **{{ status }}**
+{% if delivery_date %}Expected delivery: **{{ delivery_date }}**{% endif %}
+
+{% if positions %}
+Order positions:
+{% for pos in positions %}
+- {{ pos.article }}: {{ pos.quantity }} {{ pos.unit }} – {{ pos.status }}
+{% endfor %}
+{% endif %}
+
+Best regards,
+{{ sender_name }}
+{% else %}
+Sehr geehrte/r {{ recipient_name }},
+
+bezüglich Ihres Auftrags {{ order_id }}:
+
+Aktueller Status: **{{ status }}**
+{% if delivery_date %}Voraussichtlicher Liefertermin: **{{ delivery_date }}**{% endif %}
+
+{% if positions %}
+Auftragspositionen:
+{% for pos in positions %}
+- {{ pos.article }}: {{ pos.quantity }} {{ pos.unit }} – {{ pos.status }}
+{% endfor %}
+{% endif %}
+
+Mit freundlichen Grüßen,
+{{ sender_name }}
+{% endif %}

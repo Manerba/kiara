@@ -1,0 +1,914 @@
+{% extends "base.html" %}
+
+{% block title %}KIara Wiki — Guide: System{% endblock %}
+
+{% block breadcrumb %}
+<a href="/wiki/">Wiki</a> &rsaquo; <span>Guide: System</span>
+{% endblock %}
+
+{% block content %}
+<h1>System</h1>
+
+<p class="wiki-intro">
+    Der System-Tab umfasst Infrastruktur und Betrieb: Web-Einstellungen, Mail-Benachrichtigungen,
+    System-Monitor (CPU, RAM, Disk, Services), Traces (OpenTelemetry), Backup &amp; Restore,
+    Performance-Cache, Integritätsprüfung, Selbsttest und das Änderungsprotokoll.
+</p>
+
+<nav class="wiki-toc">
+    <h3>Inhalt</h3>
+    <ol>
+        <li><a href="#web">Web</a></li>
+        <li><a href="#mail">Mail</a></li>
+        <li><a href="#monitor">System-Monitor</a>
+            <ol>
+                <li><a href="#monitor-live">Live-Metriken (SSE)</a></li>
+                <li><a href="#monitor-charts">Charts &amp; Zeitreihen</a></li>
+                <li><a href="#monitor-services">Services &amp; Journal</a></li>
+                <li><a href="#monitor-storage">Speicher &amp; Datenbanken</a></li>
+                <li><a href="#monitor-config">Konfiguration &amp; Downsampling</a></li>
+            </ol>
+        </li>
+        <li><a href="#traces">Traces</a>
+            <ol>
+                <li><a href="#traces-konfiguration">Konfiguration</a></li>
+                <li><a href="#traces-explorer">Trace Explorer</a></li>
+                <li><a href="#traces-chat-debug">Chat-Debug-Modus</a></li>
+                <li><a href="#traces-otlp">OTLP-Export</a></li>
+            </ol>
+        </li>
+        <li><a href="#backup">Backup &amp; Restore</a></li>
+        <li><a href="#performance">Performance (Cache)</a></li>
+        <li><a href="#integrity">Integrität</a></li>
+        <li><a href="#selbsttest">Selbsttest</a></li>
+        <li><a href="#aenderungen">Änderungen (Changelog)</a></li>
+        <li><a href="#network">Netzwerk-Diagnose</a> (Admin-Chat)</li>
+        <li><a href="#api-endpoints">API-Endpunkte</a> (Verweis auf API-Katalog)</li>
+    </ol>
+</nav>
+
+<!-- ============================= -->
+<!-- WEB                           -->
+<!-- ============================= -->
+<h2 id="web">Sub-Tab: Web</h2>
+
+<p>
+    Netzwerkeinstellungen für die Web-Oberflächen. Änderungen an Host und Ports
+    erfordern einen Neustart der Services.
+</p>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Feld</th><th>Typ</th><th>Standard</th><th>Beschreibung</th><th>Empfehlung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>Host</code></td>
+            <td>Text</td>
+            <td><code>0.0.0.0</code></td>
+            <td>Bind-Adresse. <code>0.0.0.0</code> = alle Interfaces.</td>
+            <td>Standard belassen. Nur ändern, wenn der Dienst nur auf einem bestimmten Interface erreichbar sein soll.</td>
+        </tr>
+        <tr>
+            <td><code>Port (Chat-UI)</code></td>
+            <td>Zahl</td>
+            <td><code>8501</code></td>
+            <td>Port der Benutzer-Chat-Oberfläche.</td>
+            <td>Standard belassen.</td>
+        </tr>
+        <tr>
+            <td><code>Admin-Port</code></td>
+            <td>Zahl</td>
+            <td><code>8502</code></td>
+            <td>Port der Admin-Oberfläche.</td>
+            <td>Standard belassen.</td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box wiki-tip-warning">
+    <strong>Achtung:</strong> Nach Port-Änderungen müssen die systemd-Services
+    (<code>kiara.service</code>, <code>kiara-admin.service</code>) neu gestartet werden.
+    Firewall-Regeln entsprechend anpassen.
+</div>
+
+<!-- ============================= -->
+<!-- MAIL                          -->
+<!-- ============================= -->
+<h2 id="mail">Sub-Tab: Mail</h2>
+
+<p>
+    SMTP-Konfiguration für Admin-Benachrichtigungen. Das System sendet Mails bei Ausfällen
+    (Ollama, Datenquellen) und optionale Statusberichte.
+</p>
+
+<h3>SMTP-Server</h3>
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Feld</th><th>Typ</th><th>Standard</th><th>Beschreibung</th><th>Empfehlung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>Server</code></td>
+            <td>Text</td>
+            <td>—</td>
+            <td>SMTP-Server-Adresse.</td>
+            <td>Beispiel: <code>smtp.firma.de</code></td>
+        </tr>
+        <tr>
+            <td><code>Port</code></td>
+            <td>Zahl</td>
+            <td><code>587</code></td>
+            <td>SMTP-Port.</td>
+            <td>587 (STARTTLS) oder 465 (SSL). 25 nur im internen Netz.</td>
+        </tr>
+        <tr>
+            <td><code>Verschlüsselung</code></td>
+            <td>Dropdown</td>
+            <td><code>starttls</code></td>
+            <td><code>none</code>, <code>starttls</code>, <code>ssl</code>.</td>
+            <td><strong>starttls empfohlen.</strong></td>
+        </tr>
+    </tbody>
+</table>
+
+<h3>Anmeldung</h3>
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Feld</th><th>Typ</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr><td><code>Benutzername</code></td><td>Text</td><td>SMTP-Login (oft die E-Mail-Adresse).</td></tr>
+        <tr><td><code>Passwort</code></td><td>Passwort</td><td>Wird verschlüsselt gespeichert. Maskiert bei erneutem Laden.</td></tr>
+    </tbody>
+</table>
+
+<h3>Adressen</h3>
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Feld</th><th>Typ</th><th>Pflicht</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>Absender</code></td>
+            <td>Text</td>
+            <td>Ja</td>
+            <td>Von-Adresse (z.B. <code>kiara@firma.de</code>).</td>
+        </tr>
+        <tr>
+            <td><code>Empfänger</code></td>
+            <td>Text</td>
+            <td>Ja</td>
+            <td>Kommaseparierte Empfänger-Liste (z.B. <code>admin@firma.de, it@firma.de</code>).</td>
+        </tr>
+    </tbody>
+</table>
+
+<h3>Benachrichtigungen</h3>
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Feld</th><th>Standard</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr><td><code>Ollama nicht erreichbar</code></td><td>An</td><td>Benachrichtigung wenn der Ollama-Server nicht antwortet.</td></tr>
+        <tr><td><code>Datenquelle nicht erreichbar</code></td><td>An</td><td>Benachrichtigung wenn eine Datenquelle (SMB, WebDAV, ...) nicht erreichbar ist.</td></tr>
+        <tr><td><code>Indexierungsfehler</code></td><td>An</td><td>Benachrichtigung bei fehlgeschlagenen Ingestion-Jobs.</td></tr>
+    </tbody>
+</table>
+
+<h3>Status-Reports</h3>
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Feld</th><th>Standard</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>Automatische Status-Reports</code></td>
+            <td>Aus</td>
+            <td>Sendet periodisch einen zusammenfassenden Bericht per Mail.</td>
+        </tr>
+        <tr>
+            <td><code>Intervall</code></td>
+            <td><code>weekly</code></td>
+            <td><code>daily</code>, <code>weekly</code>, <code>monthly</code>.</td>
+        </tr>
+    </tbody>
+</table>
+
+<h3>Aktionen</h3>
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Button</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr><td><strong>Speichern</strong></td><td>Speichert die Mail-Konfiguration.</td></tr>
+        <tr><td><strong>Test-Mail senden</strong></td><td>Sendet eine Test-Nachricht an die konfigurierten Empfänger.</td></tr>
+        <tr><td><strong>Status-Report senden</strong></td><td>Sendet sofort einen Status-Report (unabhängig vom Intervall).</td></tr>
+        <tr><td><strong>Konfiguration löschen</strong></td><td>Entfernt die gesamte Mail-Konfiguration. Keine Mails mehr.</td></tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box">
+    <strong>Tipp:</strong> Nach dem Speichern immer &raquo;Test-Mail senden&laquo; klicken.
+    SMTP-Probleme (falsche Credentials, Firewall, TLS-Mismatch) zeigen sich erst beim
+    tatsächlichen Versand.
+</div>
+
+<!-- ============================= -->
+<!-- SYSTEM-MONITOR                -->
+<!-- ============================= -->
+<h2 id="monitor">Sub-Tab: System-Monitor</h2>
+
+<p>
+    Echtzeit-Überwachung des KIara-Servers mit Live-Metriken (CPU, RAM, Swap, Load,
+    Netzwerk-Durchsatz), historischen Charts, Service-Management und Speicher-Übersicht.
+    Ersetzt den früheren &raquo;Health &amp; Monitoring&laquo;-Tab mit statischen Komponenten-Karten.
+</p>
+
+<!-- --- Live --- -->
+<h3 id="monitor-live">Live-Metriken (SSE-Stream)</h3>
+
+<p>
+    Die Live-Ansicht zeigt KPI-Karten mit Echtzeit-Werten, die über einen
+    <strong>Server-Sent Events (SSE)</strong> Stream mit 1 Sample/Sekunde aktualisiert werden.
+    Kein Polling nötig — der Server pusht die Daten.
+</p>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Metrik</th><th>Einheit</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>CPU</strong></td>
+            <td>%</td>
+            <td>CPU-Auslastung (1-Sekunden-Durchschnitt über alle Kerne).</td>
+        </tr>
+        <tr>
+            <td><strong>RAM</strong></td>
+            <td>GB / GB</td>
+            <td>Belegt / Gesamt des physischen Arbeitsspeichers.</td>
+        </tr>
+        <tr>
+            <td><strong>Swap</strong></td>
+            <td>GB / GB</td>
+            <td>Swap-Nutzung. Hohe Werte deuten auf RAM-Knappheit hin.</td>
+        </tr>
+        <tr>
+            <td><strong>Load Average</strong></td>
+            <td>1m / 5m / 15m</td>
+            <td>System-Last. Werte über der CPU-Kern-Anzahl deuten auf Überlastung hin.</td>
+        </tr>
+        <tr>
+            <td><strong>Netzwerk</strong></td>
+            <td>bytes/s (in/out)</td>
+            <td>Aktueller Netzwerk-Durchsatz (Sende- und Empfangsrate als Delta).</td>
+        </tr>
+        <tr>
+            <td><strong>Plattenplatz</strong></td>
+            <td>GB / GB</td>
+            <td>Belegt / Gesamt der Root-Partition (<code>/</code>).</td>
+        </tr>
+        <tr>
+            <td><strong>Uptime</strong></td>
+            <td>Tage/Stunden</td>
+            <td>Betriebszeit seit dem letzten Server-Neustart.</td>
+        </tr>
+        <tr>
+            <td><strong>Top-5 Prozesse</strong></td>
+            <td>MB</td>
+            <td>Die 5 Prozesse mit dem höchsten RAM-Verbrauch (PID, Name, RSS).</td>
+        </tr>
+        <tr>
+            <td><strong>OS / Kernel</strong></td>
+            <td>Text</td>
+            <td>Betriebssystem-Version und Kernel-Release.</td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box">
+    <strong>Tipp:</strong> Der SSE-Stream reconnected automatisch bei Verbindungsabbruch
+    (Browser-seitiges EventSource-Verhalten). Ein Keep-Alive alle 5 Sekunden verhindert
+    Proxy-Timeouts bei inaktiven Verbindungen.
+</div>
+
+<!-- --- Charts --- -->
+<h3 id="monitor-charts">Charts &amp; Zeitreihen</h3>
+
+<p>
+    Neben den Live-Karten zeigt der Monitor Liniendiagramme (Chart.js) mit historischen
+    Verläufen. Der Zeitraum ist wählbar:
+</p>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Zeitraum</th><th>Datenquelle</th><th>Auflösung</th></tr>
+    </thead>
+    <tbody>
+        <tr><td><strong>1h</strong></td><td>PostgreSQL (raw)</td><td>1 Datenpunkt/Minute</td></tr>
+        <tr><td><strong>24h</strong></td><td>PostgreSQL (raw)</td><td>1 Datenpunkt/Minute</td></tr>
+        <tr><td><strong>30d</strong></td><td>PostgreSQL (5min-Aggregate)</td><td>1 Datenpunkt/5 Minuten</td></tr>
+        <tr><td><strong>1y</strong></td><td>PostgreSQL (1h-Aggregate)</td><td>1 Datenpunkt/Stunde</td></tr>
+    </tbody>
+</table>
+
+<h4>Verfügbare Metrik-Gruppen</h4>
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Gruppe</th><th>Serien</th></tr>
+    </thead>
+    <tbody>
+        <tr><td><strong>CPU</strong></td><td><code>cpu_percent</code></td></tr>
+        <tr><td><strong>RAM</strong></td><td><code>ram_used_bytes</code>, <code>ram_total_bytes</code></td></tr>
+        <tr><td><strong>Swap</strong></td><td><code>swap_used_bytes</code>, <code>swap_total_bytes</code></td></tr>
+        <tr><td><strong>Load</strong></td><td><code>load_1m</code>, <code>load_5m</code>, <code>load_15m</code></td></tr>
+        <tr><td><strong>Netzwerk</strong></td><td><code>net_sent_bps</code>, <code>net_recv_bps</code></td></tr>
+        <tr><td><strong>Disk</strong></td><td><code>disk_used_bytes</code>, <code>disk_total_bytes</code></td></tr>
+    </tbody>
+</table>
+
+<!-- --- Services --- -->
+<h3 id="monitor-services">Services &amp; Journal</h3>
+
+<p>
+    Zeigt den Status aller KIara-systemd-Services und ermöglicht den Neustart direkt
+    aus der UI (mit Bestätigungsdialog).
+</p>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Service</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr><td><code>kiara.service</code></td><td>Chat-UI (Benutzer-Oberfläche, Port 8501).</td></tr>
+        <tr><td><code>kiara-admin.service</code></td><td>Admin-UI (Port 8502).</td></tr>
+        <tr><td><code>kiara-worker.service</code></td><td>Ingestion-Worker (Job-Queue-Verarbeitung).</td></tr>
+        <tr><td><code>kiara-admin-chat.service</code></td><td>Admin-Chat Backend.</td></tr>
+        <tr><td><code>kiara-mcp.service</code></td><td>MCP-Server (Port 8503, falls aktiviert).</td></tr>
+    </tbody>
+</table>
+
+<h4>Aktionen pro Service</h4>
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Aktion</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr><td><strong>Status anzeigen</strong></td><td>Zeigt <code>active</code> / <code>inactive</code> / <code>failed</code>.</td></tr>
+        <tr><td><strong>Neustart</strong></td><td>Führt <code>systemctl restart</code> aus. Bestätigungsdialog erforderlich.</td></tr>
+    </tbody>
+</table>
+
+<h4>Letzte systemd-Fehler</h4>
+<p>
+    Zeigt die letzten Fehler-Einträge aus <code>journalctl</code> für alle KIara-Services.
+    Nützlich für die schnelle Fehlerdiagnose ohne SSH-Zugang.
+</p>
+
+<div class="wiki-tip-box wiki-tip-warning">
+    <strong>Achtung:</strong> Vor einem Neustart von <code>kiara-worker</code> immer prüfen,
+    ob ein Ingestion-Job läuft (siehe <a href="/wiki/guide/jobs#steuerung">Jobs-Guide</a>).
+    Ein Neustart während einer Indexierung erzeugt einen Ghost-Job, der beim nächsten
+    Start automatisch fortgesetzt wird, aber unnötige Wartezeit verursacht.
+</div>
+
+<!-- --- Storage --- -->
+<h3 id="monitor-storage">Speicher &amp; Datenbanken</h3>
+
+<p>
+    Zusätzlich zum Plattenplatz zeigt der Monitor die Größe der Datenbanken:
+</p>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Metrik</th><th>Quelle</th><th>Aktualisierung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>PostgreSQL-Größe</strong></td>
+            <td><code>pg_database_size()</code></td>
+            <td>Alle 60 Sekunden (gecached).</td>
+        </tr>
+        <tr>
+            <td><strong>Qdrant-Größe</strong></td>
+            <td>Dateisystem-Scan des Data-Verzeichnisses</td>
+            <td>Alle 60 Sekunden (gecached, da rglob teuer).</td>
+        </tr>
+        <tr>
+            <td><strong>Root-Partition</strong></td>
+            <td><code>psutil.disk_usage("/")</code></td>
+            <td>Jede Sekunde (Live via SSE).</td>
+        </tr>
+    </tbody>
+</table>
+
+<!-- --- Config --- -->
+<h3 id="monitor-config">Konfiguration &amp; Downsampling</h3>
+
+<p>
+    Der System-Monitor läuft mit sinnvollen Defaults — keine Konfiguration nötig.
+    Optional können Werte in <code>kiara.yaml</code> unter <code>monitoring:</code>
+    angepasst werden:
+</p>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Config-Key</th><th>Standard</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>persist_interval_seconds</code></td>
+            <td><code>60</code></td>
+            <td>Intervall für DB-Writes (eine Zeile pro Minute).</td>
+        </tr>
+        <tr>
+            <td><code>downsample_hour</code></td>
+            <td><code>3</code></td>
+            <td>Uhrzeit (Stunde) für das tägliche Downsampling.</td>
+        </tr>
+        <tr>
+            <td><code>raw_retention_hours</code></td>
+            <td><code>24</code></td>
+            <td>Wie lange Raw-Daten (1/min) behalten werden, bevor sie in 5min-Aggregate komprimiert werden.</td>
+        </tr>
+        <tr>
+            <td><code>retention_5min_days</code></td>
+            <td><code>30</code></td>
+            <td>Wie lange 5min-Aggregate behalten werden.</td>
+        </tr>
+        <tr>
+            <td><code>retention_1h_days</code></td>
+            <td><code>365</code></td>
+            <td>Wie lange 1h-Aggregate behalten werden (danach gelöscht).</td>
+        </tr>
+        <tr>
+            <td><code>qdrant_data_path</code></td>
+            <td>(leer = Auto-Detect)</td>
+            <td>
+                Pfad zum Qdrant-Datenverzeichnis für die Größen-Anzeige.
+                Leer = Auto-Detect: Docker-Volume oder <code>/opt/qdrant/storage</code>.
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<h4>Downsampling (3-Stufen-Komprimierung)</h4>
+<pre class="wiki-code-block"><code>raw (1 Zeile/min)  ──[nach 24h]──▶  5min-AVG  ──[nach 30d]──▶  1h-AVG  ──[nach 1y]──▶  DELETE
+
+Speicherverbrauch:
+  Raw:  ~1.440 Zeilen/Tag
+  5min: ~288 Zeilen/Tag
+  1h:   ~24 Zeilen/Tag
+  ≈ 312 Zeilen/Tag nach Downsampling</code></pre>
+
+<div class="wiki-tip-box">
+    <strong>Tipp:</strong> Das Downsampling läuft als Background-Thread täglich um 03:00 Uhr
+    (konfigurierbar). Es ist idempotent — wenn keine passenden Daten vorhanden sind, passiert
+    nichts. Die historischen Daten in PostgreSQL belegen ca. <strong>~120.000 Zeilen/Jahr</strong>
+    — vernachlässigbar im Vergleich zu den übrigen KIara-Tabellen.
+</div>
+
+<h4>Backend-Probes (unverändert)</h4>
+<p>
+    Die bisherigen Health-Endpoints bleiben für Load-Balancer und Orchestrierung erhalten:
+</p>
+<ul class="wiki-examples">
+    <li><code>/api/health</code> — Vollständiger Health-Check (unauthentifiziert)</li>
+    <li><code>/api/health/ready</code> — Readiness-Probe (Kubernetes-kompatibel)</li>
+    <li><code>/api/health/live</code> — Liveness-Probe</li>
+</ul>
+
+<!-- ============================= -->
+<!-- TRACES                        -->
+<!-- ============================= -->
+<h2 id="traces">Sub-Tab: Traces</h2>
+
+<p>
+    OpenTelemetry-basiertes Tracing fuer Retrieval-, Agent- und Ingestion-Pipelines.
+    Jede Anfrage bzw. Dateiverarbeitung wird als hierarchischer Trace aufgezeichnet
+    (Root-Span &rarr; Child-Spans mit exakten Timing-Daten).
+</p>
+
+<h3 id="traces-konfiguration">Konfiguration</h3>
+
+<pre class="wiki-code-block"><code># /etc/kiara/kiara.yaml
+tracing:
+  enabled: true              # Tracing aktivieren (default: false)
+  exporter: postgresql       # "postgresql", "otlp" oder "both"
+  retention_days: 7          # Auto-Cleanup aelterer Traces
+  pipelines:                 # Per-Pipeline-Steuerung
+    retrieval: true          # RAG-Queries + Retrieval
+    agent: true              # Agent-Chain (ReAct-Loop)
+    ingestion: true          # Ingestion-Pipeline
+  chat_debug: false          # Trace-Timing-Bar in Chat-UI</code></pre>
+
+<div class="wiki-tip-box">
+    <strong>Voraussetzung:</strong> Das Paket <code>opentelemetry-sdk</code> muss installiert
+    sein (<code>pip install 'kiara[tracing]'</code>). Ohne SDK bleibt ein NoOp-Tracer aktiv
+    &mdash; kein Fehler, null Overhead.
+</div>
+
+<p>Drei Pipelines sind instrumentiert:</p>
+
+<table class="wiki-param-table">
+    <thead><tr><th>Pipeline</th><th>Root-Span</th><th>Typische Child-Spans</th></tr></thead>
+    <tbody>
+        <tr>
+            <td><strong>Retrieval</strong></td>
+            <td><code>rag_query</code></td>
+            <td><code>query_expansion</code>, <code>hybrid_retrieve</code>, <code>rerank</code>, <code>sibling_expansion</code>, <code>context_build</code>, <code>llm_generate</code></td>
+        </tr>
+        <tr>
+            <td><strong>Agent</strong></td>
+            <td><code>agent_query</code></td>
+            <td><code>agent_iteration</code>, <code>llm_step</code>, <code>tool_call</code>, <code>loop_detection</code>, <code>final_answer</code></td>
+        </tr>
+        <tr>
+            <td><strong>Ingestion</strong></td>
+            <td><code>ingest_file</code></td>
+            <td><code>load_content</code>, <code>chunk_and_collect</code>, <code>embed_batch</code>, <code>write_vectors</code>, <code>graph_extraction</code></td>
+        </tr>
+    </tbody>
+</table>
+
+<p>
+    Einzelne Pipelines koennen per <code>pipelines.*: false</code> deaktiviert werden, z.B. um
+    das Datenvolumen waehrend einer grossen Ingestion zu reduzieren. Der globale
+    <code>enabled: false</code>-Schalter ueberschreibt alle Pipeline-Flags.
+</p>
+
+<h3 id="traces-explorer">Trace Explorer</h3>
+
+<p>
+    Der Trace Explorer ist im Sub-Tab <strong>Traces</strong> erreichbar und bietet:
+</p>
+
+<ul>
+    <li><strong>Filter:</strong> Root-Span-Name, Mindest-Dauer, Status (OK/ERROR/UNSET), Zeitraum, Span-Name, Attribut-Suche</li>
+    <li><strong>Wasserfall:</strong> Hierarchische Span-Visualisierung mit proportionalen Balken</li>
+    <li><strong>Histogram:</strong> Bucket-basierte Dauer-Verteilung mit P50/P95/P99-Percentilen</li>
+    <li><strong>Vergleich:</strong> Zwei Traces nebeneinander mit Span-fuer-Span-Diff (absolut + prozentual)</li>
+    <li><strong>Export:</strong> CSV oder JSON, einzeln oder Bulk (bis 5.000 Eintraege)</li>
+</ul>
+
+<h3 id="traces-chat-debug">Chat-Debug-Modus</h3>
+
+<p>
+    Mit <code>tracing.chat_debug: true</code> erscheint in der Chat-UI ein Toggle
+    (<code>&#x23F1;</code>). Bei aktiviertem Toggle wird unter jeder Antwort eine
+    kompakte Timing-Bar angezeigt (z.B. <em>Retrieval: 45ms &middot; Reranking: 12ms
+    &middot; LLM: 830ms &mdash; 912ms</em>) mit Link zum Trace Explorer.
+</p>
+
+<div class="wiki-tip-warning">
+    <strong>Sicherheit:</strong> Chat-Debug-Endpoints pruefen Ownership &mdash; ein User
+    sieht nur Traces seiner eigenen Anfragen. Admin-Konten haben keinen Zugriff auf
+    Chat-Debug; der Trace Explorer im Admin-UI ist der richtige Weg.
+</div>
+
+<h3 id="traces-otlp">OTLP-Export</h3>
+
+<p>
+    Neben PostgreSQL koennen Spans per OTLP/gRPC an externe Plattformen
+    (Grafana Tempo, Jaeger, Datadog, etc.) exportiert werden:
+</p>
+
+<pre class="wiki-code-block"><code>tracing:
+  enabled: true
+  exporter: both             # PostgreSQL + OTLP parallel
+  otlp:
+    endpoint: "http://otel-collector.local:4317"
+    insecure: true           # Kein TLS (internes Netz)</code></pre>
+
+<table class="wiki-param-table">
+    <thead><tr><th>Exporter-Wert</th><th>Ziel</th><th>Anwendungsfall</th></tr></thead>
+    <tbody>
+        <tr><td><code>postgresql</code></td><td>Lokale <code>traces</code>-Tabelle</td><td>Standard &mdash; Trace Explorer</td></tr>
+        <tr><td><code>otlp</code></td><td>Externer Collector (gRPC)</td><td>Grafana Tempo, Jaeger, etc.</td></tr>
+        <tr><td><code>both</code></td><td>Beide parallel</td><td>Uebergangsphase</td></tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box">
+    <strong>Installation:</strong> OTLP-Export erfordert ein zusaetzliches Paket:
+    <code>pip install 'kiara[tracing-otlp]'</code>. Fehlt das Paket, faellt KIara
+    automatisch auf den verbleibenden Exporter zurueck &mdash; kein Absturz.
+</div>
+
+<!-- ============================= -->
+<!-- BACKUP                        -->
+<!-- ============================= -->
+<h2 id="backup">Sub-Tab: Backup &amp; Restore</h2>
+
+<p>
+    Sicherung und Wiederherstellung: Datenbank, Konfiguration und Templates.
+    Backups enthalten SHA256-Prüfsummen. Qdrant-Collections werden nicht ueber
+    den alten Dateipfad gesichert; nach Restore ist Re-Ingest oder ein separater
+    Qdrant-Snapshot noetig.
+</p>
+
+<h3>Backup erstellen</h3>
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Feld</th><th>Typ</th><th>Standard</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>File-backed VectorDB-Daten einschliessen</code></td>
+            <td>Checkbox</td>
+            <td>Aus</td>
+            <td>
+                Nur fuer dateibasierte VectorDB-Backends. Bei Qdrant bricht ein
+                aktiviertes Dateibackup fail-closed ab, weil der ChromaDB-Pfad
+                keine Qdrant-Collections enthaelt.
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box">
+    <strong>Tipp — Backup-Strategie:</strong>
+    <ul>
+        <li><strong>Tägliches Backup:</strong> Sichert PostgreSQL, Konfiguration und Templates.</li>
+        <li><strong>Nach Restore:</strong> Qdrant per Re-Ingest oder separatem Qdrant-Snapshot wiederherstellen.</li>
+    </ul>
+</div>
+
+<h3>Backup-Liste</h3>
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Spalte</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr><td><strong>Dateiname</strong></td><td>Dateiname (z.B. <code>kiara_backup_2026-03-29_14-30.tar.gz</code>).</td></tr>
+        <tr><td><strong>Größe</strong></td><td>Dateigröße in MB.</td></tr>
+        <tr><td><strong>Erstellt</strong></td><td>Erstellungszeitpunkt.</td></tr>
+        <tr><td><strong>Aktionen</strong></td><td>Wiederherstellen (mit Bestätigung).</td></tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box wiki-tip-warning">
+    <strong>Achtung:</strong> Die Wiederherstellung überschreibt die aktuelle Datenbank
+    und Konfiguration. Alle Änderungen seit dem Backup-Zeitpunkt gehen verloren.
+    Vor einem Restore ein aktuelles Backup erstellen!
+</div>
+
+<!-- ============================= -->
+<!-- PERFORMANCE                   -->
+<!-- ============================= -->
+<h2 id="performance">Sub-Tab: Performance (Cache)</h2>
+
+<p>
+    Query-Cache-Statistiken. Der Cache beschleunigt wiederkehrende Anfragen und wird
+    bei Neuindexierung automatisch invalidiert. Aktualisiert sich alle 10 Sekunden.
+</p>
+
+<h3>KPI-Widgets</h3>
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>KPI</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr><td><strong>Cache aktiv</strong></td><td>Ja/Nein — ob der Query-Cache aktiviert ist.</td></tr>
+        <tr><td><strong>Einträge</strong></td><td>Aktuelle Belegung vs. Maximum (z.B. <code>42 / 256</code>).</td></tr>
+        <tr><td><strong>Hit-Rate</strong></td><td>Anteil der Anfragen, die aus dem Cache beantwortet wurden.</td></tr>
+        <tr><td><strong>Hits / Misses</strong></td><td>Absolute Zähler: Cache-Treffer vs. Cache-Fehlschläge.</td></tr>
+        <tr><td><strong>TTL</strong></td><td>Time-to-Live eines Cache-Eintrags in Sekunden.</td></tr>
+    </tbody>
+</table>
+
+<h3>Aktionen</h3>
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Button</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Cache leeren</strong></td>
+            <td>
+                Invalidiert alle Cache-Einträge sofort. Bestätigung erforderlich.
+                Nützlich nach manuellen Datenbank-Änderungen oder Config-Updates.
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box">
+    <strong>Tipp:</strong> Eine Hit-Rate unter 10% deutet darauf hin, dass die
+    meisten Anfragen einmalig sind — der Cache bringt wenig Nutzen. Eine Hit-Rate
+    über 30% zeigt, dass der Cache signifikant zur Antwortgeschwindigkeit beiträgt.
+</div>
+
+<!-- ============================= -->
+<!-- INTEGRITAET                   -->
+<!-- ============================= -->
+<h2 id="integrity">Sub-Tab: Integrität</h2>
+
+<p>
+    Prüft die Konsistenz aller 4 Datenschichten (Qdrant, Elasticsearch, chunk_datasources,
+    file_hashes). Die vollständige Dokumentation der Checks und Reparatur-Aktionen
+    findest du im <a href="/wiki/guide/vectordb#integrity">VektorDB-Guide → Integritätsprüfung</a>.
+</p>
+
+<h3>Prüfungen (Kurzübersicht)</h3>
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Button</th><th>Beschreibung</th><th>Laufzeit</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Vollprüfung starten</strong></td>
+            <td>5 Checks: Layer-Counts, DS-Coverage, ES-Duplikate, Orphan-Chunks, Overlapping DS.</td>
+            <td>Minuten (Background, Polling alle 2s).</td>
+        </tr>
+        <tr>
+            <td><strong>Schnell-Check</strong></td>
+            <td>Nur Layer-Counts vergleichen.</td>
+            <td>Sekunden (synchron).</td>
+        </tr>
+    </tbody>
+</table>
+
+<h3>Reparatur-Aktionen (bei Befund)</h3>
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Aktion</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr><td><strong>ds_ids synchronisieren</strong></td><td>Schreibt ds_ids-Payload in Qdrant aus chunk_datasources neu.</td></tr>
+        <tr><td><strong>Statistiken korrigieren</strong></td><td>Aktualisiert chunk_count in datasource_embeddings.</td></tr>
+        <tr><td><strong>Verwaiste Chunks löschen</strong></td><td>Löscht Chunks ohne chunk_datasources-Zuordnung (destruktiv).</td></tr>
+    </tbody>
+</table>
+
+<!-- ============================= -->
+<!-- SELBSTTEST                    -->
+<!-- ============================= -->
+<h2 id="selbsttest">Sub-Tab: Selbsttest</h2>
+
+<p>
+    Führt die gesamte Testsuite aus und prüft alle Systemkomponenten auf korrekte Funktion.
+    Läuft im Hintergrund mit Live-Fortschrittsanzeige (Polling alle 1,5s).
+</p>
+
+<h3>Fortschrittsanzeige (während Test)</h3>
+<ul class="wiki-examples">
+    <li>Fortschrittsbalken mit Prozentsatz</li>
+    <li>Aktueller Test-Name</li>
+    <li>Live-Zähler: &#10003; bestanden, &#10007; fehlgeschlagen, &#9888; Fehler, &#8856; übersprungen</li>
+</ul>
+
+<h3>Ergebnis-Anzeige (nach Abschluss)</h3>
+<ul class="wiki-examples">
+    <li><strong>KPI-Leiste:</strong> Bestanden / Fehlgeschlagen / Fehler / Übersprungen / Dauer</li>
+    <li><strong>Fehlgeschlagene Tests</strong> (aufgeklappt): Name + Detail-Ausgabe</li>
+    <li><strong>Bestandene Tests</strong> (eingeklappt): Multi-Column-Liste</li>
+    <li><strong>Übersprungene Tests</strong> (eingeklappt): Multi-Column-Liste</li>
+</ul>
+
+<div class="wiki-tip-box">
+    <strong>Tipp:</strong> Übersprungene Tests bedeuten, dass die jeweilige Komponente
+    nicht konfiguriert ist (z.B. LDAP-Tests ohne LDAP-Config, Cloud-Tests ohne API-Key).
+    Das ist kein Fehler — es zeigt nur, dass der Test nicht anwendbar ist.
+</div>
+
+<!-- ============================= -->
+<!-- AENDERUNGEN                   -->
+<!-- ============================= -->
+<h2 id="aenderungen">Sub-Tab: Änderungen (Changelog)</h2>
+
+<p>
+    Chronologisches Protokoll aller Konfigurationsänderungen. Zeigt wer wann was geändert hat —
+    egal ob über die GUI oder den Admin-Chat.
+</p>
+
+<h3>Filter</h3>
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Filter</th><th>Typ</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Bereich</strong></td>
+            <td>Dropdown</td>
+            <td>Filtert nach Änderungs-Bereich (z.B. users, datasources, ki, system). Dynamisch geladen.</td>
+        </tr>
+        <tr>
+            <td><strong>Quelle</strong></td>
+            <td>Dropdown</td>
+            <td><code>Alle</code>, <code>GUI</code>, <code>Chat</code>.</td>
+        </tr>
+    </tbody>
+</table>
+
+<h3>Tabellen-Spalten</h3>
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Spalte</th><th>Beschreibung</th><th>Sortierbar</th></tr>
+    </thead>
+    <tbody>
+        <tr><td><strong>Zeitstempel</strong></td><td>Datum und Uhrzeit der Änderung.</td><td>Ja</td></tr>
+        <tr><td><strong>Benutzer</strong></td><td>Wer die Änderung vorgenommen hat.</td><td>Ja</td></tr>
+        <tr><td><strong>Bereich</strong></td><td>Betroffener Bereich (users, datasources, ki, ...).</td><td>Ja</td></tr>
+        <tr><td><strong>Aktion</strong></td><td>Badge: Erstellt (grün), Aktualisiert (blau), Gelöscht (rot).</td><td>Ja</td></tr>
+        <tr><td><strong>Quelle</strong></td><td>Badge: GUI oder Chat.</td><td>Ja</td></tr>
+        <tr><td><strong>Ziel</strong></td><td>Betroffenes Objekt (z.B. Datenquellen-Name, Template-Name).</td><td>Ja</td></tr>
+        <tr><td><strong>Feld</strong></td><td>Geändertes Feld (z.B. <code>name</code>, <code>is_active</code>).</td><td>Ja</td></tr>
+    </tbody>
+</table>
+
+<h3>Detail-Ansicht (Expandable)</h3>
+<p>
+    Klick auf eine Zeile zeigt die <strong>Vorher/Nachher-Werte</strong> im Vergleich:
+    alter Wert links, neuer Wert rechts. Bei JSON-Feldern werden die Werte formatiert
+    dargestellt.
+</p>
+
+<div class="wiki-tip-box">
+    <strong>Tipp:</strong> Der Changelog erfasst Änderungen sowohl aus der GUI als auch
+    aus dem Admin-Chat. Das bedeutet: Wenn ein Admin per Chat &raquo;Deaktiviere Benutzer 5&laquo;
+    sagt, erscheint die Änderung hier mit Quelle &raquo;Chat&laquo;. Nützlich für die
+    Nachvollziehbarkeit bei mehreren Admins.
+</div>
+
+<!-- ============================= -->
+<!-- NETZWERK                      -->
+<!-- ============================= -->
+<h2 id="network">Netzwerk-Diagnose (Admin-Chat)</h2>
+
+<p>
+    Netzwerk-Diagnose-Tools sind über den Admin-Chat verfügbar (kein eigener Sub-Tab).
+    Sie ermöglichen die Fehlersuche bei Verbindungsproblemen direkt aus der Admin-UI.
+</p>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Tool</th><th>Beschreibung</th><th>Beispiel-Prompt</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>network.ping</code></td>
+            <td>ICMP-Ping (1–10 Pakete).</td>
+            <td>&raquo;Ping gpu-server.local&laquo;</td>
+        </tr>
+        <tr>
+            <td><code>network.portscan</code></td>
+            <td>TCP-Port-Scan (via nmap oder Socket-Fallback).</td>
+            <td>&raquo;Prüfe ob Port 6333 auf localhost offen ist&laquo;</td>
+        </tr>
+        <tr>
+            <td><code>network.dns</code></td>
+            <td>DNS-Auflösung (A, AAAA, MX, CNAME, PTR).</td>
+            <td>&raquo;DNS-Lookup für mail.firma.de&laquo;</td>
+        </tr>
+        <tr>
+            <td><code>network.smb_discover</code></td>
+            <td>Verfügbare SMB-Freigaben auflisten.</td>
+            <td>&raquo;Welche Freigaben hat der Server fileserver01?&laquo;</td>
+        </tr>
+        <tr>
+            <td><code>network.webdav_check</code></td>
+            <td>WebDAV-Erreichbarkeit prüfen (OPTIONS/PROPFIND, DAV-Compliance).</td>
+            <td>&raquo;Ist der Nextcloud-Server erreichbar?&laquo;</td>
+        </tr>
+        <tr>
+            <td><code>network.http_check</code></td>
+            <td>HTTP(S)-Erreichbarkeit testen (HEAD/GET, Status, RTT).</td>
+            <td>&raquo;Ist http://gpu-server.local:11434 erreichbar?&laquo;</td>
+        </tr>
+        <tr>
+            <td><code>network.traceroute</code></td>
+            <td>Netzwerkpfad zu einem Host (max. 20 Hops).</td>
+            <td>&raquo;Traceroute zu gpu-server.local&laquo;</td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box">
+    <strong>Tipp:</strong> Die Netzwerk-Tools sind besonders nützlich bei der Ersteinrichtung
+    von Datenquellen-Konnektoren (SMB, WebDAV, IMAP) — sie ermöglichen die Fehlersuche ohne
+    SSH-Zugang zum KIara-Server.
+</div>
+
+<!-- ============================= -->
+<!-- API (Verweis)                 -->
+<!-- ============================= -->
+<h2 id="api-endpoints">API-Endpunkte</h2>
+
+<p>
+    Die vollständige API-Referenz wird dynamisch aus der Admin-Registry generiert:
+</p>
+<ul class="wiki-examples">
+    <li><a href="/wiki/api/system">System-API</a> — Health, Settings, Metriken, Changelog</li>
+    <li><a href="/wiki/api/monitoring">Monitoring-API</a> — SSE-Stream, History, Services, Journal</li>
+    <li><a href="/wiki/api/mail">Mail-API</a> — SMTP-Konfiguration, Test-Mail, Status-Reports</li>
+    <li><a href="/wiki/api/backup">Backup-API</a> — Erstellen, Auflisten, Wiederherstellen</li>
+    <li><a href="/wiki/api/cache">Cache-API</a> — Statistiken, Leeren</li>
+    <li><a href="/wiki/api/integrity">Integrity-API</a> — Prüfungen, Reparaturen</li>
+    <li><a href="/wiki/api/testsuite">Testsuite-API</a> — Starten, Status</li>
+    <li><a href="/wiki/api/network">Netzwerk-API</a> — Ping, DNS, Portscan, Traceroute, SMB, WebDAV, HTTP</li>
+    <li><a href="/wiki/api/services">Services-API</a> — systemd-Service-Steuerung</li>
+</ul>
+
+{% endblock %}

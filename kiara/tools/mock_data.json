@@ -1,0 +1,565 @@
+{
+  "orders": [
+    {
+      "order_id": "A-1001",
+      "customer_id": "K-1001",
+      "customer_name": "Müller Maschinenbau GmbH",
+      "status": "geliefert",
+      "order_date": "2025-11-15",
+      "delivery_date": "2025-12-10",
+      "total_amount": 18750.00,
+      "positions": [
+        {"pos": 1, "article_id": "ART-10001", "description": "Aluminium-Gehäuse Typ A", "quantity": 50, "unit_price": 125.00},
+        {"pos": 2, "article_id": "ART-10005", "description": "Präzisionswelle 20mm", "quantity": 50, "unit_price": 89.00},
+        {"pos": 3, "article_id": "ART-10010", "description": "Dichtungsring NBR 20x30", "quantity": 200, "unit_price": 3.50}
+      ]
+    },
+    {
+      "order_id": "A-1002",
+      "customer_id": "K-1002",
+      "customer_name": "Schmidt & Partner Antriebstechnik AG",
+      "status": "in_fertigung",
+      "order_date": "2026-01-08",
+      "delivery_date": "2026-03-01",
+      "total_amount": 34200.00,
+      "positions": [
+        {"pos": 1, "article_id": "ART-10003", "description": "Steuerplatine V2.1", "quantity": 100, "unit_price": 210.00},
+        {"pos": 2, "article_id": "ART-10008", "description": "Temperatursensor PT100", "quantity": 100, "unit_price": 42.00},
+        {"pos": 3, "article_id": "ART-10012", "description": "Kabelbaum 12-polig", "quantity": 100, "unit_price": 90.00}
+      ]
+    },
+    {
+      "order_id": "A-1003",
+      "customer_id": "K-1003",
+      "customer_name": "Bauer Elektronik OHG",
+      "status": "offen",
+      "order_date": "2026-02-01",
+      "delivery_date": "2026-04-15",
+      "total_amount": 7840.00,
+      "positions": [
+        {"pos": 1, "article_id": "ART-10003", "description": "Steuerplatine V2.1", "quantity": 20, "unit_price": 210.00},
+        {"pos": 2, "article_id": "ART-10007", "description": "Drucksensor 0-10bar", "quantity": 20, "unit_price": 78.00},
+        {"pos": 3, "article_id": "ART-10015", "description": "LCD-Display 4.3 Zoll", "quantity": 20, "unit_price": 104.00}
+      ]
+    },
+    {
+      "order_id": "A-1004",
+      "customer_id": "K-1004",
+      "customer_name": "Weber Feinmechanik KG",
+      "status": "in_fertigung",
+      "order_date": "2026-01-20",
+      "delivery_date": "2026-03-15",
+      "total_amount": 52600.00,
+      "positions": [
+        {"pos": 1, "article_id": "ART-10002", "description": "Edelstahl-Gehäuse Typ B", "quantity": 200, "unit_price": 185.00},
+        {"pos": 2, "article_id": "ART-10006", "description": "Präzisionswelle 30mm", "quantity": 200, "unit_price": 78.00}
+      ]
+    },
+    {
+      "order_id": "A-1005",
+      "customer_id": "K-1005",
+      "customer_name": "Hoffmann Industrietechnik GmbH & Co. KG",
+      "status": "offen",
+      "order_date": "2026-02-10",
+      "delivery_date": "2026-05-01",
+      "total_amount": 29500.00,
+      "positions": [
+        {"pos": 1, "article_id": "ART-10001", "description": "Aluminium-Gehäuse Typ A", "quantity": 100, "unit_price": 125.00},
+        {"pos": 2, "article_id": "ART-10009", "description": "Induktiver Näherungssensor", "quantity": 100, "unit_price": 56.00},
+        {"pos": 3, "article_id": "ART-10014", "description": "Schaltschrank IP65 klein", "quantity": 10, "unit_price": 1140.00}
+      ]
+    },
+    {
+      "order_id": "A-1006",
+      "customer_id": "K-1001",
+      "customer_name": "Müller Maschinenbau GmbH",
+      "status": "geliefert",
+      "order_date": "2025-09-20",
+      "delivery_date": "2025-10-30",
+      "total_amount": 4480.00,
+      "positions": [
+        {"pos": 1, "article_id": "ART-10004", "description": "Motorsteuerung MCU-3", "quantity": 10, "unit_price": 320.00},
+        {"pos": 2, "article_id": "ART-10011", "description": "Zahnrad Modul 1.5 Z40", "quantity": 40, "unit_price": 32.00}
+      ]
+    },
+    {
+      "order_id": "A-1007",
+      "customer_id": "K-1003",
+      "customer_name": "Bauer Elektronik OHG",
+      "status": "storniert",
+      "order_date": "2026-01-05",
+      "delivery_date": null,
+      "total_amount": 0.00,
+      "cancel_reason": "Projektabbruch beim Kunden",
+      "positions": [
+        {"pos": 1, "article_id": "ART-10003", "description": "Steuerplatine V2.1", "quantity": 500, "unit_price": 210.00}
+      ]
+    },
+    {
+      "order_id": "A-1008",
+      "customer_id": "K-1002",
+      "customer_name": "Schmidt & Partner Antriebstechnik AG",
+      "status": "geliefert",
+      "order_date": "2025-10-01",
+      "delivery_date": "2025-11-15",
+      "total_amount": 11200.00,
+      "positions": [
+        {"pos": 1, "article_id": "ART-10005", "description": "Präzisionswelle 20mm", "quantity": 80, "unit_price": 89.00},
+        {"pos": 2, "article_id": "ART-10016", "description": "Linearführung 300mm", "quantity": 20, "unit_price": 204.00}
+      ]
+    },
+    {
+      "order_id": "A-1009",
+      "customer_id": "K-1005",
+      "customer_name": "Hoffmann Industrietechnik GmbH & Co. KG",
+      "status": "offen",
+      "order_date": "2026-02-18",
+      "delivery_date": "2026-04-30",
+      "total_amount": 15600.00,
+      "positions": [
+        {"pos": 1, "article_id": "ART-10013", "description": "Schaltschrank IP54 gross", "quantity": 5, "unit_price": 1850.00},
+        {"pos": 2, "article_id": "ART-10004", "description": "Motorsteuerung MCU-3", "quantity": 20, "unit_price": 320.00},
+        {"pos": 3, "article_id": "ART-10017", "description": "Kupplungselement flex 20mm", "quantity": 20, "unit_price": 45.00}
+      ]
+    },
+    {
+      "order_id": "A-1010",
+      "customer_id": "K-1004",
+      "customer_name": "Weber Feinmechanik KG",
+      "status": "storniert",
+      "order_date": "2025-12-20",
+      "delivery_date": null,
+      "total_amount": 0.00,
+      "cancel_reason": "Doppelbestellung — Zusammenführung mit A-1004",
+      "positions": [
+        {"pos": 1, "article_id": "ART-10002", "description": "Edelstahl-Gehäuse Typ B", "quantity": 100, "unit_price": 185.00}
+      ]
+    }
+  ],
+  "articles": [
+    {
+      "article_id": "ART-10001",
+      "description": "Aluminium-Gehäuse Typ A",
+      "category": "Gehäuse",
+      "unit": "Stück",
+      "stock_quantity": 320,
+      "min_stock": 100,
+      "warehouse": "Lager 1 - Regal A3",
+      "unit_price": 125.00,
+      "supplier": "Alu-Form GmbH",
+      "lead_time_days": 14
+    },
+    {
+      "article_id": "ART-10002",
+      "description": "Edelstahl-Gehäuse Typ B",
+      "category": "Gehäuse",
+      "unit": "Stück",
+      "stock_quantity": 85,
+      "min_stock": 50,
+      "warehouse": "Lager 1 - Regal A4",
+      "unit_price": 185.00,
+      "supplier": "Alu-Form GmbH",
+      "lead_time_days": 21
+    },
+    {
+      "article_id": "ART-10003",
+      "description": "Steuerplatine V2.1",
+      "category": "Elektronik",
+      "unit": "Stück",
+      "stock_quantity": 45,
+      "min_stock": 80,
+      "warehouse": "Lager 2 - ESD-Bereich R1",
+      "unit_price": 210.00,
+      "supplier": "CircuitPro AG",
+      "lead_time_days": 28
+    },
+    {
+      "article_id": "ART-10004",
+      "description": "Motorsteuerung MCU-3",
+      "category": "Elektronik",
+      "unit": "Stück",
+      "stock_quantity": 120,
+      "min_stock": 30,
+      "warehouse": "Lager 2 - ESD-Bereich R2",
+      "unit_price": 320.00,
+      "supplier": "CircuitPro AG",
+      "lead_time_days": 35
+    },
+    {
+      "article_id": "ART-10005",
+      "description": "Präzisionswelle 20mm",
+      "category": "Drehteile",
+      "unit": "Stück",
+      "stock_quantity": 540,
+      "min_stock": 200,
+      "warehouse": "Lager 3 - Regal C1",
+      "unit_price": 89.00,
+      "supplier": "Drehtechnik Berger",
+      "lead_time_days": 10
+    },
+    {
+      "article_id": "ART-10006",
+      "description": "Präzisionswelle 30mm",
+      "category": "Drehteile",
+      "unit": "Stück",
+      "stock_quantity": 180,
+      "min_stock": 100,
+      "warehouse": "Lager 3 - Regal C2",
+      "unit_price": 78.00,
+      "supplier": "Drehtechnik Berger",
+      "lead_time_days": 10
+    },
+    {
+      "article_id": "ART-10007",
+      "description": "Drucksensor 0-10bar",
+      "category": "Sensorik",
+      "unit": "Stück",
+      "stock_quantity": 95,
+      "min_stock": 50,
+      "warehouse": "Lager 2 - Regal B3",
+      "unit_price": 78.00,
+      "supplier": "SensorTech GmbH",
+      "lead_time_days": 18
+    },
+    {
+      "article_id": "ART-10008",
+      "description": "Temperatursensor PT100",
+      "category": "Sensorik",
+      "unit": "Stück",
+      "stock_quantity": 210,
+      "min_stock": 100,
+      "warehouse": "Lager 2 - Regal B4",
+      "unit_price": 42.00,
+      "supplier": "SensorTech GmbH",
+      "lead_time_days": 12
+    },
+    {
+      "article_id": "ART-10009",
+      "description": "Induktiver Näherungssensor",
+      "category": "Sensorik",
+      "unit": "Stück",
+      "stock_quantity": 330,
+      "min_stock": 150,
+      "warehouse": "Lager 2 - Regal B5",
+      "unit_price": 56.00,
+      "supplier": "SensorTech GmbH",
+      "lead_time_days": 14
+    },
+    {
+      "article_id": "ART-10010",
+      "description": "Dichtungsring NBR 20x30",
+      "category": "Normteile",
+      "unit": "Stück",
+      "stock_quantity": 4500,
+      "min_stock": 1000,
+      "warehouse": "Lager 1 - Regal D1",
+      "unit_price": 3.50,
+      "supplier": "Normteile24",
+      "lead_time_days": 5
+    },
+    {
+      "article_id": "ART-10011",
+      "description": "Zahnrad Modul 1.5 Z40",
+      "category": "Antriebselemente",
+      "unit": "Stück",
+      "stock_quantity": 260,
+      "min_stock": 100,
+      "warehouse": "Lager 3 - Regal C5",
+      "unit_price": 32.00,
+      "supplier": "Zahnrad-Werner KG",
+      "lead_time_days": 15
+    },
+    {
+      "article_id": "ART-10012",
+      "description": "Kabelbaum 12-polig",
+      "category": "Elektrik",
+      "unit": "Stück",
+      "stock_quantity": 75,
+      "min_stock": 50,
+      "warehouse": "Lager 2 - Regal B1",
+      "unit_price": 90.00,
+      "supplier": "KabelWerk Süd",
+      "lead_time_days": 20
+    },
+    {
+      "article_id": "ART-10013",
+      "description": "Schaltschrank IP54 gross",
+      "category": "Schaltschränke",
+      "unit": "Stück",
+      "stock_quantity": 8,
+      "min_stock": 5,
+      "warehouse": "Lager 4 - Grossteile G1",
+      "unit_price": 1850.00,
+      "supplier": "Rittal GmbH",
+      "lead_time_days": 25
+    },
+    {
+      "article_id": "ART-10014",
+      "description": "Schaltschrank IP65 klein",
+      "category": "Schaltschränke",
+      "unit": "Stück",
+      "stock_quantity": 15,
+      "min_stock": 10,
+      "warehouse": "Lager 4 - Grossteile G2",
+      "unit_price": 1140.00,
+      "supplier": "Rittal GmbH",
+      "lead_time_days": 20
+    },
+    {
+      "article_id": "ART-10015",
+      "description": "LCD-Display 4.3 Zoll",
+      "category": "Elektronik",
+      "unit": "Stück",
+      "stock_quantity": 60,
+      "min_stock": 30,
+      "warehouse": "Lager 2 - ESD-Bereich R3",
+      "unit_price": 104.00,
+      "supplier": "DisplayTech Europe",
+      "lead_time_days": 30
+    },
+    {
+      "article_id": "ART-10016",
+      "description": "Linearführung 300mm",
+      "category": "Führungselemente",
+      "unit": "Stück",
+      "stock_quantity": 42,
+      "min_stock": 20,
+      "warehouse": "Lager 3 - Regal C8",
+      "unit_price": 204.00,
+      "supplier": "THK Deutschland",
+      "lead_time_days": 18
+    },
+    {
+      "article_id": "ART-10017",
+      "description": "Kupplungselement flex 20mm",
+      "category": "Antriebselemente",
+      "unit": "Stück",
+      "stock_quantity": 190,
+      "min_stock": 80,
+      "warehouse": "Lager 3 - Regal C6",
+      "unit_price": 45.00,
+      "supplier": "KTR Systems",
+      "lead_time_days": 12
+    },
+    {
+      "article_id": "ART-10018",
+      "description": "Schrittmotor NEMA23",
+      "category": "Antriebe",
+      "unit": "Stück",
+      "stock_quantity": 35,
+      "min_stock": 20,
+      "warehouse": "Lager 3 - Regal C10",
+      "unit_price": 145.00,
+      "supplier": "MotionControl AG",
+      "lead_time_days": 22
+    },
+    {
+      "article_id": "ART-10019",
+      "description": "Netzteil 24V/10A",
+      "category": "Elektrik",
+      "unit": "Stück",
+      "stock_quantity": 110,
+      "min_stock": 40,
+      "warehouse": "Lager 2 - Regal B6",
+      "unit_price": 68.00,
+      "supplier": "MeanWell Europe",
+      "lead_time_days": 10
+    },
+    {
+      "article_id": "ART-10020",
+      "description": "Pneumatikzylinder DN32/100",
+      "category": "Pneumatik",
+      "unit": "Stück",
+      "stock_quantity": 28,
+      "min_stock": 15,
+      "warehouse": "Lager 3 - Regal C12",
+      "unit_price": 178.00,
+      "supplier": "Festo AG",
+      "lead_time_days": 14
+    }
+  ],
+  "customers": [
+    {
+      "customer_id": "K-1001",
+      "name": "Müller Maschinenbau GmbH",
+      "address": {
+        "street": "Industriestraße 42",
+        "zip": "71034",
+        "city": "Böblingen",
+        "country": "Deutschland"
+      },
+      "contact": {
+        "name": "Thomas Müller",
+        "phone": "+49 7031 123456",
+        "email": "t.mueller@mueller-maschinenbau.de"
+      },
+      "customer_since": "2018-03-15",
+      "payment_terms": "30 Tage netto",
+      "credit_limit": 100000.00,
+      "last_orders": ["A-1001", "A-1006"]
+    },
+    {
+      "customer_id": "K-1002",
+      "name": "Schmidt & Partner Antriebstechnik AG",
+      "address": {
+        "street": "Robert-Bosch-Weg 8",
+        "zip": "74076",
+        "city": "Heilbronn",
+        "country": "Deutschland"
+      },
+      "contact": {
+        "name": "Andrea Schmidt",
+        "phone": "+49 7131 987654",
+        "email": "a.schmidt@sp-antriebstechnik.de"
+      },
+      "customer_since": "2020-07-01",
+      "payment_terms": "14 Tage 2% Skonto, 30 Tage netto",
+      "credit_limit": 200000.00,
+      "last_orders": ["A-1002", "A-1008"]
+    },
+    {
+      "customer_id": "K-1003",
+      "name": "Bauer Elektronik OHG",
+      "address": {
+        "street": "Siemensallee 15",
+        "zip": "76131",
+        "city": "Karlsruhe",
+        "country": "Deutschland"
+      },
+      "contact": {
+        "name": "Martin Bauer",
+        "phone": "+49 721 554433",
+        "email": "m.bauer@bauer-elektronik.de"
+      },
+      "customer_since": "2022-01-10",
+      "payment_terms": "30 Tage netto",
+      "credit_limit": 50000.00,
+      "last_orders": ["A-1003", "A-1007"]
+    },
+    {
+      "customer_id": "K-1004",
+      "name": "Weber Feinmechanik KG",
+      "address": {
+        "street": "Präzisionsweg 3",
+        "zip": "78048",
+        "city": "Villingen-Schwenningen",
+        "country": "Deutschland"
+      },
+      "contact": {
+        "name": "Klaus Weber",
+        "phone": "+49 7721 334455",
+        "email": "k.weber@weber-feinmechanik.de"
+      },
+      "customer_since": "2019-11-20",
+      "payment_terms": "14 Tage netto",
+      "credit_limit": 150000.00,
+      "last_orders": ["A-1004", "A-1010"]
+    },
+    {
+      "customer_id": "K-1005",
+      "name": "Hoffmann Industrietechnik GmbH & Co. KG",
+      "address": {
+        "street": "Am Technopark 27",
+        "zip": "70569",
+        "city": "Stuttgart",
+        "country": "Deutschland"
+      },
+      "contact": {
+        "name": "Sabine Hoffmann",
+        "phone": "+49 711 778899",
+        "email": "s.hoffmann@hoffmann-industrie.de"
+      },
+      "customer_since": "2021-05-08",
+      "payment_terms": "30 Tage netto",
+      "credit_limit": 250000.00,
+      "last_orders": ["A-1005", "A-1009"]
+    }
+  ],
+  "production_orders": [
+    {
+      "production_order_id": "FA-2001",
+      "order_reference": "A-1002",
+      "article_id": "ART-10003",
+      "article_description": "Steuerplatine V2.1",
+      "quantity": 100,
+      "status": "in_fertigung",
+      "start_date": "2026-01-20",
+      "planned_end_date": "2026-02-28",
+      "operations": [
+        {"op_number": 10, "name": "Leiterplatte bestücken", "workstation": "SMD-Linie 1", "status": "abgeschlossen", "planned_hours": 8.0, "actual_hours": 7.5},
+        {"op_number": 20, "name": "Löten (Reflow)", "workstation": "Reflow-Ofen R1", "status": "abgeschlossen", "planned_hours": 4.0, "actual_hours": 4.0},
+        {"op_number": 30, "name": "Funktionstest", "workstation": "Prüfplatz E1", "status": "in_bearbeitung", "planned_hours": 12.0, "actual_hours": 6.0},
+        {"op_number": 40, "name": "Qualitätsprüfung", "workstation": "QS-Labor", "status": "offen", "planned_hours": 6.0, "actual_hours": null},
+        {"op_number": 50, "name": "Verpackung", "workstation": "Verpackung V2", "status": "offen", "planned_hours": 3.0, "actual_hours": null}
+      ]
+    },
+    {
+      "production_order_id": "FA-2002",
+      "order_reference": "A-1004",
+      "article_id": "ART-10002",
+      "article_description": "Edelstahl-Gehäuse Typ B",
+      "quantity": 200,
+      "status": "in_fertigung",
+      "start_date": "2026-02-01",
+      "planned_end_date": "2026-03-10",
+      "operations": [
+        {"op_number": 10, "name": "Laserschneiden", "workstation": "Laser L2", "status": "abgeschlossen", "planned_hours": 16.0, "actual_hours": 15.0},
+        {"op_number": 20, "name": "Abkanten", "workstation": "Abkantpresse P1", "status": "abgeschlossen", "planned_hours": 12.0, "actual_hours": 13.5},
+        {"op_number": 30, "name": "Schweißen", "workstation": "Schweißplatz S2", "status": "in_bearbeitung", "planned_hours": 24.0, "actual_hours": 10.0},
+        {"op_number": 40, "name": "Schleifen/Polieren", "workstation": "Schleifplatz SP1", "status": "offen", "planned_hours": 20.0, "actual_hours": null},
+        {"op_number": 50, "name": "Qualitätsprüfung", "workstation": "QS-Messraum", "status": "offen", "planned_hours": 8.0, "actual_hours": null}
+      ]
+    },
+    {
+      "production_order_id": "FA-2003",
+      "order_reference": "A-1004",
+      "article_id": "ART-10006",
+      "article_description": "Präzisionswelle 30mm",
+      "quantity": 200,
+      "status": "in_fertigung",
+      "start_date": "2026-01-25",
+      "planned_end_date": "2026-02-28",
+      "operations": [
+        {"op_number": 10, "name": "Drehen (Vorbearbeitung)", "workstation": "CNC-Drehmaschine D3", "status": "abgeschlossen", "planned_hours": 20.0, "actual_hours": 18.0},
+        {"op_number": 20, "name": "Drehen (Feinbearbeitung)", "workstation": "CNC-Drehmaschine D1", "status": "abgeschlossen", "planned_hours": 24.0, "actual_hours": 26.0},
+        {"op_number": 30, "name": "Fräsen (Passfedernut)", "workstation": "CNC-Fräse F2", "status": "abgeschlossen", "planned_hours": 8.0, "actual_hours": 9.0},
+        {"op_number": 40, "name": "Schleifen", "workstation": "Rundschleifmaschine RS1", "status": "in_bearbeitung", "planned_hours": 16.0, "actual_hours": 8.0},
+        {"op_number": 50, "name": "Qualitätsprüfung", "workstation": "QS-Messraum", "status": "offen", "planned_hours": 10.0, "actual_hours": null}
+      ]
+    },
+    {
+      "production_order_id": "FA-2004",
+      "order_reference": "A-1005",
+      "article_id": "ART-10001",
+      "article_description": "Aluminium-Gehäuse Typ A",
+      "quantity": 100,
+      "status": "geplant",
+      "start_date": "2026-03-01",
+      "planned_end_date": "2026-04-10",
+      "operations": [
+        {"op_number": 10, "name": "CNC-Fräsen", "workstation": "CNC-Fräse F1", "status": "offen", "planned_hours": 16.0, "actual_hours": null},
+        {"op_number": 20, "name": "Entgraten", "workstation": "Entgratung E1", "status": "offen", "planned_hours": 8.0, "actual_hours": null},
+        {"op_number": 30, "name": "Eloxieren", "workstation": "Eloxal-Anlage", "status": "offen", "planned_hours": 6.0, "actual_hours": null},
+        {"op_number": 40, "name": "Montage Einpressbuchsen", "workstation": "Montageplatz M1", "status": "offen", "planned_hours": 10.0, "actual_hours": null},
+        {"op_number": 50, "name": "Qualitätsprüfung", "workstation": "QS-Messraum", "status": "offen", "planned_hours": 4.0, "actual_hours": null}
+      ]
+    },
+    {
+      "production_order_id": "FA-2005",
+      "order_reference": "A-1009",
+      "article_id": "ART-10004",
+      "article_description": "Motorsteuerung MCU-3",
+      "quantity": 20,
+      "status": "geplant",
+      "start_date": "2026-03-10",
+      "planned_end_date": "2026-04-15",
+      "operations": [
+        {"op_number": 10, "name": "Leiterplatte bestücken", "workstation": "SMD-Linie 1", "status": "offen", "planned_hours": 6.0, "actual_hours": null},
+        {"op_number": 20, "name": "Löten (Reflow)", "workstation": "Reflow-Ofen R1", "status": "offen", "planned_hours": 2.0, "actual_hours": null},
+        {"op_number": 30, "name": "Firmware-Programmierung", "workstation": "Programmierplatz P1", "status": "offen", "planned_hours": 4.0, "actual_hours": null},
+        {"op_number": 40, "name": "Montage in Gehäuse", "workstation": "Montageplatz M2", "status": "offen", "planned_hours": 8.0, "actual_hours": null},
+        {"op_number": 50, "name": "Funktionstest + Qualitätsprüfung", "workstation": "Prüfplatz E2", "status": "offen", "planned_hours": 10.0, "actual_hours": null}
+      ]
+    }
+  ]
+}

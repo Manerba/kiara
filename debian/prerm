@@ -1,0 +1,18 @@
+#!/bin/bash
+set -e
+
+case "$1" in
+    remove|upgrade)
+        # Stop services
+        systemctl stop kiara.service 2>/dev/null || true
+        systemctl stop kiara-admin.service 2>/dev/null || true
+        systemctl stop kiara-admin-chat.service 2>/dev/null || true
+        systemctl disable kiara.service 2>/dev/null || true
+        systemctl disable kiara-admin.service 2>/dev/null || true
+        systemctl disable kiara-admin-chat.service 2>/dev/null || true
+        ;;
+esac
+
+#DEBHELPER#
+
+exit 0

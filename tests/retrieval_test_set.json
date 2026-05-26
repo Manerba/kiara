@@ -1,0 +1,62 @@
+[
+  {
+    "query": "Wie konfiguriere ich die Firewall-Regeln?",
+    "relevant_sources": ["firewall_config.md", "netzwerk_sicherheit.md"]
+  },
+  {
+    "query": "VPN-Verbindung einrichten",
+    "relevant_sources": ["vpn_setup.md", "remote_access.md"]
+  },
+  {
+    "query": "Active Directory Gruppenrichtlinien",
+    "relevant_sources": ["ad_gpo.md", "windows_server.md"]
+  },
+  {
+    "query": "DNS-Server konfigurieren und Zonen einrichten",
+    "relevant_sources": ["dns_setup.md", "netzwerk_infrastruktur.md"]
+  },
+  {
+    "query": "Backup und Disaster Recovery Strategie",
+    "relevant_sources": ["backup_strategie.md", "disaster_recovery.md"]
+  },
+  {
+    "query": "DHCP Scope erstellen und Optionen setzen",
+    "relevant_sources": ["dhcp_config.md", "netzwerk_infrastruktur.md"]
+  },
+  {
+    "query": "PowerShell Script zur Benutzeranlage im AD",
+    "relevant_sources": ["ad_user_management.ps1", "powershell_scripts.md"]
+  },
+  {
+    "query": "SSL-Zertifikat erneuern und installieren",
+    "relevant_sources": ["zertifikatsverwaltung.md", "webserver_config.md"]
+  },
+  {
+    "query": "Exchange Online Mailbox migrieren",
+    "relevant_sources": ["exchange_migration.md", "office365_setup.md"]
+  },
+  {
+    "query": "VLAN Konfiguration auf dem Switch",
+    "relevant_sources": ["vlan_config.md", "netzwerk_sicherheit.md"]
+  },
+  {
+    "query": "Windows Server Update Services WSUS einrichten",
+    "relevant_sources": ["wsus_setup.md", "windows_server.md"]
+  },
+  {
+    "query": "Hyper-V virtuelle Maschine erstellen",
+    "relevant_sources": ["hyperv_setup.md", "virtualisierung.md"]
+  },
+  {
+    "query": "Netzwerkdrucker per GPO verteilen",
+    "relevant_sources": ["drucker_verwaltung.md", "ad_gpo.md"]
+  },
+  {
+    "query": "Monitoring und Alerting mit SNMP",
+    "relevant_sources": ["monitoring_setup.md", "netzwerk_infrastruktur.md"]
+  },
+  {
+    "query": "Linux Server absichern und SSH haerten",
+    "relevant_sources": ["linux_hardening.md", "ssh_config.md"]
+  }
+]

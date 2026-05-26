@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Sicherheitslücke melden
+    url: https://github.com/placeholder/kiara/security/advisories/new
+    about: Sicherheitslücken bitte privat über Security Advisories melden, nicht über öffentliche Issues.

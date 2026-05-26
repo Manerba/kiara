@@ -1,0 +1,61 @@
+Kiara
+Copyright (C) 2026 Andreas Alber and the Kiara contributors
+
+This product is licensed under the GNU Affero General Public License, version 3
+or (at your option) any later version (AGPL-3.0-or-later). See the LICENSE file
+for the full license text, or <https://www.gnu.org/licenses/agpl-3.0.html>.
+
+Copyright on the Kiara source code is held by Andreas Alber and the project's
+contributors. Each contributor retains copyright on their own contributions,
+which are provided to the project under AGPL-3.0-or-later on an
+inbound = outbound basis (see CONTRIBUTING.md). No contributor license
+agreement (CLA) and no copyright assignment is required or implied.
+
+==============================================================================
+Third-party components
+==============================================================================
+
+Kiara is distributed together with third-party open-source components (for
+example inside the Debian package or the bundled Python virtual environment).
+Each such component remains under its own license and copyright. The AGPL covers
+Kiara's own source code; it does not relicense these bundled dependencies.
+
+The list below names the principal runtime dependencies grouped by license
+family. It is INFORMATIONAL AND NOT EXHAUSTIVE. The authoritative, version-exact
+inventory is generated from the installed environment with:
+
+    pip install pip-licenses
+    pip-licenses --format=markdown --with-urls --with-license-file \
+                 --output-file THIRD_PARTY_LICENSES.md
+
+Principal components
+--------------------
+
+MIT License
+    langchain, langchain-community, langchain-text-splitters, ollama, PyYAML,
+    python-docx, openpyxl, python-pptx, fastapi, PyJWT, anthropic,
+    charset-normalizer, ezdxf, netifaces, voyageai, msal
+
+Apache License 2.0
+    watchdog, bcrypt, python-multipart, openai, rank-bm25, qdrant-client,
+    elasticsearch, opentelemetry-api, opentelemetry-sdk, sentence-transformers,
+    transformers, fastmcp, cryptography (Apache-2.0 OR BSD)
+
+BSD (2-/3-Clause) and HPND
+    click, pypdf, uvicorn, itsdangerous, httpx, httpcore, Jinja2, reportlab,
+    psutil, torch, torchvision, Pillow (HPND), pyahocorasick
+
+Other licenses — review before redistribution
+    tqdm    MPL-2.0 / MIT (dual-licensed)
+    odfpy   GPL-2.0-or-later / Apache-2.0 (dual-licensed; Apache-2.0 may be elected)
+    ldap3   LGPL-3.0-or-later
+
+All of the licenses listed above are compatible with distributing Kiara under
+AGPL-3.0. The "Other licenses" group is called out only because (L)GPL and
+dual-licensed components warrant a deliberate check whenever a release is cut or
+the appliance ISO is built.
+
+Apache-2.0 components that ship their own NOTICE file require that NOTICE text to
+be reproduced downstream. Collect those, together with the full per-package
+license texts, in the generated THIRD_PARTY_LICENSES.md (or a vendored
+licenses/ directory) when preparing a binary distribution.

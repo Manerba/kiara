@@ -1,0 +1,271 @@
+/**
+ * KIara-Chat — produktspezifische Reste (Sprint 5).
+ *
+ * Core-Primitives (Container/Messages/Avatar/Bubble/Timestamp/Sources/Tool/Usage/
+ * Input/Empty/Streaming/Copy-Button) sind nach ui_core/css/chat.css extrahiert.
+ * Markdown-Regeln (Inline-/Block-Code + Tabellen) stehen in ui_core/css/markdown.css.
+ * Hier bleiben nur KIara-eigene Shell-Hooks, Mode-Badges, Bubble-Headings,
+ * Source-Edit-Link, Rewrite-/Expansion-/Warning-Blocks, Kontext-Bubbles aus der
+ * Such-Tab-Uebergabe und die Trace-Debug-Bar.
+ */
+
+/* ── KIara-Shell-Hooks ───────────────────────────────────────────── */
+
+.container:has(.chat-container) { padding: 0; }
+
+body:has(.chat-container) { overflow: hidden; }
+
+/* KIara-Chat-Container bekommt fixe Hoehe mit Header-/Filter-/Tab-Abzug. */
+.chat-container {
+    height: calc(100vh - var(--header-height) - 44px - var(--filter-bar-height));
+}
+
+/* ── KIara-Bubble-Headings (kompakt in Bubble-Kontext) ─────────── */
+
+.chat-bubble h1 { font-size: 1.3em; margin: 12px 0 6px; }
+.chat-bubble h2 { font-size: 1.15em; margin: 10px 0 5px; }
+.chat-bubble h3 { font-size: 1.05em; margin: 8px 0 4px; }
+.chat-bubble h4, .chat-bubble h5, .chat-bubble h6 { font-size: 1em; margin: 6px 0 3px; }
+
+/* ── Mode Badge (Unchained / Agent) ─────────────────────────────── */
+
+.chat-mode-badge {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    margin-bottom: 6px;
+}
+
+.chat-mode-badge.unchained {
+    background-color: #16a34a;
+    color: white;
+}
+
+.chat-mode-badge.agent {
+    background-color: #ea580c;
+    color: white;
+}
+
+[data-theme="dark"] .chat-mode-badge.unchained {
+    background-color: #22c55e;
+    color: #052e16;
+}
+
+[data-theme="dark"] .chat-mode-badge.agent {
+    background-color: #f97316;
+    color: #431407;
+}
+
+/* ── Source-Edit-Link (Editor-Button in Quelle) ─────────────────── */
+
+.chat-source-edit-btn {
+    display: inline-block;
+    margin-top: 4px;
+    padding: 2px 8px;
+    font-size: 11px;
+    color: var(--accent-primary);
+    border: 1px solid var(--accent-primary);
+    border-radius: 4px;
+    text-decoration: none;
+    background: transparent;
+}
+
+.chat-source-edit-btn:hover {
+    background-color: var(--accent-primary);
+    color: white;
+}
+
+/* ── Kontext-Warnung (num_ctx ueberschritten) ───────────────────── */
+
+.chat-context-warning {
+    margin: 0 0 8px 0;
+    padding: 8px 12px;
+    background-color: rgba(245,158,11,0.12);
+    border: 1px solid rgba(245,158,11,0.4);
+    border-radius: 6px;
+    font-size: 12px;
+    color: #b45309;
+    line-height: 1.4;
+}
+[data-theme="dark"] .chat-context-warning {
+    background-color: rgba(245,158,11,0.15);
+    border-color: rgba(245,158,11,0.35);
+    color: #fbbf24;
+}
+
+/* ── Query-Rewrite Info ─────────────────────────────────────────── */
+
+.chat-rewrite-info {
+    margin: 0 0 8px 0;
+    padding: 6px 10px;
+    background-color: rgba(16,185,129,0.08);
+    border: 1px solid rgba(16,185,129,0.25);
+    border-radius: 6px;
+    font-size: 11px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+}
+.rewrite-label {
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+.rewrite-tag {
+    display: inline-block;
+    margin: 1px 4px 1px 0;
+    padding: 1px 7px;
+    background-color: rgba(16,185,129,0.12);
+    border-radius: 4px;
+    font-size: 11px;
+}
+[data-theme="dark"] .chat-rewrite-info {
+    background-color: rgba(16,185,129,0.1);
+    border-color: rgba(16,185,129,0.3);
+}
+[data-theme="dark"] .rewrite-tag {
+    background-color: rgba(16,185,129,0.18);
+}
+
+/* ── Query-Expansion Info ───────────────────────────────────────── */
+
+.chat-expansion-info {
+    margin: 0 0 8px 0;
+    padding: 6px 10px;
+    background-color: rgba(59,130,246,0.08);
+    border: 1px solid rgba(59,130,246,0.25);
+    border-radius: 6px;
+    font-size: 11px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+}
+.expansion-label {
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+.expansion-tag {
+    display: inline-block;
+    margin: 1px 4px 1px 0;
+    padding: 1px 7px;
+    background-color: rgba(59,130,246,0.12);
+    border-radius: 4px;
+    font-size: 11px;
+}
+[data-theme="dark"] .chat-expansion-info {
+    background-color: rgba(59,130,246,0.1);
+    border-color: rgba(59,130,246,0.3);
+}
+[data-theme="dark"] .expansion-tag {
+    background-color: rgba(59,130,246,0.18);
+}
+
+/* ── Kontext-Nachrichten (aus Such-Tab-Uebergabe) ───────────────── */
+
+.chat-message-context {
+    display: flex;
+    gap: 8px;
+    padding: 8px 12px;
+    justify-content: flex-end;
+}
+.chat-context-bubble {
+    max-width: 85%;
+    background: var(--bg-detail);
+    border: 1px dashed var(--border-color);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 12px;
+}
+.chat-context-label {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--accent-primary);
+    text-transform: uppercase;
+    margin-bottom: 4px;
+}
+.chat-context-title {
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 2px;
+}
+.chat-context-score {
+    display: inline-block;
+    background: var(--accent-primary);
+    color: #fff;
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 8px;
+    margin-left: 6px;
+}
+.chat-context-text {
+    color: var(--text-secondary);
+    font-size: 11px;
+    margin-top: 4px;
+    max-height: 60px;
+    overflow: hidden;
+}
+.chat-context-group {
+    padding: 8px 12px;
+    display: flex;
+    justify-content: flex-end;
+}
+.chat-context-group-inner {
+    max-width: 85%;
+    background: var(--bg-detail);
+    border: 1px dashed var(--border-color);
+    border-radius: 8px;
+    padding: 8px 12px;
+    cursor: pointer;
+}
+.chat-context-group-inner summary {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--accent-primary);
+}
+
+/* ── Trace Debug Bar (S7) ───────────────────────────────────────── */
+
+.trace-debug-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 12px;
+    margin-top: 4px;
+    font-size: 0.75rem;
+    color: var(--text-secondary, #888);
+    font-variant-numeric: tabular-nums;
+}
+.trace-debug-segments {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.trace-debug-total {
+    font-weight: 600;
+    color: var(--text-primary, #333);
+    white-space: nowrap;
+}
+.trace-debug-link {
+    color: var(--accent-primary);
+    text-decoration: none;
+    font-size: 0.85rem;
+}
+.trace-debug-link:hover {
+    text-decoration: underline;
+}
+.trace-debug-toggle {
+    background: none;
+    border: 1px solid transparent;
+    cursor: pointer;
+    font-size: 1rem;
+    padding: 4px 8px;
+    border-radius: 4px;
+    opacity: 0.5;
+}
+.trace-debug-toggle.active {
+    opacity: 1;
+    border-color: var(--accent-primary);
+    background: var(--bg-row-hover);
+}

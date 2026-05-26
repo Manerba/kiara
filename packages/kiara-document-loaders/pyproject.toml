@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kiara-document-loaders"
+version = "0.0.1"
+description = "KIara Document Loaders -- Format-Parser fuer 25+ Dateitypen"
+license = "AGPL-3.0-or-later"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+text = ["charset_normalizer>=3.0"]
+office = ["python-docx", "pypdf", "openpyxl", "odfpy", "python-pptx"]
+cad = ["ezdxf"]
+vision = ["ollama", "Pillow"]
+
+[tool.setuptools.packages.find]
+include = ["kiara_document_loaders", "kiara_document_loaders.*"]

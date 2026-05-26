@@ -1,0 +1,14 @@
+{# description: Strukturierte Checkliste für IT-Aufgaben #}
+{# variables: title, items, category, priority #}
+# Checkliste: {{ title }}
+
+**Kategorie:** {{ category | default("Allgemein") }}
+**Priorität:** {{ priority | default("Normal") }}
+**Erstellt:** {{ now | default("") }}
+
+{% for item in items %}
+- [ ] {{ item }}
+{% endfor %}
+
+---
+*Generiert von OpenRAG*

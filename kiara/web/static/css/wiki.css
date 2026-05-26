@@ -1,0 +1,771 @@
+/* ========================================
+   KIara Wiki — CSS
+   Sidebar-Layout, Karten, Parameter-Tabellen,
+   Self-Check-Badges, Dark/Light Theme
+   ======================================== */
+
+/* --- Layout --- */
+.wiki-layout {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+}
+
+.wiki-header {
+    display: flex;
+    justify-content: space-between;
+}
+
+.wiki-header-right {
+    display: flex;
+    align-items: center;
+}
+
+.wiki-back-link {
+    color: var(--text-header);
+    text-decoration: none;
+    font-size: 13px;
+    opacity: 0.85;
+    transition: opacity var(--transition-speed);
+}
+.wiki-back-link:hover {
+    opacity: 1;
+    text-decoration: underline;
+}
+
+.wiki-body {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+}
+
+/* --- Sidebar --- */
+.wiki-sidebar {
+    width: 220px;
+    min-width: 220px;
+    background: var(--bg-secondary);
+    border-right: 1px solid var(--border-color);
+    overflow-y: auto;
+    transition: width 0.2s, min-width 0.2s;
+    position: relative;
+}
+
+.wiki-sidebar.collapsed {
+    width: 0;
+    min-width: 0;
+    /* overflow: visible damit der Toggle-Button auch bei collapsed Sidebar sichtbar bleibt */
+    overflow: visible;
+}
+
+.wiki-sidebar.collapsed .wiki-sidebar-content {
+    display: none;
+}
+
+.wiki-sidebar.collapsed .wiki-sidebar-toggle {
+    /* Toggle-Button nach aussen schieben wenn Sidebar kollabiert ist */
+    right: -28px;
+}
+
+.wiki-sidebar-toggle {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 16px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    z-index: 1;
+}
+.wiki-sidebar-toggle:hover {
+    background: var(--bg-row-hover);
+}
+
+.wiki-sidebar-content {
+    padding: 12px;
+}
+
+.wiki-nav-section {
+    margin-bottom: 16px;
+}
+
+.wiki-nav-heading {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary);
+    margin: 0 0 6px 0;
+    padding: 0;
+}
+
+.wiki-nav-link {
+    display: block;
+    padding: 4px 8px;
+    color: var(--text-primary);
+    text-decoration: none;
+    font-size: 13px;
+    border-radius: 4px;
+    transition: background var(--transition-speed);
+}
+.wiki-nav-link:hover {
+    background: var(--bg-row-hover);
+}
+
+.wiki-nav-home {
+    font-weight: 600;
+}
+
+.wiki-nav-indent {
+    padding-left: 16px;
+    font-size: 12px;
+}
+
+/* --- Content --- */
+.wiki-content {
+    flex: 1;
+    padding: 20px 32px;
+    overflow-y: auto;
+    max-width: 960px;
+}
+
+.wiki-content h1 {
+    margin: 0 0 16px 0;
+    font-size: 24px;
+    font-weight: 600;
+}
+
+.wiki-content h2 {
+    margin: 24px 0 12px 0;
+    font-size: 18px;
+    font-weight: 600;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 6px;
+}
+
+.wiki-breadcrumb {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+}
+.wiki-breadcrumb a {
+    color: var(--accent-primary);
+    text-decoration: none;
+}
+.wiki-breadcrumb a:hover {
+    text-decoration: underline;
+}
+
+.wiki-intro {
+    color: var(--text-secondary);
+    font-size: 14px;
+    line-height: 1.5;
+    margin-bottom: 24px;
+}
+
+/* --- Stats Grid (Startseite) --- */
+.wiki-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+    margin-bottom: 24px;
+}
+
+.wiki-stat-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 16px;
+    text-align: center;
+}
+
+.wiki-stat-number {
+    display: block;
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--accent-primary);
+}
+
+.wiki-stat-label {
+    display: block;
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 4px;
+}
+
+/* --- Quick-Links (Startseite) --- */
+.wiki-link-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+    margin-bottom: 24px;
+}
+
+.wiki-link-card {
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 16px;
+    text-decoration: none;
+    color: var(--text-primary);
+    transition: box-shadow var(--transition-speed), border-color var(--transition-speed);
+}
+.wiki-link-card:hover {
+    border-color: var(--accent-primary);
+    box-shadow: var(--shadow-sm);
+}
+
+.wiki-link-icon {
+    font-size: 24px;
+    margin-bottom: 8px;
+}
+
+.wiki-link-title {
+    font-weight: 600;
+    font-size: 14px;
+    margin-bottom: 4px;
+}
+
+.wiki-link-desc {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+/* --- Self-Check --- */
+.wiki-self-check {
+    margin-bottom: 24px;
+}
+
+.self-check-box {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 12px 16px;
+}
+
+.self-check-compact {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    padding: 8px 12px;
+    margin-bottom: 24px;
+}
+
+.self-check-item {
+    padding: 4px 0;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.self-check-ok { color: var(--color-bullish); }
+.self-check-error { color: var(--color-bearish); }
+.self-check-warn { color: var(--color-unclear); }
+.self-check-info { color: var(--accent-primary); }
+
+.self-check-func {
+    font-weight: 600;
+    font-family: monospace;
+    font-size: 12px;
+}
+
+/* --- Kategorie-Karten (API-Index) --- */
+.wiki-category-card {
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    margin-bottom: 16px;
+    overflow: hidden;
+}
+
+.wiki-category-card.collapsed .wiki-category-body {
+    display: none;
+}
+
+.wiki-category-card.collapsed .wiki-collapse-icon {
+    transform: rotate(-90deg);
+}
+
+.wiki-category-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 16px;
+    background: var(--bg-secondary);
+    cursor: pointer;
+    user-select: none;
+}
+
+.wiki-category-header h2 {
+    margin: 0;
+    font-size: 15px;
+    border: none;
+    padding: 0;
+}
+
+.wiki-collapse-icon {
+    display: inline-block;
+    font-size: 10px;
+    margin-right: 6px;
+    transition: transform 0.2s;
+}
+
+.wiki-category-count {
+    font-weight: 400;
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+.wiki-category-detail-link {
+    font-size: 12px;
+    color: var(--accent-primary);
+    text-decoration: none;
+    white-space: nowrap;
+}
+.wiki-category-detail-link:hover {
+    text-decoration: underline;
+}
+
+.wiki-category-body {
+    border-top: 1px solid var(--border-color);
+}
+
+/* --- Funktions-Zeile (API-Index) --- */
+.wiki-func-row {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border-color);
+}
+.wiki-func-row:last-child {
+    border-bottom: none;
+}
+
+.wiki-func-main {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.wiki-func-name {
+    font-family: monospace;
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--accent-primary);
+    text-decoration: none;
+}
+.wiki-func-name:hover {
+    text-decoration: underline;
+}
+
+.wiki-func-desc {
+    color: var(--text-secondary);
+    font-size: 12px;
+    margin-top: 2px;
+}
+
+.wiki-func-meta {
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-top: 4px;
+}
+
+.wiki-meta-sep {
+    margin: 0 6px;
+    opacity: 0.5;
+}
+
+/* --- HTTP-Badges --- */
+.wiki-http-badge {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 700;
+    font-family: monospace;
+    text-transform: uppercase;
+    color: #fff;
+}
+
+.wiki-http-get { background: #28a745; }
+.wiki-http-post { background: #007bff; }
+.wiki-http-put { background: #fd7e14; }
+.wiki-http-patch { background: #6f42c1; }
+.wiki-http-delete { background: #dc3545; }
+.wiki-http-chat { background: var(--color-neutral); }
+
+.wiki-http-path {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.wiki-http-path-lg {
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+/* --- Confirm-Badge --- */
+.wiki-confirm-badge {
+    display: inline-block;
+    padding: 1px 6px;
+    background: var(--color-unclear);
+    color: #fff;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 600;
+}
+
+/* --- Check-Badges --- */
+.wiki-func-checks {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 6px;
+}
+
+.wiki-check-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 500;
+}
+
+.wiki-check-error {
+    background: rgba(220, 53, 69, 0.15);
+    color: var(--color-bearish);
+}
+.wiki-check-warning {
+    background: rgba(253, 126, 20, 0.15);
+    color: var(--color-unclear);
+}
+.wiki-check-info {
+    background: rgba(52, 152, 219, 0.15);
+    color: var(--accent-primary);
+}
+
+/* --- Funktions-Detail (Kategorie-Seite) --- */
+.wiki-func-detail {
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    margin-bottom: 12px;
+}
+
+.wiki-func-detail-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    cursor: pointer;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    list-style: none;
+}
+.wiki-func-detail-header::-webkit-details-marker {
+    display: none;
+}
+
+.wiki-func-detail[open] .wiki-func-detail-header {
+    border-radius: 8px 8px 0 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.wiki-func-name-lg {
+    font-family: monospace;
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--accent-primary);
+    text-decoration: none;
+}
+.wiki-func-name-lg:hover {
+    text-decoration: underline;
+}
+
+.wiki-func-detail-body {
+    padding: 16px;
+}
+
+.wiki-func-description {
+    color: var(--text-secondary);
+    font-size: 14px;
+    margin-bottom: 12px;
+}
+
+.wiki-func-description-lg {
+    color: var(--text-secondary);
+    font-size: 15px;
+    line-height: 1.5;
+    margin-bottom: 16px;
+}
+
+/* --- Funktions-Header (Einzelseite) --- */
+.wiki-func-header-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+
+.wiki-category-tag {
+    display: inline-block;
+    padding: 2px 10px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+/* --- Sections --- */
+.wiki-section {
+    margin-bottom: 20px;
+}
+
+.wiki-section h4 {
+    margin: 0 0 8px 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.wiki-help-text {
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-primary);
+    white-space: pre-wrap;
+}
+
+/* --- Parameter-Tabelle --- */
+.wiki-param-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.wiki-param-table th {
+    text-align: left;
+    padding: 6px 10px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    font-weight: 600;
+    font-size: 12px;
+}
+
+.wiki-param-table td {
+    padding: 6px 10px;
+    border: 1px solid var(--border-color);
+    vertical-align: top;
+}
+
+.wiki-param-table code {
+    font-size: 12px;
+    background: var(--bg-secondary);
+    padding: 1px 4px;
+    border-radius: 3px;
+}
+
+/* --- Meta-Tabelle (Einzelseite) --- */
+.wiki-meta-table {
+    font-size: 13px;
+    border-collapse: collapse;
+}
+
+.wiki-meta-table td {
+    padding: 4px 12px 4px 0;
+}
+
+.wiki-meta-table td:first-child {
+    font-weight: 600;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+/* --- Beispiele --- */
+.wiki-examples {
+    list-style: disc;
+    padding-left: 20px;
+    font-size: 13px;
+}
+
+.wiki-examples li {
+    margin-bottom: 4px;
+    color: var(--text-primary);
+}
+
+/* --- Code-Block (curl) --- */
+.wiki-code-block {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 12px 16px;
+    overflow-x: auto;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.wiki-code-block code {
+    font-family: monospace;
+    white-space: pre;
+}
+
+.wiki-tip-box .wiki-code-block {
+    margin-top: 8px;
+}
+
+.wiki-code-sample {
+    margin: 0;
+    font-size: 11px;
+}
+
+/* --- Status-Farben fuer Guide-Tabellen --- */
+.wiki-status-bullish { color: var(--color-bullish); }
+.wiki-status-unclear { color: var(--color-unclear); }
+.wiki-status-bearish { color: var(--color-bearish); }
+.wiki-status-neutral { color: var(--text-secondary); }
+
+/* --- Platzhalter-Box (Guide + 404) --- */
+.wiki-placeholder-box {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 24px;
+    margin-top: 16px;
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+.wiki-placeholder-box a {
+    color: var(--accent-primary);
+    text-decoration: none;
+}
+.wiki-placeholder-box a:hover {
+    text-decoration: underline;
+}
+
+.wiki-error-box {
+    border-color: var(--color-bearish);
+}
+
+.wiki-meta-section {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+/* --- Inhaltsverzeichnis (TOC) --- */
+.wiki-toc {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 12px 20px;
+    margin-bottom: 24px;
+    font-size: 13px;
+}
+
+.wiki-toc h3 {
+    margin: 0 0 8px 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.wiki-toc ol {
+    margin: 0;
+    padding-left: 20px;
+}
+
+.wiki-toc li {
+    margin-bottom: 3px;
+}
+
+.wiki-toc a {
+    color: var(--accent-primary);
+    text-decoration: none;
+}
+.wiki-toc a:hover {
+    text-decoration: underline;
+}
+
+.wiki-toc ol ol {
+    margin-top: 3px;
+    font-size: 12px;
+}
+
+/* --- Tipp-Boxen --- */
+.wiki-tip-box {
+    background: rgba(52, 152, 219, 0.08);
+    border-left: 3px solid var(--accent-primary);
+    border-radius: 4px;
+    padding: 10px 14px;
+    margin: 12px 0 16px 0;
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.wiki-tip-box strong {
+    color: var(--accent-primary);
+}
+
+.wiki-tip-box ol,
+.wiki-tip-box ul {
+    margin: 6px 0 0 0;
+    padding-left: 20px;
+}
+
+.wiki-tip-box li {
+    margin-bottom: 2px;
+}
+
+.wiki-tip-box pre {
+    margin: 0;
+}
+
+.wiki-tip-warning {
+    background: rgba(253, 126, 20, 0.08);
+    border-left-color: var(--color-unclear);
+}
+
+.wiki-tip-warning strong {
+    color: var(--color-unclear);
+}
+
+/* --- Responsive --- */
+@media (max-width: 768px) {
+    .wiki-sidebar {
+        width: 0;
+        min-width: 0;
+        overflow: hidden;
+    }
+    .wiki-sidebar .wiki-sidebar-content {
+        display: none;
+    }
+    .wiki-sidebar-toggle {
+        position: fixed;
+        top: 52px;
+        left: 6px;
+        z-index: 100;
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        padding: 4px 8px;
+    }
+    .wiki-sidebar:not(.collapsed) {
+        position: fixed;
+        top: 44px;
+        left: 0;
+        bottom: 0;
+        width: 220px;
+        min-width: 220px;
+        z-index: 99;
+        box-shadow: var(--shadow-lg);
+    }
+    .wiki-sidebar:not(.collapsed) .wiki-sidebar-content {
+        display: block;
+    }
+    .wiki-content {
+        padding: 16px;
+    }
+}

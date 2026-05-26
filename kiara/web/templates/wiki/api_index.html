@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block title %}KIara Wiki — API-Katalog{% endblock %}
+
+{% block breadcrumb %}
+<a href="/wiki/">Wiki</a> &rsaquo; <span>API-Katalog</span>
+{% endblock %}
+
+{% block sidebar_categories %}
+{% for cat in categories.keys()|sort %}
+<a href="/wiki/api/{{ cat }}" class="wiki-nav-link wiki-nav-indent">{{ cat }}</a>
+{% endfor %}
+{% endblock %}
+
+{% block content %}
+<h1>API-Katalog</h1>
+
+<p>
+    {{ summary.total_functions }} Funktionen in {{ summary.total_categories }} Kategorien.
+    Jede Funktion ist sowohl über den Admin-Chat (natürliche Sprache) als auch über
+    die REST-API (HTTP) ansprechbar.
+</p>
+
+<!-- Self-Check Kompakt -->
+<div class="self-check-box self-check-compact">
+    <span class="self-check-item self-check-ok">&#10003; {{ summary.total_functions }} Funktionen</span>
+    {% if summary.errors %}
+    <span class="self-check-item self-check-error">&#10007; {{ summary.errors|length }} Fehler</span>
+    {% endif %}
+    {% if summary.warnings %}
+    <span class="self-check-item self-check-warn">&#9888; {{ summary.warnings|length }} Warnungen</span>
+    {% endif %}
+    {% if summary.infos %}
+    <span class="self-check-item self-check-info">&#8505; {{ summary.infos|length }} Hinweise</span>
+    {% endif %}
+</div>
+
+<!-- Kategorien -->
+{% for cat, funcs in categories.items()|sort %}
+<div class="wiki-category-card">
+    <div class="wiki-category-header" data-wiki-toggle="category">
+        <h2>
+            <span class="wiki-collapse-icon">&#9660;</span>
+            {{ cat }}
+            <span class="wiki-category-count">({{ funcs|length }} Funktionen)</span>
+        </h2>
+        <a href="/wiki/api/{{ cat }}" class="wiki-category-detail-link" data-wiki-stop-toggle>Details &rarr;</a>
+    </div>
+    <div class="wiki-category-body">
+        {% for func in funcs %}
+        <div class="wiki-func-row">
+            <div class="wiki-func-main">
+                <a href="/wiki/api/fn/{{ func.name }}" class="wiki-func-name">{{ func.name }}</a>
+                {% if func.http_method and func.http_path %}
+                <span class="wiki-http-badge wiki-http-{{ func.http_method|lower }}">{{ func.http_method }}</span>
+                <code class="wiki-http-path">{{ func.http_path }}</code>
+                {% else %}
+                <span class="wiki-http-badge wiki-http-chat">Chat-only</span>
+                {% endif %}
+            </div>
+            <div class="wiki-func-desc">{{ func.description }}</div>
+            <div class="wiki-func-meta">
+                {% if func.parameters and func.parameters.get("properties") %}
+                <span>Parameter: {{ func.parameters["properties"].keys()|join(", ") }}</span>
+                {% else %}
+                <span>Parameter: &mdash;</span>
+                {% endif %}
+                <span class="wiki-meta-sep">|</span>
+                {% if func.requires_confirmation %}
+                <span class="wiki-confirm-badge">Confirmation</span>
+                {% else %}
+                <span>Confirmation: Nein</span>
+                {% endif %}
+            </div>
+            {% if func.checks %}
+            <div class="wiki-func-checks">
+                {% for check in func.checks %}
+                <span class="wiki-check-badge wiki-check-{{ check.level }}">{{ check.message }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endfor %}
+{% endblock %}

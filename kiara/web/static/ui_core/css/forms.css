@@ -1,0 +1,221 @@
+/**
+ * SharedUi.forms — produktneutrale Form-Controls + Button-Varianten.
+ *
+ * Token-Neutralitaet: Danger-Varianten nutzen `--accent-danger` mit hartem
+ * Fallback, nicht die KIara-spezifischen `--color-bearish`/`--color-danger`.
+ * Fokus-Ring ueber `--shadow-focus` (bestehender Token in tokens.css).
+ */
+
+/* ── Config-Field-Grid (Wrapper fuer mehrere configField-Bloecke) ── */
+
+.config-fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 12px;
+}
+
+/* ── Config-Field (Struktur von SharedUi.forms.configField) ──────── */
+
+.config-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.config-field label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.config-input {
+    padding: 8px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    font-size: 13px;
+    font-family: inherit;
+}
+
+.config-input:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+    box-shadow: var(--shadow-focus);
+}
+
+.config-hint {
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin: -4px 0 12px 0;
+}
+
+.field-hint {
+    display: block;
+    font-size: 11px;
+    color: var(--text-secondary);
+    line-height: 1.4;
+    margin-top: 4px;
+}
+
+/* ── Config-Checkbox (zwei Contract-Varianten) ───────────────────── */
+/* (a) <input class="config-checkbox" data-key="..."> — collectAndSaveConfig-Selector */
+/* (b) <label class="config-checkbox"><input ...>...</label> — ID-basiertes Handling */
+
+.config-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    cursor: pointer;
+    padding-top: 4px;
+}
+
+input.config-checkbox:focus-visible,
+.config-checkbox input:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus);
+    border-radius: 3px;
+}
+
+/* ── Action-Buttons (primary / danger / -sm) ─────────────────────── */
+
+.action-btn {
+    padding: 6px 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    transition: all var(--transition-speed);
+}
+
+.action-btn:hover {
+    background-color: var(--bg-row-hover);
+}
+
+.action-btn.primary {
+    background-color: var(--accent-primary);
+    color: white;
+    border-color: var(--accent-primary);
+}
+
+.action-btn.primary:hover {
+    background-color: var(--accent-hover);
+}
+
+.action-btn.danger {
+    color: var(--accent-danger, #dc3545);
+    border-color: var(--accent-danger, #dc3545);
+}
+
+.action-btn.danger:hover {
+    background-color: var(--accent-danger, #dc3545);
+    color: white;
+}
+
+.action-btn-sm {
+    background: none;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 2px 6px;
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--text-primary);
+    transition: background 0.15s;
+    min-width: 28px;
+    text-align: center;
+}
+
+.action-btn-sm:hover {
+    background: var(--bg-secondary);
+}
+
+.action-btn-sm.danger {
+    color: var(--accent-danger, #dc3545);
+    border-color: var(--accent-danger, #dc3545);
+}
+
+.action-btn-sm.danger:hover {
+    background: rgba(239,68,68,0.1);
+}
+
+/* ── Button-Varianten (primary / secondary / icon / sm / outline) ── */
+
+.btn-primary {
+    background: var(--accent-primary);
+    color: #fff;
+}
+
+.btn-primary:hover {
+    background: var(--accent-hover);
+}
+
+.btn-secondary {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+}
+
+.btn-secondary:hover {
+    background: var(--bg-row-hover);
+}
+
+.btn-icon {
+    background: none;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    cursor: pointer;
+    padding: 2px 6px;
+    color: var(--accent-primary);
+    font-size: 14px;
+    transition: all 0.15s;
+}
+
+.btn-icon:hover {
+    background: var(--accent-primary);
+    color: #fff;
+}
+
+.btn-sm {
+    padding: 4px 10px;
+    font-size: 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    border: none;
+}
+
+.btn-outline {
+    background: none;
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.btn-outline:hover {
+    background: var(--bg-secondary);
+}
+
+/* ── Gemeinsamer Fokus-Ring fuer alle Button-Varianten ───────────── */
+
+.action-btn:focus-visible,
+.action-btn-sm:focus-visible,
+.btn-primary:focus-visible,
+.btn-secondary:focus-visible,
+.btn-icon:focus-visible,
+.btn-sm:focus-visible,
+.btn-outline:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus);
+}
+
+/* ── Responsive ─────────────────────────────────────────────────── */
+
+@media (max-width: 768px) {
+    .config-fields {
+        grid-template-columns: 1fr;
+    }
+}

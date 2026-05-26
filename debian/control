@@ -1,0 +1,15 @@
+Source: kiara
+Section: utils
+Priority: optional
+Maintainer: KIara Team <admin@example.com>
+Build-Depends: debhelper-compat (= 13), python3 (>= 3.10), python3-venv
+Standards-Version: 4.6.2
+
+Package: kiara
+Architecture: all
+Depends: python3 (>= 3.10), python3-venv, python3-jwt, cifs-utils, smbclient, ${misc:Depends}
+Recommends: systemd-coredump
+Description: KIara – KI-Assistenz für Retrieval und Analyse
+ KIara ist ein Retrieval-Augmented Generation System für Q&A
+ gegen eine IT-Wissensbasis. Es nutzt Qdrant als Vektor-Datenbank
+ und Ollama als KI-Backend.

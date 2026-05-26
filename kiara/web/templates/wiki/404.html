@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block title %}KIara Wiki — Nicht gefunden{% endblock %}
+
+{% block breadcrumb %}
+<a href="/wiki/">Wiki</a> &rsaquo; <span>Nicht gefunden</span>
+{% endblock %}
+
+{% block content %}
+<h1>Nicht gefunden</h1>
+
+<div class="wiki-placeholder-box wiki-error-box">
+    <p>{{ message }}</p>
+    <p><a href="/wiki/">Zurück zur Wiki-Startseite</a></p>
+</div>
+{% endblock %}
