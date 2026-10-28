@@ -1,0 +1,42 @@
+[Unit]
+Description=KIara bounded Samba-side packet flight recorder
+After=network.target
+ConditionPathExists=/usr/bin/tcpdump
+
+[Service]
+Type=simple
+User=tcpdump
+Group=tcpdump
+UMask=0077
+EnvironmentFile=/etc/default/kiara-smb-server-pcap-recorder
+StateDirectory=kiara-smb-forensics
+StateDirectoryMode=0700
+ExecStart=/usr/bin/tcpdump -i any -nn -s 256 -B 4096 -U -C 16 -W 16 -w /var/lib/kiara-smb-forensics/server-smb.pcap host ${KIARA_CLIENT_IP} and tcp port 445
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGINT
+TimeoutStopSec=15
+
+# Der Server-Ring ist auf 16 Dateien zu je hoechstens 16 MB begrenzt. Die
+# groessere Historie verhindert, dass parallele Samba-Clients den KIara-
+# Vorfall vor der Auswertung aus dem Ring drehen.
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectControlGroups=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectClock=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictAddressFamilies=AF_UNIX AF_NETLINK AF_PACKET AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target

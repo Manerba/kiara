@@ -1,0 +1,6 @@
+{
+  "original_path": "/var/lib/kiara/benchmarks/crag_full136/documents/task1/8e6f6025-d096-432b-b1d3-7fbd42007e2c/web_001.html",
+  "source_sha256": "6b0eb38ec6efb4dcd53155608dfef39e11a542be88ad8f23971cf1863ea3c539",
+  "source_bytes": 263045,
+  "purpose": "Unmodified actual FTAI source regression for authorized multilevel TD headers; includes all original tables."
+}

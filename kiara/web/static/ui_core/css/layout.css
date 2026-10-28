@@ -1,0 +1,121 @@
+/**
+ * SharedUi.layout — produktneutrale Layout-Primitives (Core-Baustein 3).
+ *
+ * Scope: Nur die in KIara tatsaechlich live genutzten generischen Basis-
+ * klassen: `.tabs`, `.tab`, `a.tab`, `.tab:hover`, `.tab.active`
+ * (+ `::before`/`::after`-Gradient), `.filter-bar`, `.container`.
+ *
+ * KIara-Shell-Ausnahmen (`.main-tabs.has-subtabs ~ .filter-bar`, `.sub-tabs*`,
+ * `.info-toggle-btn`, `[data-theme="kontrast"]`-Overrides, `.filter-group*`,
+ * `.tab-help-btn`) bleiben Produktcode in `style.css`.
+ *
+ * Sprint-1-Detail: Die `.tabs`-Scrollbar-Freigabe (`overflow-x/y`) ist Teil
+ * der Basis.
+ */
+
+/* ── Tabs ───────────────────────────────────────────────────────── */
+
+.tabs {
+    display: flex;
+    background-color: var(--bg-tabs);
+    background-image: linear-gradient(to top, var(--border-color) 1px, transparent 1px);
+    padding: 0 20px;
+    min-height: 28px;
+    align-items: stretch;
+    position: sticky;
+    top: var(--header-height);
+    z-index: 95;
+    overflow-x: auto;
+    overflow-y: hidden;
+    transition: background-color var(--transition-speed);
+}
+
+.tab {
+    padding: 4px 14px;
+    cursor: pointer;
+    border: 1px solid transparent;
+    border-radius: 6px 6px 0 0;
+    background: none;
+    color: var(--text-tabs);
+    font-size: 12px;
+    font-weight: 400;
+    position: relative;
+    transition: all var(--transition-speed);
+    display: flex;
+    align-items: center;
+    margin-bottom: -1px;
+}
+
+a.tab {
+    text-decoration: none;
+    font-family: inherit;
+}
+
+.tab:hover {
+    color: var(--text-primary);
+    background-color: var(--bg-row-hover);
+}
+
+.tab.active {
+    color: var(--text-tabs-active);
+    font-weight: 600;
+    border-color: var(--border-color);
+    border-bottom-color: transparent;
+    background-color: var(--bg-tab-active);
+    z-index: 1;
+}
+
+.tab.active::before,
+.tab.active::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    width: 7px;
+    height: 7px;
+    pointer-events: none;
+}
+
+.tab.active::before {
+    left: -7px;
+    background: radial-gradient(circle at 0 0, transparent 5.5px, var(--border-color) 6px, var(--border-color) 7px, var(--bg-tab-active) 7.5px);
+}
+
+.tab.active::after {
+    right: -7px;
+    background: radial-gradient(circle at 100% 0, transparent 5.5px, var(--border-color) 6px, var(--border-color) 7px, var(--bg-tab-active) 7.5px);
+}
+
+.tab:focus-visible,
+a.tab:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus);
+}
+
+/* ── Filter-Bar ─────────────────────────────────────────────────── */
+
+.filter-bar {
+    padding: 10px 20px;
+    background-color: var(--bg-controls);
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    flex-wrap: wrap;
+    position: sticky;
+    top: calc(var(--header-height) + 28px);
+    z-index: 90;
+}
+
+/* ── Container ──────────────────────────────────────────────────── */
+
+.container {
+    padding: 15px 20px;
+}
+
+/* ── Responsive ─────────────────────────────────────────────────── */
+
+@media (max-width: 768px) {
+    .filter-bar {
+        flex-wrap: wrap;
+    }
+}

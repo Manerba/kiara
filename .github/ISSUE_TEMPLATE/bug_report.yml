@@ -1,0 +1,47 @@
+name: Fehlerbericht
+description: Einen reproduzierbaren Fehler in KIara melden
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Danke für deinen Bericht! Bitte **keine** Sicherheitslücken hier melden –
+        dafür gilt die [Sicherheitsrichtlinie](../blob/master/SECURITY.md).
+  - type: textarea
+    id: description
+    attributes:
+      label: Beschreibung
+      description: Was ist passiert? Was hast du erwartet?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduktionsschritte
+      description: Schritt-für-Schritt-Anleitung zum Nachstellen.
+      placeholder: |
+        1. ...
+        2. ...
+        3. Fehler tritt auf
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / Fehlermeldungen
+      description: Relevante Ausschnitte (bitte Secrets/PII entfernen).
+      render: text
+    validations:
+      required: false
+  - type: textarea
+    id: environment
+    attributes:
+      label: Umgebung
+      description: KIara-Version, OS, Python-Version, LLM-Backend (Ollama/Anthropic/OpenAI).
+      placeholder: |
+        - KIara: 0.0.1+...
+        - OS: Debian 12
+        - Python: 3.12
+        - Backend: Ollama (qwen3:8b)
+    validations:
+      required: true

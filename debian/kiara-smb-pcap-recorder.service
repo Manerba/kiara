@@ -1,0 +1,41 @@
+[Unit]
+Description=KIara bounded SMB packet flight recorder
+After=network.target
+Before=kiara-worker.service
+ConditionPathExists=/usr/bin/tcpdump
+
+[Service]
+Type=simple
+User=tcpdump
+Group=tcpdump
+UMask=0077
+StateDirectory=kiara-smb-forensics
+StateDirectoryMode=0700
+ExecStart=/usr/bin/tcpdump -i any -nn -s 256 -B 4096 -U -C 8 -W 8 -w /var/lib/kiara-smb-forensics/client-smb.pcap tcp port 445
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGINT
+TimeoutStopSec=15
+
+# Nur Paketaufnahme und der eigene, von systemd angelegte Ringpuffer sind
+# schreibbar. Acht Dateien zu je hoechstens 8 MB begrenzen den Plattenbedarf.
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectControlGroups=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectClock=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictAddressFamilies=AF_UNIX AF_NETLINK AF_PACKET AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,324 @@
+{% extends "base.html" %}
+
+{% block title %}KIara Wiki — Guide: Benchmark{% endblock %}
+
+{% block breadcrumb %}
+<a href="/wiki/">Wiki</a> &rsaquo; <span>Guide: Benchmark</span>
+{% endblock %}
+
+{% block content %}
+<h1>Benchmark</h1>
+
+<p class="wiki-intro">
+    Der Benchmark-Tab sammelt Qualitätsmessungen für Retrieval und RAG. CRAG ist
+    als Read-only-Auswertung vorhandener Artefakte umgesetzt. BEIR ist als loser
+    Script- und UI-Benchmark verfügbar; die übrigen Benchmarks sind als Platzhalter sichtbar.
+</p>
+
+<nav class="wiki-toc">
+    <h3>Inhalt</h3>
+    <ol>
+        <li><a href="#subtabs">Sub-Tabs</a></li>
+        <li><a href="#crag">CRAG</a>
+            <ol>
+                <li><a href="#benchmark-lesereihenfolge">Lesereihenfolge</a></li>
+                <li><a href="#benchmark-metriken">Metriken</a></li>
+                <li><a href="#benchmark-diagnose">Diagnose-Muster</a></li>
+            </ol>
+        </li>
+        <li><a href="#beir">BEIR</a></li>
+        <li><a href="#platzhalter">Noch nicht implementierte Benchmarks</a></li>
+    </ol>
+</nav>
+
+<h2 id="subtabs">Sub-Tabs</h2>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Sub-Tab</th><th>Status</th><th>Zweck</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>CRAG</strong></td>
+            <td>Implementiert</td>
+            <td>Read-only-Auswertung vorhandener CRAG-Result-Artefakte unter <code>/var/lib/kiara/benchmarks</code>.</td>
+        </tr>
+        <tr>
+            <td><strong>BEIR</strong></td>
+            <td>Implementiert</td>
+            <td>Corpus-Retrieval über etablierte IR-Datasets mit Recall@k, nDCG@10 und MRR. Läufe können im Tab gestartet und historisch ausgewertet werden.</td>
+        </tr>
+        <tr>
+            <td><strong>MTEB</strong></td>
+            <td>Noch nicht implementiert</td>
+            <td>Breites Evaluationsframework für Embedding-Modelle, inklusive Retrieval-Aufgaben.</td>
+        </tr>
+        <tr>
+            <td><strong>MIRACL</strong></td>
+            <td>Noch nicht implementiert</td>
+            <td>Mehrsprachiges Retrieval über kuratierte Korpora, Queries und Relevanzurteile.</td>
+        </tr>
+        <tr>
+            <td><strong>MS MARCO</strong></td>
+            <td>Noch nicht implementiert</td>
+            <td>Großer Web-Passage-Retrieval-Benchmark für Ranking, Top-k-Verhalten und Skalierung.</td>
+        </tr>
+        <tr>
+            <td><strong>NQ / HotpotQA</strong></td>
+            <td>Noch nicht implementiert</td>
+            <td>QA-orientiertes Retrieval, bei HotpotQA auch mit Multi-Hop-Fragen über mehrere Textstellen.</td>
+        </tr>
+    </tbody>
+</table>
+
+<h2 id="beir">Sub-Tab: BEIR</h2>
+
+<p>
+    BEIR misst die persistente Retrieval-Pipeline: ein Corpus wird als normale
+    lokale KIara-Datenquelle indexiert, Queries und Relevanzurteile bleiben als
+    separate Benchmark-Artefakte daneben liegen. Gemessen wird, ob KIara die
+    relevanten Dokumente in den Top-k-Ergebnissen wiederfindet.
+</p>
+
+<p>
+    Der BEIR-Tab kann vorbereitete BEIR-Datasets gegen eine normale KIara-
+    Datenquelle ausführen. Die Ergebnisse werden als JSON-Artefakte historisch
+    gespeichert; pro Run werden Dataset, Datasource, Retriever, Embedding-Modell,
+    k-Werte, Filter, Overfetch, Retrieval-Konfiguration, Qdrant-Collection und
+    Elasticsearch-Status mitgespeichert.
+</p>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Erstlauf</th><th>Wert</th></tr>
+    </thead>
+    <tbody>
+        <tr><td>Dataset</td><td><code>scifact</code></td></tr>
+        <tr><td>Embedding</td><td><code>nomic-embed-text</code></td></tr>
+        <tr><td>Queries</td><td>300</td></tr>
+        <tr><td>Chunks</td><td>14.820 aus 5.183 Dateien</td></tr>
+        <tr><td>Dense Recall@10</td><td>0,825</td></tr>
+        <tr><td>Dense nDCG@10</td><td>0,701</td></tr>
+        <tr><td>Dense MRR@10</td><td>0,671</td></tr>
+        <tr><td>Dense HitRate@10</td><td>0,833</td></tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box wiki-tip-warning">
+    <strong>Einordnung:</strong> Der Hybrid-Erstlauf lieferte dieselben
+    Qualitätswerte wie Dense, weil Elasticsearch auf dieser Instanz nicht
+    verfügbar war. Für belastbare Hybrid-Aussagen muss der Keyword-Pfad separat
+    geprüft werden.
+</div>
+
+<h2 id="crag">Sub-Tab: CRAG</h2>
+
+<p>
+    Der CRAG-Sub-Tab zeigt Benchmark-Ergebnisse, die als JSON-Artefakte unter
+    <code>/var/lib/kiara/benchmarks</code> liegen. Der Tab startet keine neuen Läufe und
+    ändert keine Datenbanktabellen. Er dient dazu, vorhandene Runs, Retrieval-Metriken,
+    Latenzen, Breakdowns und Ablation-Vergleiche auszuwerten.
+</p>
+
+<div class="wiki-tip-box wiki-tip-warning">
+    <strong>Einordnung:</strong> CRAG ist kein sauberer persistenter
+    VectorDB-Ingestion-Benchmark. Für KIara wird CRAG deshalb minimal-invasiv als
+    normale, deaktivierbare Datenquelle und als Read-only-Auswertung vorhandener
+    Result-Artefakte genutzt.
+</div>
+
+<h3 id="benchmark-lesereihenfolge">Lesereihenfolge</h3>
+
+<p>
+    Die Kennzahlen sollten nicht isoliert gelesen werden. Für eine schnelle Einschätzung
+    ist diese Reihenfolge sinnvoll:
+</p>
+
+<ol class="wiki-examples">
+    <li>
+        <strong>Score:</strong> Gesamtqualität des Runs. Höher ist besser.
+        Der Score fasst korrekte Antworten, sauberes Nichtwissen und falsche Antworten
+        zu einer einzigen Vergleichszahl zusammen.
+    </li>
+    <li>
+        <strong>Accuracy:</strong> Anteil der lokal als korrekt erkannten Antworten.
+        Diese Zahl ist streng und eignet sich vor allem als reproduzierbarer Smoke-Test.
+    </li>
+    <li>
+        <strong>Hallucination:</strong> Anteil falscher Antworten. Diese Zahl sollte
+        möglichst niedrig sein, weil falsche Antworten im Unternehmenseinsatz riskanter
+        sind als keine Antwort.
+    </li>
+    <li>
+        <strong>Missing:</strong> Anteil der Fälle, in denen KIara nicht antwortet oder
+        keine belastbare Information findet. Etwas Missing ist besser als Halluzination,
+        zu viel Missing zeigt aber ein zu defensives oder erfolgloses System.
+    </li>
+    <li>
+        <strong>GoldCtx:</strong> Anteil der Fragen, bei denen die Gold-Antwort im
+        Retrieval-Kontext enthalten war. Das ist die wichtigste Retrieval-Zahl.
+        Ist sie niedrig, kann das LLM die richtige Antwort meist nicht zuverlässig
+        generieren.
+    </li>
+    <li>
+        <strong>Avg ms:</strong> Durchschnittliche Latenz pro Anfrage. Diese Zahl ist
+        erst zweitrangig, solange die Qualität noch nicht ausreichend ist.
+    </li>
+</ol>
+
+<h3 id="benchmark-metriken">Metriken</h3>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Metrik</th><th>Aussage</th><th>Interpretation</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Score</strong></td>
+            <td>Gesamtbewertung aus korrekt, missing und falsch.</td>
+            <td>
+                Höher ist besser. Ein negativer Score ist ein Hinweis, dass falsche
+                Antworten noch deutlich überwiegen.
+            </td>
+        </tr>
+        <tr>
+            <td><strong>Accuracy</strong></td>
+            <td>Anteil der Antworten, die gegen die Gold-Antwort matchen.</td>
+            <td>
+                Höher ist besser. Die lokale Prüfung ist bewusst streng und ersetzt
+                keine manuelle Qualitätsbewertung einzelner Antworten.
+            </td>
+        </tr>
+        <tr>
+            <td><strong>Missing</strong></td>
+            <td>Anteil leerer, verweigernder oder &raquo;ich weiß es nicht&laquo;-Antworten.</td>
+            <td>
+                Niedrig bis moderat ist akzeptabel. Eine hohe Missing-Rate bedeutet,
+                dass Retrieval oder Antwortgenerierung zu selten verwertbare Evidenz findet.
+            </td>
+        </tr>
+        <tr>
+            <td><strong>Hallucination</strong></td>
+            <td>Anteil der Antworten, die weder korrekt noch missing sind.</td>
+            <td>
+                Niedriger ist besser. Diese Metrik ist sicherheitsrelevant, weil sie
+                falsche, aber selbstbewusst formulierte Antworten sichtbar macht.
+            </td>
+        </tr>
+        <tr>
+            <td><strong>GoldCtx</strong></td>
+            <td>Gold-Antwort im gelieferten Retrieval-Kontext gefunden.</td>
+            <td>
+                Höher ist besser. Eine niedrige Zahl zeigt primär ein Retrieval-Problem:
+                Chunking, Embedding-Modell, Hybrid-Suche, Reranking, Filterung oder
+                Datenvorbereitung müssen geprüft werden.
+            </td>
+        </tr>
+        <tr>
+            <td><strong>Avg ms</strong></td>
+            <td>Durchschnittliche Antwortlatenz pro Benchmark-Frage.</td>
+            <td>
+                Niedriger ist besser, aber Qualität geht vor Geschwindigkeit.
+                Latenz wird besonders relevant, wenn mehrere Runs qualitativ ähnlich sind.
+            </td>
+        </tr>
+        <tr>
+            <td><strong>Breakdowns</strong></td>
+            <td>Dieselben Metriken nach Domain, Fragetyp, static/dynamic, Modell und <code>k</code>.</td>
+            <td>
+                Dienen der Ursachenanalyse. Wenn z.B. eine Domain deutlich schlechter ist,
+                sollte zuerst dort Retrieval und Datenaufbereitung geprüft werden.
+            </td>
+        </tr>
+        <tr>
+            <td><strong>Delta</strong></td>
+            <td>Unterschied eines Ablation-Runs zur Baseline.</td>
+            <td>
+                Positives Score-Delta ist gut. Bei Accuracy, GoldCtx und Latenz immer
+                die Richtung der jeweiligen Metrik beachten.
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<h3 id="benchmark-diagnose">Diagnose-Muster</h3>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Muster</th><th>Wahrscheinliche Ursache</th><th>Nächster Prüfpunkt</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>GoldCtx niedrig, Accuracy niedrig</strong></td>
+            <td>Die richtige Evidenz landet nicht im Kontext.</td>
+            <td>Ingestion, Chunking, Embedding-Modell, Hybrid-Suche, Reranking und Filter prüfen.</td>
+        </tr>
+        <tr>
+            <td><strong>GoldCtx hoch, Accuracy niedrig</strong></td>
+            <td>Retrieval findet die Evidenz, aber das LLM nutzt sie nicht gut.</td>
+            <td>Prompt-Template, Kontextformat, LLM-Backend und Antwortregeln prüfen.</td>
+        </tr>
+        <tr>
+            <td><strong>Hallucination hoch, Missing niedrig</strong></td>
+            <td>Das System antwortet zu oft ohne belastbare Evidenz.</td>
+            <td>Prompt strenger formulieren, Missing-Verhalten verbessern, Reranking/GoldCtx prüfen.</td>
+        </tr>
+        <tr>
+            <td><strong>Missing hoch, Hallucination niedrig</strong></td>
+            <td>Das System ist defensiv oder findet zu selten nutzbaren Kontext.</td>
+            <td>Top-k, Retrieval-Modus, Chunk-Größe und Kontext-Limits prüfen.</td>
+        </tr>
+        <tr>
+            <td><strong>Score steigt, GoldCtx bleibt gleich</strong></td>
+            <td>Verbesserung kommt eher aus Antwortverhalten als aus besserem Retrieval.</td>
+            <td>Antwortqualität und Hallucination prüfen; Retrieval bleibt weiter der Hebel.</td>
+        </tr>
+        <tr>
+            <td><strong>Latenz steigt, Score bleibt gleich</strong></td>
+            <td>Zusätzliche Retrieval- oder LLM-Schritte bringen keinen Qualitätsgewinn.</td>
+            <td>Ablation rückbauen oder gezielt nur für problematische Domains aktivieren.</td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box">
+    <strong>Praktische Daumenregel:</strong> Zuerst prüfen, ob <code>GoldCtx</code> steigt.
+    Ohne passende Evidenz im Kontext kann auch ein gutes LLM nur begrenzt helfen.
+    Erst wenn Retrieval stabil ist, sollten Prompt- und LLM-Optimierungen priorisiert werden.
+</div>
+
+<h2 id="platzhalter">Noch nicht implementierte Benchmarks</h2>
+
+<p>
+    Die uebrigen Platzhalter zeigen die geplante Richtung, liefern aber noch keine Messwerte.
+    BEIR ist als loser Script- und UI-Benchmark umgesetzt.
+</p>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Benchmark</th><th>Kurzbeschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>BEIR</strong></td>
+            <td>Standardisierte Retrieval-Datasets mit Corpus, Queries und Relevanzurteilen. Implementiert.</td>
+        </tr>
+        <tr>
+            <td><strong>MTEB</strong></td>
+            <td>Embedding-Benchmark-Suite mit vielen Aufgaben, darunter Retrieval. Noch nicht implementiert.</td>
+        </tr>
+        <tr>
+            <td><strong>MIRACL</strong></td>
+            <td>Mehrsprachiger Retrieval-Benchmark für robuste Suche über mehrere Sprachen. Noch nicht implementiert.</td>
+        </tr>
+        <tr>
+            <td><strong>MS MARCO</strong></td>
+            <td>Großer Web-Retrieval-Benchmark für Ranking-Qualität und Skalierung. Noch nicht implementiert.</td>
+        </tr>
+        <tr>
+            <td><strong>NQ / HotpotQA</strong></td>
+            <td>QA-orientierte Retrieval-Benchmarks, HotpotQA besonders für Multi-Hop-Fragen. Noch nicht implementiert.</td>
+        </tr>
+    </tbody>
+</table>
+{% endblock %}

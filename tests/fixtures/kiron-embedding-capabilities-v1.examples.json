@@ -1,0 +1,1208 @@
+{
+  "artifact_version": 1,
+  "schema": "kiron-embedding-capabilities-v1.schema.json",
+  "materialization": "Invalid examples apply RFC 6902-style operations to the named valid value; operations are ordered.",
+  "valid": [
+    {
+      "name": "role_sensitive_provider_phase",
+      "value": {
+        "schema_version": 1,
+        "canonical_model_id": "example/role-sensitive-embedder:1",
+        "aliases": [
+          "example-role-embedder",
+          "role-embedder:1"
+        ],
+        "profiles": [
+          {
+            "profile_id": "service-dense-v1",
+            "kind": "dense",
+            "endpoint": "/api/embed",
+            "default_for_endpoint": true,
+            "backend": {
+              "type": "kiron_embeddings",
+              "implementation": "example-sentence-encoder",
+              "implementation_revision": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            },
+            "artifact": {
+              "repository": "example/role-sensitive-embedder",
+              "revision": "0123456789abcdef0123456789abcdef01234567",
+              "manifest_digest": null,
+              "weights": [
+                {
+                  "path": "model.safetensors",
+                  "sha256": "2222222222222222222222222222222222222222222222222222222222222222"
+                }
+              ],
+              "auxiliary": [
+                {
+                  "path": "adapter.safetensors",
+                  "sha256": "3333333333333333333333333333333333333333333333333333333333333333"
+                }
+              ]
+            },
+            "dimensions": 768,
+            "max_input_tokens": {
+              "unit": "tokenizer_tokens",
+              "counting": "after_server_formatting_including_special_tokens",
+              "truncation": "right",
+              "overflow": "truncate",
+              "by_role": {
+                "search_document": 512,
+                "search_query": 384
+              }
+            },
+            "output_normalized": true,
+            "similarity": "cosine",
+            "input_type": {
+              "supported": [
+                "search_document",
+                "search_query"
+              ],
+              "additional_task_roles": [
+                "classification"
+              ],
+              "aliases": [
+                {
+                  "alias": "document",
+                  "canonical": "search_document"
+                },
+                {
+                  "alias": "query",
+                  "canonical": "search_query"
+                }
+              ],
+              "role_sensitive": true,
+              "required": false,
+              "default": "search_document",
+              "missing_role_behavior": "use_default"
+            },
+            "formatting_owner": "server",
+            "pipeline": {
+              "tokenizer": {
+                "repository": "example/role-sensitive-embedder",
+                "revision": "0123456789abcdef0123456789abcdef01234567"
+              },
+              "formatting": {
+                "search_document": {
+                  "template": "passage: {text}",
+                  "parameters": {}
+                },
+                "search_query": {
+                  "template": "query: {text}",
+                  "parameters": {}
+                }
+              },
+              "pooling": {
+                "method": "mean",
+                "parameters": {
+                  "exclude_special_tokens": true
+                }
+              },
+              "normalization": {
+                "method": "l2",
+                "dtype": "float32",
+                "scope": "vector"
+              },
+              "parameters": {
+                "instruction_version": 1,
+                "language": "de_DE"
+              }
+            },
+            "verification": {
+              "status": "verified",
+              "evidence": [
+                "fixture:pinned-primary-and-runtime-witness"
+              ],
+              "blocking_reasons": []
+            },
+            "index_compatibility_id": "sha256:9269290d579a293846e7c448be0f6bda36c74b1f495e6e0c28bad2b7c5819ff3",
+            "query_compatibility_id": "sha256:60dd5bdc46aead3b19325d424ec265240010e0e66a600d736c7a1240d66370bf"
+          }
+        ]
+      }
+    },
+    {
+      "name": "role_sensitive_strict_phase_same_ids",
+      "value": {
+        "schema_version": 1,
+        "canonical_model_id": "example/role-sensitive-embedder:1",
+        "aliases": [
+          "example-role-embedder",
+          "role-embedder:1"
+        ],
+        "profiles": [
+          {
+            "profile_id": "service-dense-v1",
+            "kind": "dense",
+            "endpoint": "/api/embed",
+            "default_for_endpoint": true,
+            "backend": {
+              "type": "kiron_embeddings",
+              "implementation": "example-sentence-encoder",
+              "implementation_revision": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            },
+            "artifact": {
+              "repository": "example/role-sensitive-embedder",
+              "revision": "0123456789abcdef0123456789abcdef01234567",
+              "manifest_digest": null,
+              "weights": [
+                {
+                  "path": "model.safetensors",
+                  "sha256": "2222222222222222222222222222222222222222222222222222222222222222"
+                }
+              ],
+              "auxiliary": [
+                {
+                  "path": "adapter.safetensors",
+                  "sha256": "3333333333333333333333333333333333333333333333333333333333333333"
+                }
+              ]
+            },
+            "dimensions": 768,
+            "max_input_tokens": {
+              "unit": "tokenizer_tokens",
+              "counting": "after_server_formatting_including_special_tokens",
+              "truncation": "right",
+              "overflow": "truncate",
+              "by_role": {
+                "search_document": 512,
+                "search_query": 384
+              }
+            },
+            "output_normalized": true,
+            "similarity": "cosine",
+            "input_type": {
+              "supported": [
+                "search_document",
+                "search_query"
+              ],
+              "additional_task_roles": [
+                "classification"
+              ],
+              "aliases": [
+                {
+                  "alias": "document",
+                  "canonical": "search_document"
+                },
+                {
+                  "alias": "query",
+                  "canonical": "search_query"
+                }
+              ],
+              "role_sensitive": true,
+              "required": true,
+              "default": null,
+              "missing_role_behavior": "reject"
+            },
+            "formatting_owner": "server",
+            "pipeline": {
+              "tokenizer": {
+                "repository": "example/role-sensitive-embedder",
+                "revision": "0123456789abcdef0123456789abcdef01234567"
+              },
+              "formatting": {
+                "search_document": {
+                  "template": "passage: {text}",
+                  "parameters": {}
+                },
+                "search_query": {
+                  "template": "query: {text}",
+                  "parameters": {}
+                }
+              },
+              "pooling": {
+                "method": "mean",
+                "parameters": {
+                  "exclude_special_tokens": true
+                }
+              },
+              "normalization": {
+                "method": "l2",
+                "dtype": "float32",
+                "scope": "vector"
+              },
+              "parameters": {
+                "instruction_version": 1,
+                "language": "de_DE"
+              }
+            },
+            "verification": {
+              "status": "verified",
+              "evidence": [
+                "fixture:pinned-primary-and-runtime-witness"
+              ],
+              "blocking_reasons": []
+            },
+            "index_compatibility_id": "sha256:9269290d579a293846e7c448be0f6bda36c74b1f495e6e0c28bad2b7c5819ff3",
+            "query_compatibility_id": "sha256:60dd5bdc46aead3b19325d424ec265240010e0e66a600d736c7a1240d66370bf"
+          }
+        ]
+      }
+    },
+    {
+      "name": "role_independent_canonical_roles_are_no_op",
+      "value": {
+        "schema_version": 1,
+        "canonical_model_id": "example/role-independent:1",
+        "aliases": [],
+        "profiles": [
+          {
+            "profile_id": "service-role-independent-dense-v1",
+            "kind": "dense",
+            "endpoint": "/api/embed",
+            "default_for_endpoint": true,
+            "backend": {
+              "type": "kiron_embeddings",
+              "implementation": "example-sentence-encoder",
+              "implementation_revision": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            },
+            "artifact": {
+              "repository": "example/role-sensitive-embedder",
+              "revision": "0123456789abcdef0123456789abcdef01234567",
+              "manifest_digest": null,
+              "weights": [
+                {
+                  "path": "model.safetensors",
+                  "sha256": "2222222222222222222222222222222222222222222222222222222222222222"
+                }
+              ],
+              "auxiliary": [
+                {
+                  "path": "adapter.safetensors",
+                  "sha256": "3333333333333333333333333333333333333333333333333333333333333333"
+                }
+              ]
+            },
+            "dimensions": 768,
+            "max_input_tokens": {
+              "unit": "tokenizer_tokens",
+              "counting": "after_server_formatting_including_special_tokens",
+              "truncation": "right",
+              "overflow": "truncate",
+              "by_role": {
+                "search_document": 512,
+                "search_query": 512
+              }
+            },
+            "output_normalized": true,
+            "similarity": "cosine",
+            "input_type": {
+              "supported": [
+                "search_document",
+                "search_query"
+              ],
+              "additional_task_roles": [
+                "classification"
+              ],
+              "aliases": [
+                {
+                  "alias": "document",
+                  "canonical": "search_document"
+                },
+                {
+                  "alias": "query",
+                  "canonical": "search_query"
+                }
+              ],
+              "role_sensitive": false,
+              "required": false,
+              "default": null,
+              "missing_role_behavior": "no_op"
+            },
+            "formatting_owner": "server",
+            "pipeline": {
+              "tokenizer": {
+                "repository": "example/role-sensitive-embedder",
+                "revision": "0123456789abcdef0123456789abcdef01234567"
+              },
+              "formatting": {
+                "search_document": {
+                  "template": "{text}",
+                  "parameters": {}
+                },
+                "search_query": {
+                  "template": "{text}",
+                  "parameters": {}
+                }
+              },
+              "pooling": {
+                "method": "mean",
+                "parameters": {
+                  "exclude_special_tokens": true
+                }
+              },
+              "normalization": {
+                "method": "l2",
+                "dtype": "float32",
+                "scope": "vector"
+              },
+              "parameters": {
+                "instruction_version": 1,
+                "language": "de_DE"
+              }
+            },
+            "verification": {
+              "status": "verified",
+              "evidence": [
+                "fixture:role-independent-primary-and-runtime-witness"
+              ],
+              "blocking_reasons": []
+            },
+            "index_compatibility_id": "sha256:1d7d711c46cbc8e4993580f469a21db77c9a995cfd60ef66fc8137b801070db7",
+            "query_compatibility_id": "sha256:4f731eb8d9017bd76d63a29c2ee7f3eb6845cdeec3f6af95e12d8602f70bb364"
+          }
+        ]
+      }
+    },
+    {
+      "name": "merged_service_ollama_and_late_profiles",
+      "value": {
+        "schema_version": 1,
+        "canonical_model_id": "example/multi-backend:1",
+        "aliases": [
+          "example-multi",
+          "multi-backend"
+        ],
+        "profiles": [
+          {
+            "profile_id": "ollama-dense-unverified-v1",
+            "kind": "dense",
+            "endpoint": "/api/embed",
+            "default_for_endpoint": false,
+            "backend": {
+              "type": "ollama",
+              "implementation": "ollama",
+              "implementation_revision": "0.18.0"
+            },
+            "artifact": {
+              "repository": null,
+              "revision": null,
+              "manifest_digest": "sha256:8888888888888888888888888888888888888888888888888888888888888888",
+              "weights": [
+                {
+                  "path": "sha256-9999999999999999999999999999999999999999999999999999999999999999",
+                  "sha256": "9999999999999999999999999999999999999999999999999999999999999999"
+                }
+              ],
+              "auxiliary": []
+            },
+            "dimensions": 768,
+            "max_input_tokens": {
+              "unit": "tokenizer_tokens",
+              "counting": "after_server_formatting_including_special_tokens",
+              "truncation": "right",
+              "overflow": "truncate",
+              "by_role": {
+                "search_document": 512,
+                "search_query": 384
+              }
+            },
+            "output_normalized": null,
+            "similarity": "unknown",
+            "input_type": {
+              "supported": [
+                "search_document",
+                "search_query"
+              ],
+              "additional_task_roles": [],
+              "aliases": [],
+              "role_sensitive": null,
+              "required": false,
+              "default": null,
+              "missing_role_behavior": "unknown"
+            },
+            "formatting_owner": "server",
+            "pipeline": {
+              "tokenizer": {
+                "repository": null,
+                "revision": null
+              },
+              "formatting": {
+                "search_document": {
+                  "template": null,
+                  "parameters": {}
+                },
+                "search_query": {
+                  "template": null,
+                  "parameters": {}
+                }
+              },
+              "pooling": {
+                "method": "unknown",
+                "parameters": {}
+              },
+              "normalization": {
+                "method": "unknown",
+                "dtype": "unknown",
+                "scope": "unknown"
+              },
+              "parameters": {}
+            },
+            "verification": {
+              "status": "unverified",
+              "evidence": [
+                "fixture:manifest-and-model-digest-only"
+              ],
+              "blocking_reasons": [
+                "upstream_revision_and_pipeline_semantics_not_proven"
+              ]
+            },
+            "index_compatibility_id": null,
+            "query_compatibility_id": null
+          },
+          {
+            "profile_id": "service-dense-v1",
+            "kind": "dense",
+            "endpoint": "/api/embed",
+            "default_for_endpoint": true,
+            "backend": {
+              "type": "kiron_embeddings",
+              "implementation": "example-sentence-encoder",
+              "implementation_revision": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            },
+            "artifact": {
+              "repository": "example/role-sensitive-embedder",
+              "revision": "0123456789abcdef0123456789abcdef01234567",
+              "manifest_digest": null,
+              "weights": [
+                {
+                  "path": "model.safetensors",
+                  "sha256": "2222222222222222222222222222222222222222222222222222222222222222"
+                }
+              ],
+              "auxiliary": [
+                {
+                  "path": "adapter.safetensors",
+                  "sha256": "3333333333333333333333333333333333333333333333333333333333333333"
+                }
+              ]
+            },
+            "dimensions": 768,
+            "max_input_tokens": {
+              "unit": "tokenizer_tokens",
+              "counting": "after_server_formatting_including_special_tokens",
+              "truncation": "right",
+              "overflow": "truncate",
+              "by_role": {
+                "search_document": 512,
+                "search_query": 384
+              }
+            },
+            "output_normalized": true,
+            "similarity": "cosine",
+            "input_type": {
+              "supported": [
+                "search_document",
+                "search_query"
+              ],
+              "additional_task_roles": [
+                "classification"
+              ],
+              "aliases": [
+                {
+                  "alias": "document",
+                  "canonical": "search_document"
+                },
+                {
+                  "alias": "query",
+                  "canonical": "search_query"
+                }
+              ],
+              "role_sensitive": true,
+              "required": false,
+              "default": "search_document",
+              "missing_role_behavior": "use_default"
+            },
+            "formatting_owner": "server",
+            "pipeline": {
+              "tokenizer": {
+                "repository": "example/role-sensitive-embedder",
+                "revision": "0123456789abcdef0123456789abcdef01234567"
+              },
+              "formatting": {
+                "search_document": {
+                  "template": "passage: {text}",
+                  "parameters": {}
+                },
+                "search_query": {
+                  "template": "query: {text}",
+                  "parameters": {}
+                }
+              },
+              "pooling": {
+                "method": "mean",
+                "parameters": {
+                  "exclude_special_tokens": true
+                }
+              },
+              "normalization": {
+                "method": "l2",
+                "dtype": "float32",
+                "scope": "vector"
+              },
+              "parameters": {
+                "instruction_version": 1,
+                "language": "de_DE"
+              }
+            },
+            "verification": {
+              "status": "verified",
+              "evidence": [
+                "fixture:pinned-primary-and-runtime-witness"
+              ],
+              "blocking_reasons": []
+            },
+            "index_compatibility_id": "sha256:9269290d579a293846e7c448be0f6bda36c74b1f495e6e0c28bad2b7c5819ff3",
+            "query_compatibility_id": "sha256:60dd5bdc46aead3b19325d424ec265240010e0e66a600d736c7a1240d66370bf"
+          },
+          {
+            "profile_id": "service-late-unverified-v1",
+            "kind": "late_chunking",
+            "endpoint": "/api/embed_late",
+            "default_for_endpoint": true,
+            "backend": {
+              "type": "kiron_embeddings",
+              "implementation": "example-sentence-encoder",
+              "implementation_revision": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            },
+            "artifact": {
+              "repository": "example/role-sensitive-embedder",
+              "revision": "0123456789abcdef0123456789abcdef01234567",
+              "manifest_digest": null,
+              "weights": [
+                {
+                  "path": "model.safetensors",
+                  "sha256": "2222222222222222222222222222222222222222222222222222222222222222"
+                }
+              ],
+              "auxiliary": [
+                {
+                  "path": "adapter.safetensors",
+                  "sha256": "3333333333333333333333333333333333333333333333333333333333333333"
+                }
+              ]
+            },
+            "dimensions": 768,
+            "max_input_tokens": {
+              "unit": "tokenizer_tokens",
+              "counting": "after_server_formatting_including_special_tokens",
+              "truncation": "right",
+              "overflow": "late_chunk_fallback",
+              "by_role": {
+                "search_document": 512,
+                "search_query": 384
+              }
+            },
+            "output_normalized": true,
+            "similarity": "cosine",
+            "input_type": {
+              "supported": [
+                "search_document",
+                "search_query"
+              ],
+              "additional_task_roles": [
+                "classification"
+              ],
+              "aliases": [
+                {
+                  "alias": "document",
+                  "canonical": "search_document"
+                },
+                {
+                  "alias": "query",
+                  "canonical": "search_query"
+                }
+              ],
+              "role_sensitive": true,
+              "required": false,
+              "default": "search_document",
+              "missing_role_behavior": "use_default"
+            },
+            "formatting_owner": "server",
+            "pipeline": {
+              "tokenizer": {
+                "repository": "example/role-sensitive-embedder",
+                "revision": "0123456789abcdef0123456789abcdef01234567"
+              },
+              "formatting": {
+                "search_document": {
+                  "template": "passage: {text}",
+                  "parameters": {}
+                },
+                "search_query": {
+                  "template": "query: {text}",
+                  "parameters": {}
+                }
+              },
+              "pooling": {
+                "method": "late_chunk_mean",
+                "parameters": {
+                  "exclude_prefix_and_special_tokens": true
+                }
+              },
+              "normalization": {
+                "method": "l2",
+                "dtype": "float32",
+                "scope": "vector"
+              },
+              "parameters": {
+                "instruction_version": 1,
+                "language": "de_DE"
+              }
+            },
+            "verification": {
+              "status": "unverified",
+              "evidence": [
+                "fixture:pipeline-code-only"
+              ],
+              "blocking_reasons": [
+                "reference_vector_witness_missing"
+              ]
+            },
+            "index_compatibility_id": null,
+            "query_compatibility_id": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "unverified_unknown_pipeline_has_null_ids",
+      "value": {
+        "schema_version": 1,
+        "canonical_model_id": "example/unverified-ollama:Q4_0",
+        "aliases": [],
+        "profiles": [
+          {
+            "profile_id": "ollama-unknown-dense-v1",
+            "kind": "dense",
+            "endpoint": "/api/embed",
+            "default_for_endpoint": true,
+            "backend": {
+              "type": "ollama",
+              "implementation": "ollama",
+              "implementation_revision": "0.18.0"
+            },
+            "artifact": {
+              "repository": null,
+              "revision": null,
+              "manifest_digest": "sha256:8888888888888888888888888888888888888888888888888888888888888888",
+              "weights": [
+                {
+                  "path": "sha256-9999999999999999999999999999999999999999999999999999999999999999",
+                  "sha256": "9999999999999999999999999999999999999999999999999999999999999999"
+                }
+              ],
+              "auxiliary": []
+            },
+            "dimensions": 4096,
+            "max_input_tokens": {
+              "unit": "tokenizer_tokens",
+              "counting": "after_server_formatting_including_special_tokens",
+              "truncation": "unknown",
+              "overflow": "unknown",
+              "by_role": {
+                "search_document": null,
+                "search_query": null
+              }
+            },
+            "output_normalized": null,
+            "similarity": "unknown",
+            "input_type": {
+              "supported": [
+                "search_document",
+                "search_query"
+              ],
+              "additional_task_roles": [],
+              "aliases": [],
+              "role_sensitive": null,
+              "required": false,
+              "default": null,
+              "missing_role_behavior": "unknown"
+            },
+            "formatting_owner": "server",
+            "pipeline": {
+              "tokenizer": {
+                "repository": null,
+                "revision": null
+              },
+              "formatting": {
+                "search_document": {
+                  "template": null,
+                  "parameters": {}
+                },
+                "search_query": {
+                  "template": null,
+                  "parameters": {}
+                }
+              },
+              "pooling": {
+                "method": "unknown",
+                "parameters": {}
+              },
+              "normalization": {
+                "method": "unknown",
+                "dtype": "unknown",
+                "scope": "unknown"
+              },
+              "parameters": {}
+            },
+            "verification": {
+              "status": "unverified",
+              "evidence": [
+                "fixture:manifest-and-model-digest-only"
+              ],
+              "blocking_reasons": [
+                "upstream_revision_and_pipeline_semantics_not_proven"
+              ]
+            },
+            "index_compatibility_id": null,
+            "query_compatibility_id": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "unknown_extensions_are_preserved_and_hash_irrelevant",
+      "value": {
+        "schema_version": 1,
+        "canonical_model_id": "example/role-sensitive-embedder:1",
+        "aliases": [
+          "example-role-embedder",
+          "role-embedder:1"
+        ],
+        "profiles": [
+          {
+            "profile_id": "service-dense-v1",
+            "kind": "dense",
+            "endpoint": "/api/embed",
+            "default_for_endpoint": true,
+            "backend": {
+              "type": "kiron_embeddings",
+              "implementation": "example-sentence-encoder",
+              "implementation_revision": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            },
+            "artifact": {
+              "repository": "example/role-sensitive-embedder",
+              "revision": "0123456789abcdef0123456789abcdef01234567",
+              "manifest_digest": null,
+              "weights": [
+                {
+                  "path": "model.safetensors",
+                  "sha256": "2222222222222222222222222222222222222222222222222222222222222222"
+                }
+              ],
+              "auxiliary": [
+                {
+                  "path": "adapter.safetensors",
+                  "sha256": "3333333333333333333333333333333333333333333333333333333333333333"
+                }
+              ]
+            },
+            "dimensions": 768,
+            "max_input_tokens": {
+              "unit": "tokenizer_tokens",
+              "counting": "after_server_formatting_including_special_tokens",
+              "truncation": "right",
+              "overflow": "truncate",
+              "by_role": {
+                "search_document": 512,
+                "search_query": 384
+              }
+            },
+            "output_normalized": true,
+            "similarity": "cosine",
+            "input_type": {
+              "supported": [
+                "search_document",
+                "search_query"
+              ],
+              "additional_task_roles": [
+                "classification"
+              ],
+              "aliases": [
+                {
+                  "alias": "document",
+                  "canonical": "search_document"
+                },
+                {
+                  "alias": "query",
+                  "canonical": "search_query"
+                }
+              ],
+              "role_sensitive": true,
+              "required": false,
+              "default": "search_document",
+              "missing_role_behavior": "use_default"
+            },
+            "formatting_owner": "server",
+            "pipeline": {
+              "tokenizer": {
+                "repository": "example/role-sensitive-embedder",
+                "revision": "0123456789abcdef0123456789abcdef01234567"
+              },
+              "formatting": {
+                "search_document": {
+                  "template": "passage: {text}",
+                  "parameters": {}
+                },
+                "search_query": {
+                  "template": "query: {text}",
+                  "parameters": {}
+                }
+              },
+              "pooling": {
+                "method": "mean",
+                "parameters": {
+                  "exclude_special_tokens": true
+                }
+              },
+              "normalization": {
+                "method": "l2",
+                "dtype": "float32",
+                "scope": "vector"
+              },
+              "parameters": {
+                "instruction_version": 1,
+                "language": "de_DE"
+              }
+            },
+            "verification": {
+              "status": "verified",
+              "evidence": [
+                "fixture:pinned-primary-and-runtime-witness"
+              ],
+              "blocking_reasons": []
+            },
+            "index_compatibility_id": "sha256:9269290d579a293846e7c448be0f6bda36c74b1f495e6e0c28bad2b7c5819ff3",
+            "query_compatibility_id": "sha256:60dd5bdc46aead3b19325d424ec265240010e0e66a600d736c7a1240d66370bf",
+            "x_runtime": {
+              "device": "cuda",
+              "loaded": true,
+              "queue_depth": 0
+            }
+          }
+        ],
+        "x_registry_epoch": 17
+      }
+    },
+    {
+      "name": "unicode_parameter_names_and_values",
+      "value": {
+        "schema_version": 1,
+        "canonical_model_id": "example/unicode-parameters:1",
+        "aliases": [
+          "example-role-embedder",
+          "role-embedder:1"
+        ],
+        "profiles": [
+          {
+            "profile_id": "service-dense-v1",
+            "kind": "dense",
+            "endpoint": "/api/embed",
+            "default_for_endpoint": true,
+            "backend": {
+              "type": "kiron_embeddings",
+              "implementation": "example-sentence-encoder",
+              "implementation_revision": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            },
+            "artifact": {
+              "repository": "example/role-sensitive-embedder",
+              "revision": "0123456789abcdef0123456789abcdef01234567",
+              "manifest_digest": null,
+              "weights": [
+                {
+                  "path": "model.safetensors",
+                  "sha256": "2222222222222222222222222222222222222222222222222222222222222222"
+                }
+              ],
+              "auxiliary": [
+                {
+                  "path": "adapter.safetensors",
+                  "sha256": "3333333333333333333333333333333333333333333333333333333333333333"
+                }
+              ]
+            },
+            "dimensions": 768,
+            "max_input_tokens": {
+              "unit": "tokenizer_tokens",
+              "counting": "after_server_formatting_including_special_tokens",
+              "truncation": "right",
+              "overflow": "truncate",
+              "by_role": {
+                "search_document": 512,
+                "search_query": 384
+              }
+            },
+            "output_normalized": true,
+            "similarity": "cosine",
+            "input_type": {
+              "supported": [
+                "search_document",
+                "search_query"
+              ],
+              "additional_task_roles": [
+                "classification"
+              ],
+              "aliases": [
+                {
+                  "alias": "document",
+                  "canonical": "search_document"
+                },
+                {
+                  "alias": "query",
+                  "canonical": "search_query"
+                }
+              ],
+              "role_sensitive": true,
+              "required": false,
+              "default": "search_document",
+              "missing_role_behavior": "use_default"
+            },
+            "formatting_owner": "server",
+            "pipeline": {
+              "tokenizer": {
+                "repository": "example/role-sensitive-embedder",
+                "revision": "0123456789abcdef0123456789abcdef01234567"
+              },
+              "formatting": {
+                "search_document": {
+                  "template": "passage: {text}",
+                  "parameters": {}
+                },
+                "search_query": {
+                  "template": "query: {text}",
+                  "parameters": {}
+                }
+              },
+              "pooling": {
+                "method": "mean",
+                "parameters": {
+                  "exclude_special_tokens": true
+                }
+              },
+              "normalization": {
+                "method": "l2",
+                "dtype": "float32",
+                "scope": "vector"
+              },
+              "parameters": {
+                "instruction_version": 1,
+                "language": "de_DE",
+                "grüße": "für KIara 😀",
+                "": "BMP private-use",
+                "😀": "non-BMP",
+                "é": "composed: é",
+                "é": "decomposed: é"
+              }
+            },
+            "verification": {
+              "status": "verified",
+              "evidence": [
+                "fixture:pinned-primary-and-runtime-witness"
+              ],
+              "blocking_reasons": []
+            },
+            "index_compatibility_id": "sha256:8795dd41f674da4b3e055919b5101d4db9aec5c1283a643e661e50e26f0ee6f9",
+            "query_compatibility_id": "sha256:6f7a05493db54fb597c8b765bc6059b722694d481c01b8c8e8d8125ad3844f41"
+          }
+        ]
+      }
+    }
+  ],
+  "invalid": [
+    {
+      "name": "unknown_schema_version",
+      "base_valid": "role_sensitive_provider_phase",
+      "operations": [
+        {
+          "op": "replace",
+          "path": "/schema_version",
+          "value": 2
+        }
+      ],
+      "validator": "schema",
+      "reason_code": "unknown_schema_version"
+    },
+    {
+      "name": "missing_profiles",
+      "base_valid": "role_sensitive_provider_phase",
+      "operations": [
+        {
+          "op": "remove",
+          "path": "/profiles"
+        }
+      ],
+      "validator": "schema",
+      "reason_code": "missing_required_field"
+    },
+    {
+      "name": "verified_profile_has_null_index_id",
+      "base_valid": "role_sensitive_provider_phase",
+      "operations": [
+        {
+          "op": "replace",
+          "path": "/profiles/0/index_compatibility_id",
+          "value": null
+        }
+      ],
+      "validator": "schema",
+      "reason_code": "verified_id_is_null"
+    },
+    {
+      "name": "unverified_profile_claims_an_id",
+      "base_valid": "unverified_unknown_pipeline_has_null_ids",
+      "operations": [
+        {
+          "op": "replace",
+          "path": "/profiles/0/index_compatibility_id",
+          "value": "sha256:9269290d579a293846e7c448be0f6bda36c74b1f495e6e0c28bad2b7c5819ff3"
+        }
+      ],
+      "validator": "schema",
+      "reason_code": "unverified_id_is_non_null"
+    },
+    {
+      "name": "kind_endpoint_mismatch",
+      "base_valid": "role_sensitive_provider_phase",
+      "operations": [
+        {
+          "op": "replace",
+          "path": "/profiles/0/kind",
+          "value": "late_chunking"
+        }
+      ],
+      "validator": "schema",
+      "reason_code": "kind_endpoint_mismatch"
+    },
+    {
+      "name": "role_independent_profile_cannot_require_role",
+      "base_valid": "role_independent_canonical_roles_are_no_op",
+      "operations": [
+        {
+          "op": "replace",
+          "path": "/profiles/0/input_type/required",
+          "value": true
+        }
+      ],
+      "validator": "schema",
+      "reason_code": "role_independent_enforcement_invalid"
+    },
+    {
+      "name": "noncanonical_rag_role",
+      "base_valid": "role_sensitive_provider_phase",
+      "operations": [
+        {
+          "op": "replace",
+          "path": "/profiles/0/input_type/supported/1",
+          "value": "query"
+        }
+      ],
+      "validator": "schema",
+      "reason_code": "noncanonical_rag_role"
+    },
+    {
+      "name": "verified_profile_has_unknown_tokenizer_revision",
+      "base_valid": "role_sensitive_provider_phase",
+      "operations": [
+        {
+          "op": "replace",
+          "path": "/profiles/0/pipeline/tokenizer/revision",
+          "value": null
+        }
+      ],
+      "validator": "schema",
+      "reason_code": "verified_fact_unknown"
+    },
+    {
+      "name": "duplicate_profile_id",
+      "base_valid": "merged_service_ollama_and_late_profiles",
+      "operations": [
+        {
+          "op": "copy",
+          "from": "/profiles/0",
+          "path": "/profiles/-"
+        }
+      ],
+      "validator": "invariant",
+      "reason_code": "profile_id_not_unique"
+    },
+    {
+      "name": "two_defaults_for_embed_endpoint",
+      "base_valid": "merged_service_ollama_and_late_profiles",
+      "operations": [
+        {
+          "op": "replace",
+          "path": "/profiles/0/default_for_endpoint",
+          "value": true
+        }
+      ],
+      "validator": "invariant",
+      "reason_code": "endpoint_default_count"
+    },
+    {
+      "name": "profiles_not_sorted",
+      "base_valid": "merged_service_ollama_and_late_profiles",
+      "operations": [
+        {
+          "op": "replace",
+          "path": "/profiles/0/profile_id",
+          "value": "zzz-unsorted-profile"
+        }
+      ],
+      "validator": "invariant",
+      "reason_code": "profiles_not_sorted"
+    },
+    {
+      "name": "duplicate_artifact_path",
+      "base_valid": "role_sensitive_provider_phase",
+      "operations": [
+        {
+          "op": "copy",
+          "from": "/profiles/0/artifact/weights/0",
+          "path": "/profiles/0/artifact/weights/-"
+        }
+      ],
+      "validator": "invariant",
+      "reason_code": "artifact_paths_not_unique"
+    },
+    {
+      "name": "role_independent_templates_differ",
+      "base_valid": "role_independent_canonical_roles_are_no_op",
+      "operations": [
+        {
+          "op": "replace",
+          "path": "/profiles/0/pipeline/formatting/search_query/template",
+          "value": "query: {text}"
+        }
+      ],
+      "validator": "invariant",
+      "reason_code": "role_independent_pipeline_differs"
+    },
+    {
+      "name": "role_independent_limits_differ",
+      "base_valid": "role_independent_canonical_roles_are_no_op",
+      "operations": [
+        {
+          "op": "replace",
+          "path": "/profiles/0/max_input_tokens/by_role/search_query",
+          "value": 511
+        }
+      ],
+      "validator": "invariant",
+      "reason_code": "role_independent_pipeline_differs"
+    },
+    {
+      "name": "verified_profile_has_stale_compatibility_ids",
+      "base_valid": "role_sensitive_provider_phase",
+      "operations": [
+        {
+          "op": "replace",
+          "path": "/profiles/0/dimensions",
+          "value": 769
+        }
+      ],
+      "validator": "invariant",
+      "reason_code": "compatibility_id_mismatch"
+    }
+  ]
+}

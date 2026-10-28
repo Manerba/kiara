@@ -1,0 +1,636 @@
+{% extends "base.html" %}
+
+{% block title %}KIara Wiki — Guide: Benutzerverwaltung{% endblock %}
+
+{% block breadcrumb %}
+<a href="/wiki/">Wiki</a> &rsaquo; <span>Guide: Benutzerverwaltung</span>
+{% endblock %}
+
+{% block content %}
+<h1>Benutzerverwaltung</h1>
+
+<p class="wiki-intro">
+    Die Benutzerverwaltung umfasst drei Bereiche: lokale und LDAP-Benutzer, Gruppenverwaltung
+    mit Datenquellen-Zuordnung sowie die LDAP/Active-Directory-Anbindung. Alle Einstellungen
+    sind über die Admin-UI (Tab &raquo;Benutzerverwaltung&laquo;) oder die Admin-Chat-API erreichbar.
+</p>
+
+<nav class="wiki-toc">
+    <h3>Inhalt</h3>
+    <ol>
+        <li><a href="#tab-benutzer">Tab: Benutzer</a></li>
+        <li><a href="#tab-gruppen">Tab: Gruppen</a></li>
+        <li><a href="#tab-ldap">Tab: LDAP-Konfiguration</a>
+            <ol>
+                <li><a href="#ldap-server">Server-Verbindung</a></li>
+                <li><a href="#ldap-group">AD-Gruppe &amp; Sync</a></li>
+                <li><a href="#ldap-paths">LDAP-Pfade — Beispiele</a></li>
+                <li><a href="#ldap-troubleshooting">Troubleshooting</a></li>
+            </ol>
+        </li>
+        <li><a href="#api-endpoints">API-Endpunkte</a> (Verweis auf API-Katalog)</li>
+        <li><a href="#security">Sicherheit &amp; Sessions</a></li>
+    </ol>
+</nav>
+
+<!-- ============================= -->
+<!-- TAB: BENUTZER                 -->
+<!-- ============================= -->
+<h2 id="tab-benutzer">Tab: Benutzer</h2>
+
+<p>
+    Zeigt alle registrierten Benutzer (lokal und LDAP). LDAP-Benutzer werden automatisch beim
+    Sync angelegt, lokale Benutzer manuell. Jeder Benutzer hat einen Anmeldestatus, eine Rolle
+    und optional eine LDAP-Herkunft.
+</p>
+
+<h3>Benutzerliste — Spalten</h3>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Spalte</th><th>Beschreibung</th><th>Hinweis</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Benutzer</strong></td>
+            <td>Eindeutiger Login-Name. Case-insensitiv gespeichert.</td>
+            <td>Mindestens 2 Zeichen. Bei LDAP-Benutzern: sAMAccountName aus dem AD.</td>
+        </tr>
+        <tr>
+            <td><strong>Name</strong></td>
+            <td>Anzeigename (Vorname + Nachname).</td>
+            <td>Wird bei LDAP-Sync automatisch aus <code>givenName</code> + <code>sn</code> befüllt.</td>
+        </tr>
+        <tr>
+            <td><strong>E-Mail</strong></td>
+            <td>E-Mail-Adresse des Benutzers.</td>
+            <td>Bei LDAP aus dem <code>mail</code>-Attribut. Optional für lokale Benutzer.</td>
+        </tr>
+        <tr>
+            <td><strong>Admin</strong></td>
+            <td>Toggle: Administrator-Rolle (Ja/Nein).</td>
+            <td>Admins haben Zugriff auf die Admin-UI und den Admin-Chat. Per Klick umschaltbar.</td>
+        </tr>
+        <tr>
+            <td><strong>Quelle</strong></td>
+            <td>Herkunft: <code>local</code> oder <code>ldap</code>.</td>
+            <td>LDAP-Benutzer können kein lokales Passwort setzen — Anmeldung nur via AD.</td>
+        </tr>
+        <tr>
+            <td><strong>Aktiv</strong></td>
+            <td>Toggle: Aktiv-Status (Ja/Nein).</td>
+            <td>
+                <strong>Wichtig:</strong> Bei Deaktivierung werden <em>sofort alle Sessions</em>
+                des Benutzers invalidiert. Der Benutzer wird umgehend ausgeloggt.
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box">
+    <strong>Tipp:</strong> Neue LDAP-Benutzer werden nach dem Sync standardmäßig als
+    <em>aktiv</em> aber <em>nicht als Admin</em> angelegt. Admin-Rechte müssen manuell
+    vergeben werden — das ist beabsichtigt, damit ein Sync nicht versehentlich
+    Admin-Zugriff gewährt.
+</div>
+
+<h3>Benutzer anlegen (lokal)</h3>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Feld</th><th>Typ</th><th>Pflicht</th><th>Beschreibung</th><th>Empfehlung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>Benutzername</code></td>
+            <td>Text</td>
+            <td>Ja</td>
+            <td>Login-Name, mindestens 2 Zeichen. Muss eindeutig sein (case-insensitiv).</td>
+            <td>Kurze, einheitliche Namen verwenden (z.B. <code>aalber</code>, <code>mmueller</code>). Erleichtert die Zuordnung zu LDAP-Konten, falls später migriert wird.</td>
+        </tr>
+        <tr>
+            <td><code>Passwort</code></td>
+            <td>Passwort</td>
+            <td>Nein</td>
+            <td>Mindestens 8 Zeichen. Wird gehashed gespeichert (bcrypt).</td>
+            <td>Wird kein Passwort gesetzt, kann sich der Benutzer nicht anmelden, bis ein Admin eines vergibt. Nützlich für &raquo;vorbereitete&laquo; Konten.</td>
+        </tr>
+        <tr>
+            <td><code>Vorname</code></td>
+            <td>Text</td>
+            <td>Nein</td>
+            <td>Wird im Anzeigenamen und in der Benutzerliste gezeigt.</td>
+            <td>Ausfüllen — erleichtert die Zuordnung in Gruppen und Logs erheblich.</td>
+        </tr>
+        <tr>
+            <td><code>Nachname</code></td>
+            <td>Text</td>
+            <td>Nein</td>
+            <td>Siehe Vorname.</td>
+            <td>Siehe Vorname.</td>
+        </tr>
+        <tr>
+            <td><code>E-Mail</code></td>
+            <td>E-Mail</td>
+            <td>Nein</td>
+            <td>E-Mail-Adresse.</td>
+            <td>Aktuell nicht für Benachrichtigungen genutzt, aber für spätere Passwort-Reset-Funktion vorgesehen.</td>
+        </tr>
+        <tr>
+            <td><code>Administrator</code></td>
+            <td>Checkbox</td>
+            <td>Nein</td>
+            <td>Wenn aktiviert, hat der Benutzer vollen Admin-Zugang.</td>
+            <td>Sparsam vergeben. Für die meisten Benutzer reicht der normale Chat-Zugang.</td>
+        </tr>
+    </tbody>
+</table>
+
+<h3>Benutzer bearbeiten</h3>
+
+<p>
+    Über den Bearbeiten-Button einer Zeile öffnet sich ein Modal mit denselben Feldern wie
+    beim Anlegen, plus:
+</p>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Feld</th><th>Beschreibung</th><th>Hinweis</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>Neues Passwort</code></td>
+            <td>Optionales Feld. Leer lassen = Passwort bleibt unverändert.</td>
+            <td>Bei Eingabe werden alle aktiven Sessions des Benutzers invalidiert (Sicherheitsfeature).</td>
+        </tr>
+        <tr>
+            <td><code>Aktiv</code></td>
+            <td>Checkbox. Deaktivierung sperrt den Benutzer sofort.</td>
+            <td>Nützlich für temporäre Sperrungen — der Benutzer muss nicht gelöscht werden.</td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box">
+    <strong>Tipp:</strong> Der aktuell angemeldete Admin kann sich weder selbst löschen
+    noch deaktivieren. Beides wird serverseitig verhindert.
+</div>
+
+<!-- ============================= -->
+<!-- TAB: GRUPPEN                  -->
+<!-- ============================= -->
+<h2 id="tab-gruppen">Tab: Gruppen</h2>
+
+<p>
+    Gruppen werden aus dem Active Directory importiert und steuern den Zugriff auf
+    Datenquellen und ERP-Tools. Die Zuordnung &raquo;Gruppe → Datenquelle&laquo; erfolgt
+    im Datenquellen-Tab.
+</p>
+
+<h3>Gruppenliste — Spalten</h3>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Spalte</th><th>Beschreibung</th><th>Hinweis</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Gruppe</strong></td>
+            <td>Common Name (<code>cn</code>) der AD-Gruppe.</td>
+            <td>Wird beim Import aus dem AD übernommen.</td>
+        </tr>
+        <tr>
+            <td><strong>DN</strong></td>
+            <td>Distinguished Name — vollständiger LDAP-Pfad der Gruppe.</td>
+            <td>Beispiel: <code>CN=KI-Benutzer,OU=Gruppen,DC=firma,DC=local</code></td>
+        </tr>
+        <tr>
+            <td><strong>Mitglieder</strong></td>
+            <td>Anzahl der zugewiesenen Benutzer.</td>
+            <td>Wird beim Mitglieder-Sync aktualisiert.</td>
+        </tr>
+        <tr>
+            <td><strong>Datenquellen</strong></td>
+            <td>Anzahl der zugeordneten Datenquellen.</td>
+            <td>Zuordnung erfolgt im Datenquellen-Tab (nicht hier).</td>
+        </tr>
+    </tbody>
+</table>
+
+<h3>Details-Panel</h3>
+<p>
+    Bei Klick auf eine Zeile öffnet sich ein Detail-Panel mit dem vollständigen DN,
+    Import-/Aktualisierungszeitpunkten und einer <strong>Mitgliederliste</strong>.
+    Diese zeigt für jedes Mitglied: Name, E-Mail und Quelle (LDAP/Lokal).
+    Inaktive Benutzer sind ausgegraut und mit <em>(inaktiv)</em> markiert.
+</p>
+
+<h3>Gruppen importieren</h3>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Feld</th><th>Typ</th><th>Beschreibung</th><th>Empfehlung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>Base DN</code> (optional)</td>
+            <td>Text</td>
+            <td>
+                Einschränkung des Suchpfads für den Gruppen-Import.
+                Standard: der in der LDAP-Konfiguration hinterlegte Search Base.
+            </td>
+            <td>
+                Nur setzen, wenn nur Gruppen aus einem bestimmten OU importiert werden sollen.<br>
+                Beispiel: <code>OU=KI-Gruppen,DC=firma,DC=local</code>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<p>
+    Nach Klick auf <strong>&raquo;Gruppen laden&laquo;</strong> werden alle im AD gefundenen
+    Gruppen als Checkbox-Liste angezeigt. Bereits importierte Gruppen sind deaktiviert (ausgegraut).
+    Über <strong>&raquo;Alle auswählen&laquo;</strong> können alle neuen Gruppen auf einmal markiert werden.
+</p>
+
+<h3>Mitglieder synchronisieren</h3>
+<p>
+    Der Button <strong>&raquo;Mitglieder synchronisieren&laquo;</strong> gleicht die Mitgliedschaften
+    <em>aller</em> importierten Gruppen mit dem Active Directory ab. Das bedeutet:
+</p>
+<ul class="wiki-examples">
+    <li>Neue Mitglieder werden der Gruppe zugeordnet</li>
+    <li>Entfernte Mitglieder werden aus der Zuordnung gelöscht</li>
+    <li>Der Mitglieder-Zähler wird aktualisiert</li>
+</ul>
+
+<div class="wiki-tip-box">
+    <strong>Tipp:</strong> Gruppen müssen zuerst importiert werden, bevor Mitglieder synchronisiert
+    werden können. Die empfohlene Reihenfolge bei der Ersteinrichtung:
+    <ol>
+        <li>LDAP-Verbindung konfigurieren (Tab: LDAP)</li>
+        <li>AD-Gruppe auswählen und Benutzer-Sync durchführen (Tab: LDAP)</li>
+        <li>Gruppen importieren (Tab: Gruppen)</li>
+        <li>Mitglieder synchronisieren (Tab: Gruppen)</li>
+        <li>Datenquellen den Gruppen zuordnen (Tab: Datenquellen)</li>
+    </ol>
+</div>
+
+<!-- ============================= -->
+<!-- TAB: LDAP                     -->
+<!-- ============================= -->
+<h2 id="tab-ldap">Tab: LDAP-Konfiguration</h2>
+
+<p>
+    Hier wird die Verbindung zum Active Directory / LDAP-Server konfiguriert. Eine funktionierende
+    LDAP-Anbindung ist Voraussetzung für den automatischen Benutzer-Import und die Gruppen-Synchronisation.
+</p>
+
+<!-- --- Server --- -->
+<h3 id="ldap-server">Server-Verbindung</h3>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Feld</th><th>Typ</th><th>Standard</th><th>Beschreibung</th><th>Empfehlung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>Server</code></td>
+            <td>Text</td>
+            <td>—</td>
+            <td>
+                IP-Adresse oder Hostname des LDAP-/AD-Servers.<br>
+                Beispiele: <code>192.168.1.10</code>, <code>dc.firma.local</code>, <code>ad01.example.com</code>
+            </td>
+            <td>
+                <strong>Hostname bevorzugen</strong> — IP-Adressen können sich ändern,
+                Hostnamen bleiben stabil. Bei Kerberos/SSL ist ein korrekter Hostname
+                zwingend (muss zum Zertifikats-CN passen).
+            </td>
+        </tr>
+        <tr>
+            <td><code>Port</code></td>
+            <td>Zahl</td>
+            <td><code>389</code></td>
+            <td>
+                LDAP-Port. Standard-Ports:<br>
+                <code>389</code> — LDAP (unverschlüsselt oder STARTTLS)<br>
+                <code>636</code> — LDAPS (SSL/TLS)
+            </td>
+            <td>
+                <strong>636 mit SSL empfohlen</strong> — Passwörter werden sonst im Klartext
+                über das Netzwerk gesendet. In reinen Intranet-Umgebungen kann 389 akzeptabel sein.
+            </td>
+        </tr>
+        <tr>
+            <td><code>SSL</code></td>
+            <td>Checkbox</td>
+            <td>Aus</td>
+            <td>
+                Aktiviert SSL/TLS-Verschlüsselung (LDAPS).<br>
+                <strong>Automatik:</strong> Port wird bei Aktivierung auf 636, bei Deaktivierung auf 389 gesetzt.
+            </td>
+            <td>
+                <strong>Immer aktivieren</strong>, außer der AD-Server unterstützt kein SSL
+                (z.B. in Testumgebungen). Für Produktionsumgebungen ist SSL Pflicht.
+            </td>
+        </tr>
+        <tr>
+            <td><code>Bind DN</code></td>
+            <td>Text</td>
+            <td>—</td>
+            <td>
+                Distinguished Name des Service-Accounts für die LDAP-Suche.
+                Dieser Account braucht nur <em>Lese</em>-Rechte.
+            </td>
+            <td>
+                Einen dedizierten Service-Account verwenden — niemals einen persönlichen Admin-Account.<br>
+                Siehe <a href="#ldap-paths">LDAP-Pfade</a> für Formatbeispiele.
+            </td>
+        </tr>
+        <tr>
+            <td><code>Bind Passwort</code></td>
+            <td>Passwort</td>
+            <td>—</td>
+            <td>
+                Passwort des Service-Accounts. Wird AES-verschlüsselt in der Datenbank gespeichert.<br>
+                Anzeige: <code>********</code> wenn bereits konfiguriert.
+            </td>
+            <td>
+                <strong>Leer lassen = bestehendes Passwort beibehalten.</strong>
+                Nur ausfüllen, wenn das Passwort geändert werden soll.
+            </td>
+        </tr>
+        <tr>
+            <td><code>Suchpfad (Search Base)</code></td>
+            <td>Text</td>
+            <td>—</td>
+            <td>
+                Basis-DN für die Benutzer- und Gruppensuche. Die Suche findet rekursiv
+                in allen Unter-OUs statt.
+            </td>
+            <td>
+                <strong>So spezifisch wie möglich</strong> — der gesamte Baum ab diesem Punkt
+                wird durchsucht. Ein zu breiter Suchpfad (z.B. <code>DC=firma,DC=local</code>)
+                kann bei großen ADs langsam sein und Service-Accounts oder System-Objekte
+                zurückliefern.<br>
+                Siehe <a href="#ldap-paths">LDAP-Pfade</a> für Beispiele.
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<h4>Testen und Speichern</h4>
+<p>
+    Der Button <strong>&raquo;Testen und Speichern&laquo;</strong> führt <em>vor</em> dem Speichern
+    einen Verbindungstest durch. Nur bei erfolgreichem Test wird die Konfiguration gespeichert.
+    Der Test prüft:
+</p>
+<ul class="wiki-examples">
+    <li>TCP-Erreichbarkeit des Servers (Host + Port)</li>
+    <li>Bind-Authentifizierung mit den angegebenen Credentials</li>
+    <li>Gültigkeit des Search Base (Suchpfad existiert im AD)</li>
+</ul>
+
+<h4>Konfiguration löschen</h4>
+<p>
+    Der Button <strong>&raquo;Löschen&laquo;</strong> entfernt die LDAP-Konfiguration vollständig
+    und <strong>deaktiviert alle LDAP-Benutzer</strong>. Das bedeutet: Alle Benutzer mit
+    <code>auth_source=ldap</code> werden auf <code>is_active=0</code> gesetzt und sofort ausgeloggt.
+    Lokale Benutzer sind nicht betroffen.
+</p>
+
+<div class="wiki-tip-box wiki-tip-warning">
+    <strong>Achtung:</strong> Nach dem Löschen der LDAP-Konfiguration können sich LDAP-Benutzer
+    nicht mehr anmelden, bis die Konfiguration neu eingerichtet und ein Sync durchgeführt wird.
+    Sicherstellen, dass mindestens ein lokaler Admin-Account existiert!
+</div>
+
+<!-- --- Gruppe + Sync --- -->
+<h3 id="ldap-group">AD-Gruppe und Synchronisation</h3>
+
+<p>
+    Die AD-Gruppe bestimmt, welche Active-Directory-Benutzer als KIara-Benutzer importiert werden.
+    Nur Mitglieder der ausgewählten Gruppe werden beim Sync angelegt/aktualisiert.
+</p>
+
+<h4>Gruppe auswählen</h4>
+<ol class="wiki-examples">
+    <li>Klick auf <strong>&raquo;Gruppen laden&laquo;</strong> — zeigt alle im AD gefundenen Gruppen</li>
+    <li>Klick auf <strong>+</strong> neben der gewünschten Gruppe</li>
+    <li>Der erste Benutzer-Sync wird automatisch gestartet</li>
+</ol>
+
+<h4>Synchronisation</h4>
+<p>
+    Der Button <strong>&raquo;Jetzt synchronisieren&laquo;</strong> startet einen manuellen
+    LDAP-Sync. Dabei passiert folgendes:
+</p>
+<ul class="wiki-examples">
+    <li><strong>Neue AD-Benutzer:</strong> Werden als KIara-Benutzer angelegt (<code>auth_source=ldap</code>, <code>is_active=1</code>, <code>is_admin=0</code>)</li>
+    <li><strong>Bestehende Benutzer:</strong> Vorname, Nachname und E-Mail werden aus dem AD aktualisiert</li>
+    <li><strong>Entfernte Benutzer:</strong> Benutzer, die nicht mehr Mitglied der Gruppe sind, werden <em>deaktiviert</em> (nicht gelöscht)</li>
+</ul>
+
+<p>
+    Der Zeitpunkt des letzten Syncs wird als <em>&raquo;Letzter Sync&laquo;</em> angezeigt.
+</p>
+
+<div class="wiki-tip-box">
+    <strong>Tipp:</strong> Der Sync aktualisiert nur Stammdaten (Name, E-Mail) und den
+    Aktiv-Status. Admin-Rechte werden <em>niemals</em> automatisch vergeben oder entzogen —
+    das verhindert Privilege Escalation durch AD-Gruppenänderungen.
+</div>
+
+<h4>Gruppenauswahl aufheben</h4>
+<p>
+    Der Button <strong>&raquo;Aufheben&laquo;</strong> löst die Bindung zur AD-Gruppe.
+    Bestehende LDAP-Benutzer bleiben erhalten, es findet aber kein Sync mehr statt.
+    Nützlich, wenn auf eine andere Gruppe gewechselt werden soll.
+</p>
+
+<!-- --- Pfade --- -->
+<h3 id="ldap-paths">LDAP-Pfade — Beispiele</h3>
+
+<p>
+    LDAP Distinguished Names (DNs) folgen einer hierarchischen Struktur von links (spezifisch)
+    nach rechts (allgemein). Die wichtigsten Bausteine:
+</p>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Kürzel</th><th>Bedeutung</th><th>Beispiel</th></tr>
+    </thead>
+    <tbody>
+        <tr><td><code>DC</code></td><td>Domain Component</td><td><code>DC=firma,DC=local</code> (entspricht <code>firma.local</code>)</td></tr>
+        <tr><td><code>OU</code></td><td>Organizational Unit</td><td><code>OU=Benutzer</code>, <code>OU=IT-Abteilung</code></td></tr>
+        <tr><td><code>CN</code></td><td>Common Name</td><td><code>CN=Max Mustermann</code>, <code>CN=ldapreader</code></td></tr>
+    </tbody>
+</table>
+
+<h4>Bind DN — Beispiele</h4>
+
+<pre class="wiki-code-block"><code># Service-Account in der Standard-OU "Users"
+CN=ldapreader,CN=Users,DC=firma,DC=local
+
+# Service-Account in einer eigenen Service-OU
+CN=svc-kiara-reader,OU=ServiceAccounts,DC=firma,DC=local
+
+# Service-Account in einer verschachtelten OU
+CN=kiara-ldap,OU=Applikationen,OU=ServiceAccounts,DC=example,DC=com
+
+# UPN-Format (Alternative, unterstützt von vielen AD-Servern)
+svc-kiara-reader@firma.local</code></pre>
+
+<div class="wiki-tip-box">
+    <strong>Tipp:</strong> Im Active Directory den benötigten DN eines Accounts herausfinden:<br>
+    <code>dsquery user -name "ldapreader"</code> (auf einem Domain Controller)<br>
+    oder in der AD-Verwaltungskonsole: Rechtsklick &rarr; Eigenschaften &rarr; Attribut-Editor &rarr; <code>distinguishedName</code>.
+</div>
+
+<h4>Search Base — Beispiele</h4>
+
+<pre class="wiki-code-block"><code># Gesamte Domain durchsuchen (funktioniert, aber unspezifisch)
+DC=firma,DC=local
+
+# Nur die OU "Mitarbeiter" (empfohlen — spezifisch)
+OU=Mitarbeiter,DC=firma,DC=local
+
+# Verschachtelte OU — z.B. nur IT-Abteilung
+OU=IT,OU=Abteilungen,DC=firma,DC=local
+
+# Mehrere Standorte — gemeinsamer Eltern-Knoten
+OU=Standorte,DC=firma,DC=local</code></pre>
+
+<div class="wiki-tip-box">
+    <strong>Tipp:</strong> Wenn Benutzer über mehrere OUs verteilt sind (z.B.
+    <code>OU=Berlin</code> und <code>OU=München</code> unter <code>OU=Standorte</code>),
+    den gemeinsamen Eltern-Knoten (<code>OU=Standorte,DC=firma,DC=local</code>) als
+    Search Base verwenden. Die Suche ist rekursiv und findet Benutzer in allen Unter-OUs.
+</div>
+
+<h4>Gruppen-DN — Beispiele</h4>
+
+<pre class="wiki-code-block"><code># Sicherheitsgruppe in Standard-Gruppen-OU
+CN=KIara-Benutzer,OU=Gruppen,DC=firma,DC=local
+
+# Verschachtelte Gruppe in IT-spezifischer OU
+CN=KI-Zugang,OU=Applikationsgruppen,OU=IT,DC=firma,DC=local
+
+# Gruppe im Standard-Container "Users"
+CN=KIara-Users,CN=Users,DC=firma,DC=local</code></pre>
+
+<div class="wiki-tip-box">
+    <strong>Tipp — typische AD-Struktur für KIara:</strong>
+<pre class="wiki-code-block"><code>DC=firma,DC=local
+  ├── OU=ServiceAccounts
+  │     └── CN=svc-kiara-reader        ← Bind DN
+  ├── OU=Mitarbeiter                    ← Search Base
+  │     ├── OU=Berlin
+  │     │     ├── CN=Max Mustermann
+  │     │     └── CN=Erika Musterfrau
+  │     └── OU=München
+  │           └── CN=Hans Beispiel
+  └── OU=Gruppen
+        ├── CN=KIara-Benutzer           ← AD-Gruppe (Benutzer-Sync)
+        ├── CN=KIara-Vertrieb           ← Import-Gruppe (Datenquellen-Zuordnung)
+        └── CN=KIara-Technik            ← Import-Gruppe (Datenquellen-Zuordnung)</code></pre>
+</div>
+
+<!-- --- Troubleshooting --- -->
+<h3 id="ldap-troubleshooting">Troubleshooting</h3>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Problem</th><th>Mögliche Ursache</th><th>Lösung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>Verbindungstest schlägt fehl</td>
+            <td>Firewall blockiert Port 389/636, Server nicht erreichbar</td>
+            <td>
+                <code>telnet &lt;server&gt; 389</code> vom KIara-Server testen.
+                Bei SSL: <code>openssl s_client -connect &lt;server&gt;:636</code>
+            </td>
+        </tr>
+        <tr>
+            <td>Bind fehlgeschlagen</td>
+            <td>Falscher DN oder Passwort, Account gesperrt</td>
+            <td>
+                DN genau prüfen (Leerzeichen, Groß-/Kleinschreibung der OUs).
+                Account im AD auf Sperrung prüfen.
+            </td>
+        </tr>
+        <tr>
+            <td>Keine Benutzer nach Sync</td>
+            <td>Search Base zu spezifisch oder falsche Gruppe ausgewählt</td>
+            <td>
+                Search Base erweitern (z.B. auf Domain-Ebene) und prüfen, ob die
+                gewählte Gruppe tatsächlich Mitglieder hat.
+            </td>
+        </tr>
+        <tr>
+            <td>SSL-Zertifikatsfehler</td>
+            <td>Selbstsigniertes Zertifikat, CN stimmt nicht mit Hostname überein</td>
+            <td>
+                CA-Zertifikat auf dem KIara-Server installieren:<br>
+                <code>cp firma-ca.crt /usr/local/share/ca-certificates/ && update-ca-certificates</code>
+            </td>
+        </tr>
+        <tr>
+            <td>LDAP-Benutzer können sich nicht anmelden</td>
+            <td>Benutzer ist <code>is_active=0</code> oder LDAP-Config wurde gelöscht</td>
+            <td>Im Benutzer-Tab prüfen, ob der Benutzer als aktiv markiert ist.</td>
+        </tr>
+    </tbody>
+</table>
+
+<!-- ============================= -->
+<!-- API-ENDPUNKTE (Verweis)       -->
+<!-- ============================= -->
+<h2 id="api-endpoints">API-Endpunkte</h2>
+
+<p>
+    Die vollständige API-Referenz für Benutzer, Gruppen und LDAP wird dynamisch aus der
+    Admin-Registry generiert und ist im API-Katalog verfügbar:
+</p>
+<ul class="wiki-examples">
+    <li><a href="/wiki/api/users">Benutzer-API</a> — Benutzer auflisten, erstellen, aktualisieren, löschen, Passwort-Reset</li>
+    <li><a href="/wiki/api/groups">Gruppen-API</a> — Gruppen auflisten, importieren, synchronisieren, löschen</li>
+    <li><a href="/wiki/api/ldap">LDAP-API</a> — Konfiguration, Gruppen-Auswahl, Sync</li>
+</ul>
+
+<!-- ============================= -->
+<!-- SICHERHEIT                    -->
+<!-- ============================= -->
+<h2 id="security">Sicherheit &amp; Sessions</h2>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Mechanismus</th><th>Details</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Passwort-Speicherung</strong></td>
+            <td>Lokale Passwörter: bcrypt-Hash. LDAP-Bind-Passwort: AES-256 verschlüsselt in der DB.</td>
+        </tr>
+        <tr>
+            <td><strong>Session-Invalidierung</strong></td>
+            <td>Sofort bei: Benutzer deaktivieren, Benutzer löschen, Passwort-Reset, LDAP-Config löschen.</td>
+        </tr>
+        <tr>
+            <td><strong>Selbstschutz</strong></td>
+            <td>Der aktuelle Admin kann sich weder selbst löschen noch deaktivieren.</td>
+        </tr>
+        <tr>
+            <td><strong>Admin-Rechte</strong></td>
+            <td>Werden <em>niemals</em> automatisch durch LDAP-Sync vergeben oder entzogen.</td>
+        </tr>
+        <tr>
+            <td><strong>LDAP-Credentials</strong></td>
+            <td>Bind-Passwort wird maskiert angezeigt (<code>********</code>). Leere Eingabe = bestehendes Passwort beibehalten.</td>
+        </tr>
+    </tbody>
+</table>
+
+{% endblock %}

@@ -1,0 +1,57 @@
+.wiki-content:has(.atlas) { max-width: none; min-width: 0; }
+.atlas { max-width: 1250px; margin: 0 auto; line-height: 1.65; }
+.atlas h1 { overflow-wrap: anywhere; }
+.atlas h2 { margin-top: 2rem; }
+.atlas h3 { margin-top: 1.4rem; }
+.atlas p { margin: .65rem 0; }
+.atlas a { overflow-wrap: anywhere; }
+.atlas-eyebrow { text-transform: uppercase; letter-spacing: .08em; font-size: .78rem; color: var(--text-secondary, #526575); }
+.atlas-tabs, .atlas-toolbar, .atlas-step-index { display: flex; flex-wrap: wrap; gap: .5rem; margin: 1rem 0; }
+.atlas-tabs a, .atlas-paths a { border: 1px solid var(--border-color, #ccd6df); border-radius: 7px; padding: .6rem 1rem; text-decoration: none; }
+.atlas-tabs [aria-current="page"] { background: #244f72; color: #fff; border-color: #244f72; }
+.atlas-state { border-left: 4px solid #4c809f; padding: 1rem 1.2rem; background: var(--bg-secondary, #f2f6fa); border-radius: 4px; }
+.atlas-state code { overflow-wrap: anywhere; white-space: normal; }
+.atlas details { border: 1px solid var(--border-color, #ccd6df); border-radius: 6px; padding: .8rem 1rem; margin: .7rem 0; }
+.atlas details[open] > summary { margin-bottom: .8rem; }
+.atlas summary { cursor: pointer; font-weight: 600; }
+.atlas-state details { border: 0; margin: .5rem 0 0; padding: 0; }
+.atlas-paths { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 1rem; margin: 1.3rem 0; }
+.atlas-paths a { display: grid; gap: .4rem; }
+.atlas-paths span { font-size: .9rem; color: var(--text-secondary, #526575); }
+.atlas-toolbar { align-items: center; font-size: .85rem; }
+.atlas-toolbar button { color: inherit; background: var(--bg-secondary, #f2f6fa); border: 1px solid var(--border-color, #ccd6df); border-radius: 4px; padding: .35rem .65rem; cursor: pointer; }
+.atlas-toolbar a { margin: 0 .3rem; }
+.atlas-canvas { overflow: auto; background: #fff; border: 1px solid #c8d3dd; border-radius: 7px; padding: .75rem; max-height: 78vh; }
+.atlas-canvas img { display: block; width: auto; height: auto; max-width: 100%; margin: 0 auto; }
+.atlas-canvas.atlas-actual-size img { max-width: none; margin: 0; }
+.atlas-canvas.atlas-fit-size img { max-width: 100%; margin: 0 auto; }
+.atlas-id { display: inline-block; color: #244f72; background: #eaf3fb; border-radius: 3px; padding: .05rem .35rem; margin-right: .3rem; }
+.atlas-step-index a { display: inline-block; padding: .15rem .4rem; font-size: .85rem; }
+.atlas-step:target, .atlas-edge:target { outline: 2px solid #4184ab; outline-offset: 3px; }
+.atlas [id] { scroll-margin-top: 1rem; }
+.atlas dl { display: grid; grid-template-columns: minmax(140px, 190px) minmax(0, 1fr); gap: .5rem 1rem; }
+.atlas dt { font-weight: 600; }
+.atlas dd { margin: 0; }
+.atlas-code-links { font-size: .85rem; padding-left: 1.2rem; }
+.atlas-code-link { font-family: ui-monospace, monospace; font-size: .85rem; }
+.atlas-edge { padding: .5rem 0 1rem; border-bottom: 1px solid var(--border-color, #ccd6df); }
+.atlas-edge code { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .82rem; }
+.atlas-kind-optional { border-left: 4px solid #7252a3 !important; }
+.atlas-kind-error { border-left: 4px solid #b33a32 !important; }
+.atlas-kind-decision { border-left: 4px solid #98731d !important; }
+.atlas-scope { font-size: .9rem; }
+.atlas-table-wrap { overflow-x: auto; }
+.atlas table { width: 100%; border-collapse: collapse; }
+.atlas td, .atlas th { text-align: left; vertical-align: top; border: 1px solid var(--border-color, #ccd6df); padding: .65rem; }
+.atlas-source { overflow: auto; font-size: .82rem; line-height: 1.65; background: var(--bg-secondary, #f2f6fa); padding: 1rem; }
+.atlas-source-line { display: inline-block; min-width: 100%; }
+.atlas-source-line > a { display: inline-block; min-width: 4em; text-align: right; padding-right: 1em; user-select: none; }
+.atlas-source-line:target { background: #fff0b5; color: #232323; }
+.atlas :focus-visible { outline: 3px solid #3789bf; outline-offset: 3px; }
+@media (max-width: 700px) {
+    .atlas dl { grid-template-columns: 1fr; gap: .2rem; }
+    .atlas dd { margin-bottom: .7rem; }
+    .atlas-canvas img { max-width: none; margin: 0; }
+    .atlas details { padding: .65rem; }
+    .atlas-tabs a { padding: .4rem .6rem; }
+}

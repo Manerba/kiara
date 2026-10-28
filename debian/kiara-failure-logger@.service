@@ -1,0 +1,25 @@
+[Unit]
+Description=KIara Service Failure Logger for %i
+# Disjunkter Lebenszyklus zum getriggerten Service: laeuft auch dann durch,
+# wenn der originaere %i-Service via systemd-restart bereits wieder hochkommt.
+
+[Service]
+Type=oneshot
+# root noetig fuer dmesg-Kernel-Buffer (CAP_SYSLOG) und journalctl-Read
+# bei nicht-systemd-journal-Group-Mitgliedern.
+User=root
+Group=root
+ExecStart=/opt/kiara/venv/bin/kiara log-service-failure %i
+TimeoutStartSec=30
+Environment=KIARA_CONFIG=/etc/kiara/kiara.yaml
+
+# Hardening: Helper schreibt nur in DB, kein Filesystem-Zugriff noetig.
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+ReadWritePaths=/var/log/kiara

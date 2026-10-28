@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csp-nonce" content="{{ csp_nonce }}">
+    <title>KIara - Audit-Bericht</title>
+    <link rel="stylesheet" href="/static/css/audit_detail.css?v=1">
+</head>
+<body>
+    <div id="loading" class="loading-spinner">
+        <div class="spinner"></div>
+        <p>Audit-Daten werden geladen...</p>
+    </div>
+
+    <div id="error-container" class="error-container audit-hidden"></div>
+
+    <div id="app" class="audit-hidden">
+        <div class="toolbar no-print">
+            <a href="/" class="back-link">&larr; Zurueck zur Admin-Uebersicht</a>
+            <div class="view-toggle">
+                <button id="btn-form-view" class="toggle-btn active" data-audit-action="setView" data-audit-view="form">Formular</button>
+                <button id="btn-raw-view" class="toggle-btn" data-audit-action="setView" data-audit-view="raw">Rohdaten</button>
+            </div>
+        </div>
+
+        <div id="form-view"></div>
+        <div id="raw-view" class="audit-hidden"></div>
+    </div>
+
+    <script src="/static/js/vendor/marked.min.js?v=1"></script>
+    <script src="/static/js/vendor/purify.min.js?v=1"></script>
+    <script src="/static/js/audit_detail.js?v=2"></script>
+</body>
+</html>

@@ -1,0 +1,285 @@
+{% extends "base.html" %}
+
+{% block title %}KIara Wiki — Guide: ColBERT{% endblock %}
+
+{% block breadcrumb %}
+<a href="/wiki/">Wiki</a> &rsaquo; <span>Guide: ColBERT</span>
+{% endblock %}
+
+{% block content %}
+<h1>ColBERT</h1>
+
+<p class="wiki-intro">
+    ColBERT (Contextualized Late Interaction over BERT) ist ein Token-Level Matching-Verfahren,
+    das jeden Token eines Chunks als eigenen Vektor speichert. Beim Retrieval wird per
+    MaxSim-Scoring ueber alle Token-Paare gematcht &mdash; ideal fuer Multi-Aspekt-Queries,
+    bei denen verschiedene Begriffe an verschiedenen Stellen im Dokument vorkommen.
+</p>
+
+<nav class="wiki-toc">
+    <h3>Inhalt</h3>
+    <ol>
+        <li><a href="#was-ist-colbert">Was ist ColBERT?</a></li>
+        <li><a href="#wann-hilft-es">Wann hilft es?</a></li>
+        <li><a href="#voraussetzungen">Voraussetzungen</a></li>
+        <li><a href="#aktivierung">Aktivierung</a></li>
+        <li><a href="#speicherbedarf">Speicherbedarf</a></li>
+        <li><a href="#wechselwirkung">Wechselwirkung mit anderen Features</a></li>
+        <li><a href="#fallback">Fallback-Verhalten</a></li>
+    </ol>
+</nav>
+
+<!-- ============================= -->
+<!-- WAS IST COLBERT               -->
+<!-- ============================= -->
+<h2 id="was-ist-colbert">Was ist ColBERT?</h2>
+
+<p>
+    Beim Standard-Embedding wird jeder Chunk in <strong>einen einzigen Vektor</strong>
+    komprimiert. Dabei gehen feine Bedeutungsunterschiede verloren &mdash; der Vektor
+    ist ein Durchschnitt ueber alle Tokens.
+</p>
+
+<p>
+    ColBERT geht einen anderen Weg:
+</p>
+
+<ol>
+    <li>Jeder <strong>Token</strong> eines Chunks erhaelt seinen eigenen Vektor
+        (typisch 128-dimensional).</li>
+    <li>Beim Retrieval wird fuer jeden Query-Token der <strong>aehnlichste
+        Chunk-Token</strong> gesucht (Maximum Similarity = MaxSim).</li>
+    <li>Die MaxSim-Scores aller Query-Tokens werden <strong>aufsummiert</strong>
+        zum finalen Relevanz-Score.</li>
+</ol>
+
+<table class="wiki-param-table">
+    <thead><tr><th>Methode</th><th>Granularitaet</th><th>Matching</th></tr></thead>
+    <tbody>
+        <tr>
+            <td><strong>Standard-Embedding</strong></td>
+            <td>1 Vektor pro Chunk (z.B. 768-dim)</td>
+            <td>Cosine-Similarity auf Chunk-Ebene</td>
+        </tr>
+        <tr>
+            <td><strong>ColBERT</strong></td>
+            <td>1 Vektor pro Token (z.B. 128-dim)</td>
+            <td>MaxSim ueber alle Token-Paare</td>
+        </tr>
+    </tbody>
+</table>
+
+<p>
+    Der Vorteil: Wenn eine Query mehrere Aspekte enthaelt, kann jeder Aspekt
+    <strong>unabhaengig</strong> an der passenden Stelle im Chunk matchen &mdash;
+    statt im Durchschnitt unterzugehen.
+</p>
+
+<!-- ============================= -->
+<!-- WANN HILFT ES                 -->
+<!-- ============================= -->
+<h2 id="wann-hilft-es">Wann hilft es?</h2>
+
+<h3>Multi-Aspekt-Queries</h3>
+<p>
+    Beispiel: <em>&bdquo;Welche Kunden in Stuttgart haben offene Auftraege?&ldquo;</em>
+</p>
+<p>
+    Diese Query enthaelt zwei unabhaengige Aspekte: <strong>Stuttgart</strong> und
+    <strong>offene Auftraege</strong>. Beim Standard-Embedding wird ein Durchschnittsvektor
+    gebildet, der weder das eine noch das andere praezise matcht. ColBERT hingegen
+    sucht fuer &bdquo;Stuttgart&ldquo; den passenden Token im Chunk und fuer
+    &bdquo;offene Auftraege&ldquo; einen anderen &mdash; beide Treffer addieren sich.
+</p>
+
+<h3>Praezise Fachbegriffe</h3>
+<p>
+    Queries mit spezifischen Kennzeichnungen (Artikelnummern, Kundennamen,
+    Projektkuerzeln) profitieren besonders: Der Token-Level-Match findet exakte
+    Uebereinstimmungen, die im gemittelten Vektor verwaschen wuerden.
+</p>
+
+<div class="wiki-tip-box">
+    <strong>Hinweis:</strong> ColBERT ist eine Ergaenzung, kein Ersatz. Es bildet
+    die <strong>4. Quelle</strong> in der RRF-Fusion neben Vektor, BM25 und Graph.
+</div>
+
+<!-- ============================= -->
+<!-- VORAUSSETZUNGEN               -->
+<!-- ============================= -->
+<h2 id="voraussetzungen">Voraussetzungen</h2>
+
+<table class="wiki-param-table">
+    <thead><tr><th>Voraussetzung</th><th>Details</th></tr></thead>
+    <tbody>
+        <tr>
+            <td><strong>KIron Endpoint</strong></td>
+            <td>Der Embedding-Service (KIron) muss den Endpoint
+                <code>/api/embed_colbert</code> bereitstellen</td>
+        </tr>
+        <tr>
+            <td><strong>Embedding-Modell</strong></td>
+            <td><code>colbert-xm</code> (Default, konfigurierbar ueber
+                <code>retrieval.colbert.model</code>)</td>
+        </tr>
+        <tr>
+            <td><strong>Qdrant</strong></td>
+            <td>Separate Collection <code>colbert_&lt;modell&gt;</code> wird
+                automatisch angelegt</td>
+        </tr>
+    </tbody>
+</table>
+
+<!-- ============================= -->
+<!-- AKTIVIERUNG                   -->
+<!-- ============================= -->
+<h2 id="aktivierung">Aktivierung</h2>
+
+<p>ColBERT erfordert <strong>zwei</strong> Aktivierungsschritte &mdash; beide muessen erfuellt sein:</p>
+
+<ol>
+    <li><strong>Global:</strong> <code>retrieval.colbert.enabled: true</code> in
+        <code>/etc/kiara/kiara.yaml</code> oder Admin-UI &rarr; <strong>KI</strong>
+        &rarr; <strong>Indexierung</strong></li>
+    <li><strong>Per Datenquelle:</strong> Checkbox <strong>&bdquo;ColBERT&ldquo;</strong>
+        in Datenquellen &rarr; Erweiterte Einstellungen</li>
+</ol>
+
+<pre class="wiki-code-block"><code># /etc/kiara/kiara.yaml
+retrieval:
+  colbert:
+    enabled: true                # Globaler Schalter (default: false)
+    model: colbert-xm            # Embedding-Modell fuer Token-Vektoren</code></pre>
+
+<div class="wiki-tip-box wiki-tip-warning">
+    <strong>Wichtig:</strong> ColBERT ist bewusst als Opt-in pro Datenquelle
+    konzipiert, weil der Speicherbedarf erheblich ist (siehe unten). Aktivieren
+    Sie es nur fuer Datenquellen, bei denen Multi-Aspekt-Queries haeufig sind.
+</div>
+
+<div class="wiki-tip-box">
+    <strong>Hinweis:</strong> Die Aktivierung gilt nur fuer <strong>zukuenftige</strong>
+    Indexierungen. Bestehende Chunks erhalten keine ColBERT-Vektoren &mdash;
+    dafuer ist ein Re-Index der betroffenen Datenquellen erforderlich. Der globale
+    Schalter in <strong>KI</strong> &rarr; <strong>Indexierung</strong> und die
+    Datenquellen-Checkbox muessen gemeinsam aktiv sein.
+</div>
+
+<!-- ============================= -->
+<!-- SPEICHERBEDARF                -->
+<!-- ============================= -->
+<h2 id="speicherbedarf">Speicherbedarf</h2>
+
+<p>
+    ColBERT speichert pro Chunk nicht einen, sondern <strong>viele Token-Vektoren</strong>
+    (typisch 40&ndash;60 pro Chunk). Dadurch ist der Speicherbedarf etwa
+    <strong>40x hoeher</strong> als beim Standard-Embedding. Die Token-Vektoren
+    werden in einer separaten Qdrant-Collection (<code>colbert_&lt;modell&gt;</code>)
+    abgelegt.
+</p>
+
+<table class="wiki-param-table">
+    <thead><tr><th>Chunks</th><th>Standard-Embedding (768-dim)</th><th>ColBERT (128-dim, ~50 Token/Chunk)</th></tr></thead>
+    <tbody>
+        <tr>
+            <td>100.000</td>
+            <td>~300 MB</td>
+            <td>~2,5 GB</td>
+        </tr>
+        <tr>
+            <td>1.000.000</td>
+            <td>~3 GB</td>
+            <td>~25 GB</td>
+        </tr>
+        <tr>
+            <td>7.000.000</td>
+            <td>~21 GB</td>
+            <td>~175 GB</td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box wiki-tip-warning">
+    <strong>Deshalb Per-DS-Aktivierung:</strong> Nicht jede Datenquelle profitiert
+    gleich stark von ColBERT. E-Mail-Archive mit kurzen Nachrichten haben weniger
+    Nutzen als umfangreiche technische Dokumentationen mit vielen Fachbegriffen.
+</div>
+
+<!-- ============================= -->
+<!-- WECHSELWIRKUNG                -->
+<!-- ============================= -->
+<h2 id="wechselwirkung">Wechselwirkung mit anderen Features</h2>
+
+<p>
+    ColBERT ist die <strong>4. Retrieval-Quelle</strong> in der RRF-Fusion
+    (Reciprocal Rank Fusion):
+</p>
+
+<table class="wiki-param-table">
+    <thead><tr><th>#</th><th>Quelle</th><th>Staerke</th></tr></thead>
+    <tbody>
+        <tr>
+            <td>1</td>
+            <td><strong>Vektor</strong> (Standard-Embedding)</td>
+            <td>Semantische Aehnlichkeit</td>
+        </tr>
+        <tr>
+            <td>2</td>
+            <td><strong>BM25</strong> (Keyword-Suche)</td>
+            <td>Exakte Wortübereinstimmungen</td>
+        </tr>
+        <tr>
+            <td>3</td>
+            <td><strong>Graph</strong> (Wissensgraph)</td>
+            <td>Entity- und Relationsbasiertes Retrieval</td>
+        </tr>
+        <tr>
+            <td>4</td>
+            <td><strong>ColBERT</strong> (Token-Level)</td>
+            <td>Multi-Aspekt Praezisionsmatching</td>
+        </tr>
+    </tbody>
+</table>
+
+<p>
+    ColBERT ist <strong>vollstaendig kompatibel</strong> mit Contextual Retrieval
+    und Late Chunking. Die angereicherten Chunk-Texte werden auch fuer die
+    ColBERT-Tokenisierung verwendet &mdash; der Kontext-Prefix verbessert
+    also auch die Token-Level-Vektoren.
+</p>
+
+<!-- ============================= -->
+<!-- FALLBACK                      -->
+<!-- ============================= -->
+<h2 id="fallback">Fallback-Verhalten</h2>
+
+<p>
+    ColBERT ist robust gegen Ausfaelle &mdash; die Pipeline laeuft auch ohne
+    ColBERT fehlerfrei weiter:
+</p>
+
+<table class="wiki-param-table">
+    <thead><tr><th>Situation</th><th>Verhalten</th></tr></thead>
+    <tbody>
+        <tr>
+            <td>KIron-Endpoint <code>/api/embed_colbert</code> nicht erreichbar</td>
+            <td>RRF fusioniert nur die 3 verbleibenden Quellen (Vektor, BM25, Graph)</td>
+        </tr>
+        <tr>
+            <td>ColBERT global deaktiviert</td>
+            <td>Kein ColBERT-Embedding, kein ColBERT-Retrieval &mdash; wie vor Phase 18b</td>
+        </tr>
+        <tr>
+            <td>ColBERT nur fuer einzelne DS deaktiviert</td>
+            <td>Nur aktivierte Datenquellen liefern ColBERT-Ergebnisse</td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box">
+    <strong>Kein Fehler, kein Qualitaetsverlust:</strong> Wenn ColBERT nicht
+    verfuegbar ist, verhaelt sich das System exakt wie vor der ColBERT-Einfuehrung.
+    Die RRF-Fusion gewichtet automatisch nur die vorhandenen Quellen.
+</div>
+
+{% endblock %}

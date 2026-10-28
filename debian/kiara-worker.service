@@ -1,0 +1,38 @@
+[Unit]
+Description=KIara Ingestion Worker
+After=network.target kiara-cifs-flight-recorder.service kiara-smb-pcap-recorder.service
+Wants=kiara-cifs-flight-recorder.service kiara-smb-pcap-recorder.service
+OnFailure=kiara-failure-logger@%n.service
+
+[Service]
+Type=simple
+User=kiara
+Group=kiara
+WorkingDirectory=/opt/kiara
+ExecStart=/opt/kiara/venv/bin/kiara serve-worker
+Restart=on-failure
+RestartSec=10
+Environment=KIARA_CONFIG=/etc/kiara/kiara.yaml
+
+# Hardening
+ProtectHome=true
+PrivateTmp=true
+# NoNewPrivileges deaktiviert: Worker/Admin-Pfade nutzen sudo (mount/install/systemctl-restart/davfs-tee)
+NoNewPrivileges=false
+ProtectSystem=full
+ReadWritePaths=/etc/kiara /var/lib/kiara /var/log/kiara /etc/davfs2
+# full statt strict — Worker muss Dateien von beliebigen
+# Datasource-Pfaden lesen koennen (SMB-Mounts, lokale Verzeichnisse,
+# WebDAV-Mounts, etc.). full = /usr,/boot,/etc read-only.
+# Python JIT benoetigt Write+Execute
+MemoryDenyWriteExecute=false
+
+# Resource Limits
+LimitNOFILE=65536
+
+# Graceful Shutdown: Worker beendet aktuelle Datei, dann Exit.
+# SIGKILL nach 120s als Sicherung (Recovery greift in beiden Faellen).
+TimeoutStopSec=120
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,216 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kiara"
+version = "0.0.1"
+description = "KIara – KI-Assistent für Retrieval und Analyse"
+license = "AGPL-3.0-or-later"
+requires-python = ">=3.10"
+dependencies = [
+    "langchain>=0.3",
+    "langchain-community>=0.3",
+    "langchain-text-splitters>=0.3",
+    "ollama>=0.4",
+    "click>=8.1",
+    "pyyaml>=6.0",
+    "python-docx>=1.1",
+    "pypdf>=4.0",
+    "openpyxl>=3.1",
+    "odfpy>=1.4",
+    "python-pptx>=1.0",
+    "watchdog>=4.0",
+    "tqdm>=4.66",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "bcrypt>=4.0",
+    "itsdangerous>=2.1",
+    "cryptography>=44.0",
+    "PyJWT>=2.10",
+    # httpx/httpcore-Minor-Linie wegen Pinning-SNI-Vertrag eingegrenzt
+    # (kiara/shared/http_pinning.py nutzt extensions["sni_hostname"]).
+    "httpx>=0.28,<0.29",
+    "httpcore>=1.0,<2.0",
+    "jinja2>=3.1.6",
+    "jsonschema>=4.26,<5.0",
+    "python-multipart>=0.0.9",
+    "ldap3>=2.9",
+    "pyahocorasick>=2.0",
+    "anthropic>=0.40",
+    "openai>=1.50",
+    "rank_bm25>=0.2",
+    "reportlab>=4.0",
+    "voyageai>=0.3.7",
+    # HasVectorCondition fuer die ColBERT-Vektorpruefung.
+    "qdrant-client>=1.13.0",
+    "elasticsearch>=8.0,<9.0",
+    "charset_normalizer>=3.0",
+    "ezdxf>=1.3",
+    "Pillow>=10.0",
+    "psutil>=5.9.0",
+    "netifaces>=0.11",
+    # Tracing ist per Default aktiviert (kiara.yaml: tracing.enabled: true) und
+    # in den Hot-Paths von chain/agent_chain/retriever fest verdrahtet — daher
+    # core dependency, kein Extra. Sonst landen Spans im NoOp-Tracer und
+    # query_log.trace_id bleibt fuer alle Eintraege NULL.
+    "opentelemetry-api>=1.20.0",
+    "opentelemetry-sdk>=1.20.0",
+    # Cross-Encoder Reranking ist ein benoetigtes lokales Retrieval-Feature.
+    # Es ist konfigurierbar, aber die Runtime muss es ohne Nachinstallation
+    # bereitstellen koennen; daher core dependency, kein Extra.
+    "sentence-transformers>=2.0",
+    # transformers.PreTrainedModel laedt lazy torchvision::nms; ohne
+    # torchvision kann der lokale Reranker trotz installiertem torch brechen.
+    "torchvision>=0.20",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "pytest-timeout>=2.3",
+]
+dev = [
+    "pip-tools>=7.4,<8.0",
+    "pre-commit>=4.0,<5.0",
+    "ruff>=0.8,<1.0",
+]
+exchange = [
+    "msal>=1.28",
+]
+mcp = [
+    "fastmcp>=2.0,<3.0",
+]
+tracing-otlp = [
+    "opentelemetry-exporter-otlp-proto-grpc>=1.20.0",
+]
+
+[project.scripts]
+kiara = "kiara.cli:main"
+
+[project.entry-points."kiara.connectors"]
+local = "kiara.connectors.local_connector:LocalConnector"
+smb = "kiara.connectors.smb_connector:SMBConnector"
+webdav = "kiara.connectors.webdav_connector:WebDAVConnector"
+imap = "kiara.connectors.imap_connector:IMAPConnector"
+exchange_online = "kiara.connectors.exchange_connector:ExchangeOnlineConnector"
+sql = "kiara.connectors.sql_ds_connector:SQLDatasourceConnector"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = [
+    ".",
+    "tests",
+    "packages/kiara-db",
+    "packages/kiara-document-loaders",
+    "packages/kiara-ingestion-core",
+]
+testpaths = [
+    "tests",
+    "packages/kiara-document-loaders/tests",
+    "packages/kiara-ingestion-core/tests",
+    "integrity_cli_tests",
+]
+norecursedirs = [
+    ".git",
+    ".venv",
+    "venv",
+    "debian",
+    "plugins",
+    "tmp",
+    "website",
+]
+addopts = "--import-mode=importlib"
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+extend-exclude = [
+    ".git",
+    ".ruff_cache",
+    ".venv",
+    "build",
+    "debian",
+    "dist",
+    "iso/build",
+    "plugins",
+    "tmp",
+    "venv",
+    "website",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "SIM", "RUF"]
+ignore = [
+    # Existing SQL, log and German prompt text contains many long literals.
+    # Enforce wrapping later after a dedicated format baseline.
+    "E501",
+    # KIara uses intentional bootstrap/lazy imports in app startup, optional
+    # dependency guards and test importorskip blocks.
+    "E402",
+    # FastAPI's documented dependency injection pattern uses Depends() defaults.
+    "B008",
+    # Exception-shaping and silent best-effort paths are audited separately in
+    # code-quality point 7; keep Ruff baseline non-blocking until then.
+    "B904",
+    "SIM105",
+    # Nested patch/contextmanager blocks are common in the existing test suite.
+    "SIM117",
+    # German prompts/docs and UI strings intentionally contain typographic
+    # Unicode. Do not force ASCII rewrites as part of the Ruff baseline.
+    "RUF001",
+    "RUF002",
+    "RUF003",
+    # Typing modernization is handled later with the staged mypy rollout.
+    "RUF013",
+    # Existing code intentionally uses class-level maps/lists and long-lived
+    # file handles in service locks. Audit these rule families separately.
+    "RUF012",
+    "SIM115",
+    # Single-letter loop variables occur in legacy comprehensions and formulas;
+    # do not make the initial gate a naming-only refactor.
+    "E741",
+    # Loop-index simplifications are readability-only and not part of the
+    # initial blocking gate.
+    "SIM113",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"**/__init__.py" = [
+    # Package-level explicit re-exports are intentional; AGENTS.md forbids
+    # adding __all__, so redundant aliases would only add noise.
+    "F401",
+]
+"kiara/anonymization/{_text_utils,anonymizer,automaton,base,erp_connector,llm_detector,patterns}.py" = [
+    # These files are compatibility adapters that deliberately re-export the
+    # split-out kiara_anonymizer package API. Keep explicit imports readable;
+    # AGENTS.md forbids __all__ for marking public API.
+    "F401",
+]
+"tests/**/*.py" = [
+    # Tests frequently keep named values for readability or fixture shape.
+    "F841",
+    "F811",
+    "RUF059",
+    # Existing tests intentionally assert broad failures in a few guard cases.
+    "B017",
+    # Test modules use importorskip and nested patch contexts heavily.
+    "B008",
+    "E402",
+    "SIM117",
+    "RUF043",
+]
+
+[tool.ruff.format]
+line-ending = "lf"
+
+[tool.setuptools.packages.find]
+include = ["kiara", "kiara.*", "kiara_auth", "kiara_auth.*"]
+
+[tool.setuptools.package-data]
+"kiara.admin" = ["wiki_content/**/*.md"]
+"kiara.web" = ["templates/*.html", "templates/**/*", "static/**/*", "schema.sql"]
+"kiara.retrieval" = ["schemas/*.json"]
+"kiara.workflows" = ["default_templates/*.j2"]
+"kiara.tools" = ["mock_data.json"]

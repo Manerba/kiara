@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kiara-ingestion-core"
+version = "0.0.1"
+description = "KIara Ingestion Core -- monorepo-internes Package fuer Datasource-Runtime, Index-State und File-Diff"
+license = "AGPL-3.0-or-later"
+requires-python = ">=3.10"
+dependencies = [
+    "kiara-db",
+]
+
+[tool.setuptools.packages.find]
+include = ["kiara_ingestion_core", "kiara_ingestion_core.*"]

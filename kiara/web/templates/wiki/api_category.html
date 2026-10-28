@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+
+{% block title %}KIara Wiki — {{ category }}{% endblock %}
+
+{% block breadcrumb %}
+<a href="/wiki/">Wiki</a> &rsaquo; <a href="/wiki/api/">API-Katalog</a> &rsaquo; <span>{{ category }}</span>
+{% endblock %}
+
+{% block content %}
+<h1>{{ category }}</h1>
+<p>{{ functions|length }} Funktionen in dieser Kategorie.</p>
+
+{% for func in functions %}
+<details class="wiki-func-detail" {% if functions|length == 1 %}open{% endif %}>
+    <summary class="wiki-func-detail-header">
+        <a href="/wiki/api/fn/{{ func.name }}" class="wiki-func-name-lg" data-wiki-stop-toggle>{{ func.name }}</a>
+        {% if func.http_method and func.http_path %}
+        <span class="wiki-http-badge wiki-http-{{ func.http_method|lower }}">{{ func.http_method }}</span>
+        <code class="wiki-http-path">{{ func.http_path }}</code>
+        {% else %}
+        <span class="wiki-http-badge wiki-http-chat">Chat-only</span>
+        {% endif %}
+    </summary>
+    <div class="wiki-func-detail-body">
+        <p class="wiki-func-description">{{ func.description }}</p>
+
+        {% if func.help %}
+        <div class="wiki-section">
+            <h4>Hilfe</h4>
+            <div class="wiki-help-text">{{ func.help }}</div>
+        </div>
+        {% endif %}
+
+        {% if func.parameters and func.parameters.get("properties") %}
+        <div class="wiki-section">
+            <h4>Parameter</h4>
+            <table class="wiki-param-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Typ</th>
+                        <th>Required</th>
+                        <th>Default</th>
+                        <th>Beschreibung</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% set required_params = func.parameters.get("required", []) %}
+                    {% for pname, pdef in func.parameters["properties"].items() %}
+                    <tr>
+                        <td><code>{{ pname }}</code></td>
+                        <td>{{ pdef.get("type", "—") }}</td>
+                        <td>{% if pname in required_params %}Ja{% else %}Nein{% endif %}</td>
+                        <td>{{ pdef.get("default", "—") }}</td>
+                        <td>{{ pdef.get("description", "—") }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+
+        {% if func.examples %}
+        <div class="wiki-section">
+            <h4>Beispiel-Prompts</h4>
+            <ul class="wiki-examples">
+                {% for ex in func.examples %}
+                <li>{{ ex }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        {% if func.requires_confirmation %}
+        <div class="wiki-section">
+            <h4>Confirmation</h4>
+            <p>Diese Funktion erfordert eine Bestätigung.
+            {% if func.confirm_template %}
+                Template: <code>{{ func.confirm_template }}</code>
+            {% endif %}
+            </p>
+        </div>
+        {% endif %}
+
+        {% if func.changelog_area %}
+        <div class="wiki-section">
+            <h4>Changelog</h4>
+            <p>Area: <code>{{ func.changelog_area }}</code> | Action: <code>{{ func.changelog_action }}</code></p>
+        </div>
+        {% endif %}
+
+        <div class="wiki-section wiki-meta-section">
+            <span>raw_response: {% if func.raw_response %}Ja{% else %}Nein{% endif %}</span>
+            {% if func.pk_param %}
+            <span class="wiki-meta-sep">|</span>
+            <span>PK-Param: <code>{{ func.pk_param }}</code></span>
+            {% endif %}
+        </div>
+
+        {% if func.checks %}
+        <div class="wiki-func-checks">
+            {% for check in func.checks %}
+            <span class="wiki-check-badge wiki-check-{{ check.level }}">{{ check.message }}</span>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+</details>
+{% endfor %}
+{% endblock %}

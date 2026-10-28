@@ -1,0 +1,57 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@
+
+override_dh_auto_build:
+	# Nothing to build at this stage
+
+override_dh_auto_install:
+	# Install application files
+	install -d $(CURDIR)/debian/kiara/opt/kiara
+	cp -r kiara $(CURDIR)/debian/kiara/opt/kiara/
+	cp -r kiara_auth $(CURDIR)/debian/kiara/opt/kiara/
+	cp -r packages $(CURDIR)/debian/kiara/opt/kiara/
+	cp -r tests $(CURDIR)/debian/kiara/opt/kiara/
+	cp pyproject.toml $(CURDIR)/debian/kiara/opt/kiara/
+	cp requirements.txt $(CURDIR)/debian/kiara/opt/kiara/
+	cp requirements.lock $(CURDIR)/debian/kiara/opt/kiara/
+	cp requirements-dev.lock $(CURDIR)/debian/kiara/opt/kiara/
+
+	# Remove stale build/ and *.egg-info from sources copied above.
+	# Without this, setuptools picks the cached build/lib instead of the
+	# current source on first install in a fresh venv.
+	find $(CURDIR)/debian/kiara/opt/kiara \
+		\( -name build -type d -o -name '*.egg-info' -type d -o -name __pycache__ -type d \) \
+		-prune -exec rm -rf {} +
+
+	# Install default config
+	install -d $(CURDIR)/debian/kiara/etc/kiara
+	install -m 644 config/kiara.yaml $(CURDIR)/debian/kiara/etc/kiara/kiara.yaml
+
+	# Install systemd units (canonical path for Ubuntu 24.04+)
+	install -d $(CURDIR)/debian/kiara/usr/lib/systemd/system
+	install -m 644 debian/kiara.service $(CURDIR)/debian/kiara/usr/lib/systemd/system/
+	install -m 644 debian/kiara-admin.service $(CURDIR)/debian/kiara/usr/lib/systemd/system/
+	install -m 644 debian/kiara-admin-chat.service $(CURDIR)/debian/kiara/usr/lib/systemd/system/
+	install -m 644 debian/kiara-mcp.service $(CURDIR)/debian/kiara/usr/lib/systemd/system/
+	install -m 644 debian/kiara-cifs-flight-recorder.service $(CURDIR)/debian/kiara/usr/lib/systemd/system/
+	install -m 644 debian/kiara-smb-pcap-recorder.service $(CURDIR)/debian/kiara/usr/lib/systemd/system/
+	install -m 644 debian/kiara-worker.service $(CURDIR)/debian/kiara/usr/lib/systemd/system/
+	install -m 644 debian/kiara-failure-logger@.service $(CURDIR)/debian/kiara/usr/lib/systemd/system/
+	install -m 644 debian/kiara-worker-death-watcher.service $(CURDIR)/debian/kiara/usr/lib/systemd/system/
+
+	# Install CLAUDE.md for client systems (nur falls vorhanden — im
+	# oeffentlichen Export ohne docs/ wird dieser Schritt uebersprungen)
+	if [ -f docs/KIara_Client_CLAUDE.md ]; then \
+		install -m 644 docs/KIara_Client_CLAUDE.md $(CURDIR)/debian/kiara/opt/kiara/CLAUDE.md; \
+	fi
+
+	# Create data directory
+	install -d $(CURDIR)/debian/kiara/var/lib/kiara
+
+override_dh_auto_test:
+	# Skip tests during package build
+
+override_dh_installsystemd:
+	# Units are installed manually in override_dh_auto_install

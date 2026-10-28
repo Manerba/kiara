@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csp-nonce" content="{{ csp_nonce }}">
+    <title>{% block title %}KIara Wiki{% endblock %}</title>
+    <link rel="stylesheet" href="/static/ui_core/css/tokens.css">
+    <link rel="stylesheet" href="/static/ui_core/css/theme.css">
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/wiki.css">
+</head>
+<body>
+    <div class="wiki-layout">
+        <header class="header wiki-header">
+            <h1>
+                <img src="/static/img/brain.svg" class="logo-brain" alt="Kiara Wiki Logo">
+                <span><span class="logo-ki">KI</span><span class="logo-ara">ara</span><span class="logo-suffix">Wiki</span></span>
+            </h1>
+            <div class="wiki-header-right">
+                <a href="/" class="wiki-back-link">&larr; Admin-UI</a>
+            </div>
+        </header>
+
+        <div class="wiki-body">
+            <nav class="wiki-sidebar" id="wikiSidebar">
+                <button class="wiki-sidebar-toggle" id="sidebarToggle" title="Sidebar ein-/ausblenden">&#9776;</button>
+
+                <div class="wiki-sidebar-content">
+                    <div class="wiki-nav-section">
+                        <a href="/wiki/" class="wiki-nav-link wiki-nav-home">Startseite</a>
+                    </div>
+
+                    <div class="wiki-nav-section">
+                        <h3 class="wiki-nav-heading">API-Katalog</h3>
+                        <a href="/wiki/api/" class="wiki-nav-link">Übersicht</a>
+                        {% block sidebar_categories %}{% endblock %}
+                    </div>
+
+                    <div class="wiki-nav-section">
+                        <h3 class="wiki-nav-heading">Guide</h3>
+                        {% for page in guide_pages %}
+                            <a href="/wiki/guide/{{ page.slug }}" class="wiki-nav-link">{{ page.label }}</a>
+                        {% endfor %}
+                    </div>
+                </div>
+            </nav>
+
+            <main class="wiki-content">
+                <div class="wiki-breadcrumb">
+                    {% block breadcrumb %}
+                    <a href="/wiki/">Wiki</a>
+                    {% endblock %}
+                </div>
+
+                {% block content %}{% endblock %}
+            </main>
+        </div>
+    </div>
+
+    <script nonce="{{ csp_nonce }}">
+        // Dark-Mode aus localStorage übernehmen (gleich wie Admin-UI)
+        let _raw = null;
+        try { _raw = localStorage.getItem('kiara-theme'); } catch (e) { _raw = null; }
+        const savedTheme = ['light','dark','kontrast'].includes(_raw) ? _raw : 'light';
+        if (savedTheme !== 'light') {
+            document.documentElement.setAttribute('data-theme', savedTheme);
+        }
+
+        // Sidebar-Toggle
+        const toggle = document.getElementById('sidebarToggle');
+        const sidebar = document.getElementById('wikiSidebar');
+        // Auf Mobile initial collapsed, sonst überdeckt das Fixed-Overlay den Content beim ersten Aufruf
+        if (sidebar && window.matchMedia && window.matchMedia('(max-width: 768px)').matches) {
+            sidebar.classList.add('collapsed');
+        }
+        if (toggle && sidebar) {
+            toggle.addEventListener('click', function() {
+                sidebar.classList.toggle('collapsed');
+            });
+        }
+
+        document.addEventListener('click', function(event) {
+            const stopToggleEl = event.target.closest('[data-wiki-stop-toggle]');
+            if (stopToggleEl) {
+                event.stopPropagation();
+                return;
+            }
+            const categoryToggle = event.target.closest('[data-wiki-toggle="category"]');
+            if (categoryToggle && categoryToggle.parentElement) {
+                categoryToggle.parentElement.classList.toggle('collapsed');
+            }
+        });
+    </script>
+    <script src="/static/ui_core/js/core.js"></script>
+    <script src="/static/ui_core/js/theme.js"></script>
+    <script src="/static/js/kiara_bootstrap.js"></script>
+</body>
+</html>

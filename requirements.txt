@@ -1,0 +1,56 @@
+# Generated from pyproject.toml by tools/generate_requirements.py.
+# Do not edit manually. Run: make requirements
+# Included runtime extras: exchange, mcp
+
+langchain>=0.3
+langchain-community>=0.3
+langchain-text-splitters>=0.3
+ollama>=0.4
+click>=8.1
+pyyaml>=6.0
+python-docx>=1.1
+pypdf>=4.0
+openpyxl>=3.1
+odfpy>=1.4
+python-pptx>=1.0
+watchdog>=4.0
+tqdm>=4.66
+fastapi>=0.115
+uvicorn[standard]>=0.30
+bcrypt>=4.0
+itsdangerous>=2.1
+cryptography>=44.0
+PyJWT>=2.10
+httpx>=0.28,<0.29
+httpcore>=1.0,<2.0
+jinja2>=3.1.6
+jsonschema>=4.26,<5.0
+python-multipart>=0.0.9
+ldap3>=2.9
+pyahocorasick>=2.0
+anthropic>=0.40
+openai>=1.50
+rank_bm25>=0.2
+reportlab>=4.0
+voyageai>=0.3.7
+qdrant-client>=1.13.0
+elasticsearch>=8.0,<9.0
+charset_normalizer>=3.0
+ezdxf>=1.3
+Pillow>=10.0
+psutil>=5.9.0
+netifaces>=0.11
+opentelemetry-api>=1.20.0
+opentelemetry-sdk>=1.20.0
+sentence-transformers>=2.0
+torchvision>=0.20
+
+# Monorepo package runtime dependencies
+psycopg2-binary
+html-to-markdown==3.15.1
+beautifulsoup4==4.15.0
+tinycss2==1.4.0
+
+# Runtime extras included for Debian/deploy compatibility
+msal>=1.28
+fastmcp>=2.0,<3.0

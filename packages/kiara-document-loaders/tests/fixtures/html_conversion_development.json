@@ -1,0 +1,561 @@
+[
+  {
+    "kind": "synthetic",
+    "id": "blocks",
+    "required": [
+      "10.03.2025",
+      "7,45 €"
+    ],
+    "forbidden": [
+      "color:red",
+      "track()"
+    ],
+    "rows": [],
+    "html": "<style>.x{color:red}</style><h2>Beleg</h2><div>Datum: 10.03.2025</div><div>Gesamt: 7,45&nbsp;€</div><script>track()</script>"
+  },
+  {
+    "kind": "synthetic",
+    "id": "table",
+    "required": [
+      "Wartung",
+      "Gesamt",
+      "7,45 €"
+    ],
+    "forbidden": [],
+    "rows": [
+      [
+        "Wartung",
+        "7,45 €"
+      ],
+      [
+        "Gesamt",
+        "7,45 €"
+      ]
+    ],
+    "html": "<table><tr><th>Position</th><th>Betrag</th></tr><tr><td>Wartung</td><td>7,45 €</td></tr><tr><td>Gesamt</td><td>7,45 €</td></tr></table>"
+  },
+  {
+    "kind": "synthetic",
+    "id": "layout_marked",
+    "required": [
+      "Beleg",
+      "Wartung",
+      "Gesamt",
+      "7,45 €"
+    ],
+    "forbidden": [],
+    "rows": [
+      [
+        "Wartung",
+        "7,45 €"
+      ]
+    ],
+    "html": "<table role=\"presentation\"><tr><td><h2>Beleg</h2><table><tr><th>Position</th><th>Betrag</th></tr><tr><td>Wartung</td><td>7,45 €</td></tr><tr><td>Gesamt</td><td>7,45 €</td></tr></table></td></tr></table>"
+  },
+  {
+    "kind": "synthetic",
+    "id": "layout_unmarked",
+    "required": [
+      "Beleg",
+      "Wartung",
+      "Gesamt",
+      "7,45 €"
+    ],
+    "forbidden": [],
+    "rows": [
+      [
+        "Wartung",
+        "7,45 €"
+      ]
+    ],
+    "html": "<table><tr><td><h2>Beleg</h2><table><tr><th>Position</th><th>Betrag</th></tr><tr><td>Wartung</td><td>7,45 €</td></tr><tr><td>Gesamt</td><td>7,45 €</td></tr></table></td></tr></table>"
+  },
+  {
+    "kind": "synthetic",
+    "id": "rowspan",
+    "required": [
+      "Firma A",
+      "Wartung",
+      "Ersatzteil",
+      "12,50 €"
+    ],
+    "forbidden": [],
+    "rows": [
+      [
+        "Firma A",
+        "Ersatzteil",
+        "12,50 €"
+      ]
+    ],
+    "html": "<table><tr><th>Kunde</th><th>Position</th><th>Betrag</th></tr><tr><td rowspan=\"2\">Firma A</td><td>Wartung</td><td>7,45 €</td></tr><tr><td>Ersatzteil</td><td>12,50 €</td></tr></table>"
+  },
+  {
+    "kind": "synthetic",
+    "id": "colspan",
+    "required": [
+      "Artikel",
+      "Maße in mm",
+      "Breite",
+      "Höhe",
+      "A-42",
+      "12,5",
+      "4,0"
+    ],
+    "forbidden": [],
+    "rows": [
+      [
+        "A-42",
+        "12,5",
+        "4,0"
+      ]
+    ],
+    "html": "<table><thead><tr><th rowspan=\"2\">Artikel</th><th colspan=\"2\">Maße in mm</th></tr><tr><th>Breite</th><th>Höhe</th></tr></thead><tbody><tr><td>A-42</td><td>12,5</td><td>4,0</td></tr></tbody></table>"
+  },
+  {
+    "kind": "synthetic",
+    "id": "units_and_identifiers",
+    "required": [
+      "A-2025-42",
+      "12,5 × 4,0 mm",
+      "24 V",
+      "30.04.2025"
+    ],
+    "forbidden": [],
+    "rows": [],
+    "html": "<p>Teilenummer: A-2025-42</p><p>Maße: 12,5 × 4,0 mm</p><p>Spannung: 24 V</p><p>Frist: 30.04.2025</p>"
+  },
+  {
+    "kind": "synthetic",
+    "id": "inline_identifier",
+    "required": [
+      "AB-123",
+      "24 V"
+    ],
+    "forbidden": [],
+    "rows": [],
+    "html": "<p>Teilenummer A<strong>B</strong>-123. Spannung 24&nbsp;V.</p>"
+  },
+  {
+    "kind": "synthetic",
+    "id": "adjacent_blocks",
+    "required": [
+      "Jahr 2025",
+      "2,99 €",
+      "Nicht freigegeben."
+    ],
+    "forbidden": [
+      "20252,99"
+    ],
+    "rows": [],
+    "html": "<div>Jahr 2025</div><div>2,99 €</div><p>Nicht freigegeben.</p>"
+  },
+  {
+    "kind": "synthetic",
+    "id": "footer",
+    "required": [
+      "Artikel A-123",
+      "14 Tagen",
+      "17,50 €"
+    ],
+    "forbidden": [],
+    "rows": [],
+    "html": "<h1>Vertrag</h1><p>Artikel A-123</p><footer>Widerruf innerhalb von 14 Tagen. Gutschrift 17,50 €.</footer>"
+  },
+  {
+    "kind": "synthetic",
+    "id": "before_heading",
+    "required": [
+      "R-291",
+      "30.04.2025",
+      "Nicht automatisch verlängern."
+    ],
+    "forbidden": [],
+    "rows": [],
+    "html": "<p>Vertrag R-291. Kündigung bis 30.04.2025.</p><h2>Details</h2><p>Nicht automatisch verlängern.</p>"
+  },
+  {
+    "kind": "synthetic",
+    "id": "hidden_inline",
+    "required": [
+      "7,45 €"
+    ],
+    "forbidden": [
+      "GEHEIM_DOPPELT",
+      "HIDDEN_ATTR"
+    ],
+    "rows": [],
+    "html": "<p style=\"display:none\">GEHEIM_DOPPELT 999,99 €</p><p hidden>HIDDEN_ATTR 88,88 €</p><p>Gesamt 7,45 €</p>"
+  },
+  {
+    "kind": "synthetic",
+    "id": "hidden_stylesheet",
+    "required": [
+      "7,45 €"
+    ],
+    "forbidden": [
+      "MOBILE_DUPLIKAT"
+    ],
+    "rows": [],
+    "html": "<style>.mobile {display:none}</style><div class=\"mobile\">MOBILE_DUPLIKAT 999,99 €</div><div>Gesamt 7,45 €</div>"
+  },
+  {
+    "kind": "synthetic",
+    "id": "lists",
+    "required": [
+      "24 V",
+      "Nicht bei Nässe verwenden.",
+      "30.04.2025"
+    ],
+    "forbidden": [],
+    "rows": [],
+    "html": "<h2>Freigabe</h2><ul><li>Spannung: 24 V</li><li>Nicht bei Nässe verwenden.</li></ul><dl><dt>Frist</dt><dd>30.04.2025</dd></dl>"
+  },
+  {
+    "kind": "synthetic",
+    "id": "malformed_table",
+    "required": [
+      "Artikel",
+      "Betrag",
+      "A-42",
+      "7,45 €"
+    ],
+    "forbidden": [],
+    "rows": [
+      [
+        "A-42",
+        "7,45 €"
+      ]
+    ],
+    "html": "<table><tr><th>Artikel<th>Betrag<tr><td>A-42<td>7,45 €</table>"
+  },
+  {
+    "kind": "synthetic",
+    "id": "long_table",
+    "required": [
+      "TEIL-001",
+      "1,37 €",
+      "11 V",
+      "TEIL-002",
+      "2,37 €",
+      "12 V",
+      "TEIL-003",
+      "3,37 €",
+      "13 V",
+      "TEIL-004",
+      "4,37 €",
+      "14 V",
+      "TEIL-005",
+      "5,37 €",
+      "15 V",
+      "TEIL-006",
+      "6,37 €",
+      "16 V",
+      "TEIL-007",
+      "7,37 €",
+      "17 V",
+      "TEIL-008",
+      "8,37 €",
+      "18 V",
+      "TEIL-009",
+      "9,37 €",
+      "19 V",
+      "TEIL-010",
+      "10,37 €",
+      "20 V",
+      "TEIL-011",
+      "11,37 €",
+      "21 V",
+      "TEIL-012",
+      "12,37 €",
+      "22 V",
+      "TEIL-013",
+      "13,37 €",
+      "23 V",
+      "TEIL-014",
+      "14,37 €",
+      "24 V",
+      "TEIL-015",
+      "15,37 €",
+      "25 V",
+      "TEIL-016",
+      "16,37 €",
+      "26 V",
+      "TEIL-017",
+      "17,37 €",
+      "27 V",
+      "TEIL-018",
+      "18,37 €",
+      "28 V",
+      "TEIL-019",
+      "19,37 €",
+      "29 V",
+      "TEIL-020",
+      "20,37 €",
+      "30 V",
+      "TEIL-021",
+      "21,37 €",
+      "31 V",
+      "TEIL-022",
+      "22,37 €",
+      "32 V",
+      "TEIL-023",
+      "23,37 €",
+      "33 V",
+      "TEIL-024",
+      "24,37 €",
+      "34 V",
+      "TEIL-025",
+      "25,37 €",
+      "35 V",
+      "TEIL-026",
+      "26,37 €",
+      "36 V",
+      "TEIL-027",
+      "27,37 €",
+      "37 V",
+      "TEIL-028",
+      "28,37 €",
+      "38 V",
+      "TEIL-029",
+      "29,37 €",
+      "39 V",
+      "TEIL-030",
+      "30,37 €",
+      "40 V",
+      "TEIL-031",
+      "31,37 €",
+      "41 V",
+      "TEIL-032",
+      "32,37 €",
+      "42 V",
+      "TEIL-033",
+      "33,37 €",
+      "43 V",
+      "TEIL-034",
+      "34,37 €",
+      "44 V",
+      "TEIL-035",
+      "35,37 €",
+      "45 V",
+      "TEIL-036",
+      "36,37 €",
+      "46 V",
+      "TEIL-037",
+      "37,37 €",
+      "47 V",
+      "TEIL-038",
+      "38,37 €",
+      "48 V",
+      "TEIL-039",
+      "39,37 €",
+      "49 V",
+      "TEIL-040",
+      "40,37 €",
+      "50 V"
+    ],
+    "forbidden": [],
+    "rows": [
+      [
+        "TEIL-001",
+        "1,37 €",
+        "11 V"
+      ],
+      [
+        "TEIL-002",
+        "2,37 €",
+        "12 V"
+      ],
+      [
+        "TEIL-003",
+        "3,37 €",
+        "13 V"
+      ],
+      [
+        "TEIL-004",
+        "4,37 €",
+        "14 V"
+      ],
+      [
+        "TEIL-005",
+        "5,37 €",
+        "15 V"
+      ],
+      [
+        "TEIL-006",
+        "6,37 €",
+        "16 V"
+      ],
+      [
+        "TEIL-007",
+        "7,37 €",
+        "17 V"
+      ],
+      [
+        "TEIL-008",
+        "8,37 €",
+        "18 V"
+      ],
+      [
+        "TEIL-009",
+        "9,37 €",
+        "19 V"
+      ],
+      [
+        "TEIL-010",
+        "10,37 €",
+        "20 V"
+      ],
+      [
+        "TEIL-011",
+        "11,37 €",
+        "21 V"
+      ],
+      [
+        "TEIL-012",
+        "12,37 €",
+        "22 V"
+      ],
+      [
+        "TEIL-013",
+        "13,37 €",
+        "23 V"
+      ],
+      [
+        "TEIL-014",
+        "14,37 €",
+        "24 V"
+      ],
+      [
+        "TEIL-015",
+        "15,37 €",
+        "25 V"
+      ],
+      [
+        "TEIL-016",
+        "16,37 €",
+        "26 V"
+      ],
+      [
+        "TEIL-017",
+        "17,37 €",
+        "27 V"
+      ],
+      [
+        "TEIL-018",
+        "18,37 €",
+        "28 V"
+      ],
+      [
+        "TEIL-019",
+        "19,37 €",
+        "29 V"
+      ],
+      [
+        "TEIL-020",
+        "20,37 €",
+        "30 V"
+      ],
+      [
+        "TEIL-021",
+        "21,37 €",
+        "31 V"
+      ],
+      [
+        "TEIL-022",
+        "22,37 €",
+        "32 V"
+      ],
+      [
+        "TEIL-023",
+        "23,37 €",
+        "33 V"
+      ],
+      [
+        "TEIL-024",
+        "24,37 €",
+        "34 V"
+      ],
+      [
+        "TEIL-025",
+        "25,37 €",
+        "35 V"
+      ],
+      [
+        "TEIL-026",
+        "26,37 €",
+        "36 V"
+      ],
+      [
+        "TEIL-027",
+        "27,37 €",
+        "37 V"
+      ],
+      [
+        "TEIL-028",
+        "28,37 €",
+        "38 V"
+      ],
+      [
+        "TEIL-029",
+        "29,37 €",
+        "39 V"
+      ],
+      [
+        "TEIL-030",
+        "30,37 €",
+        "40 V"
+      ],
+      [
+        "TEIL-031",
+        "31,37 €",
+        "41 V"
+      ],
+      [
+        "TEIL-032",
+        "32,37 €",
+        "42 V"
+      ],
+      [
+        "TEIL-033",
+        "33,37 €",
+        "43 V"
+      ],
+      [
+        "TEIL-034",
+        "34,37 €",
+        "44 V"
+      ],
+      [
+        "TEIL-035",
+        "35,37 €",
+        "45 V"
+      ],
+      [
+        "TEIL-036",
+        "36,37 €",
+        "46 V"
+      ],
+      [
+        "TEIL-037",
+        "37,37 €",
+        "47 V"
+      ],
+      [
+        "TEIL-038",
+        "38,37 €",
+        "48 V"
+      ],
+      [
+        "TEIL-039",
+        "39,37 €",
+        "49 V"
+      ],
+      [
+        "TEIL-040",
+        "40,37 €",
+        "50 V"
+      ]
+    ],
+    "html": "<h2>Positionen</h2><table><tr><th>Artikel</th><th>Betrag</th><th>Spannung</th></tr><tr><td>TEIL-001</td><td>1,37 €</td><td>11 V</td></tr><tr><td>TEIL-002</td><td>2,37 €</td><td>12 V</td></tr><tr><td>TEIL-003</td><td>3,37 €</td><td>13 V</td></tr><tr><td>TEIL-004</td><td>4,37 €</td><td>14 V</td></tr><tr><td>TEIL-005</td><td>5,37 €</td><td>15 V</td></tr><tr><td>TEIL-006</td><td>6,37 €</td><td>16 V</td></tr><tr><td>TEIL-007</td><td>7,37 €</td><td>17 V</td></tr><tr><td>TEIL-008</td><td>8,37 €</td><td>18 V</td></tr><tr><td>TEIL-009</td><td>9,37 €</td><td>19 V</td></tr><tr><td>TEIL-010</td><td>10,37 €</td><td>20 V</td></tr><tr><td>TEIL-011</td><td>11,37 €</td><td>21 V</td></tr><tr><td>TEIL-012</td><td>12,37 €</td><td>22 V</td></tr><tr><td>TEIL-013</td><td>13,37 €</td><td>23 V</td></tr><tr><td>TEIL-014</td><td>14,37 €</td><td>24 V</td></tr><tr><td>TEIL-015</td><td>15,37 €</td><td>25 V</td></tr><tr><td>TEIL-016</td><td>16,37 €</td><td>26 V</td></tr><tr><td>TEIL-017</td><td>17,37 €</td><td>27 V</td></tr><tr><td>TEIL-018</td><td>18,37 €</td><td>28 V</td></tr><tr><td>TEIL-019</td><td>19,37 €</td><td>29 V</td></tr><tr><td>TEIL-020</td><td>20,37 €</td><td>30 V</td></tr><tr><td>TEIL-021</td><td>21,37 €</td><td>31 V</td></tr><tr><td>TEIL-022</td><td>22,37 €</td><td>32 V</td></tr><tr><td>TEIL-023</td><td>23,37 €</td><td>33 V</td></tr><tr><td>TEIL-024</td><td>24,37 €</td><td>34 V</td></tr><tr><td>TEIL-025</td><td>25,37 €</td><td>35 V</td></tr><tr><td>TEIL-026</td><td>26,37 €</td><td>36 V</td></tr><tr><td>TEIL-027</td><td>27,37 €</td><td>37 V</td></tr><tr><td>TEIL-028</td><td>28,37 €</td><td>38 V</td></tr><tr><td>TEIL-029</td><td>29,37 €</td><td>39 V</td></tr><tr><td>TEIL-030</td><td>30,37 €</td><td>40 V</td></tr><tr><td>TEIL-031</td><td>31,37 €</td><td>41 V</td></tr><tr><td>TEIL-032</td><td>32,37 €</td><td>42 V</td></tr><tr><td>TEIL-033</td><td>33,37 €</td><td>43 V</td></tr><tr><td>TEIL-034</td><td>34,37 €</td><td>44 V</td></tr><tr><td>TEIL-035</td><td>35,37 €</td><td>45 V</td></tr><tr><td>TEIL-036</td><td>36,37 €</td><td>46 V</td></tr><tr><td>TEIL-037</td><td>37,37 €</td><td>47 V</td></tr><tr><td>TEIL-038</td><td>38,37 €</td><td>48 V</td></tr><tr><td>TEIL-039</td><td>39,37 €</td><td>49 V</td></tr><tr><td>TEIL-040</td><td>40,37 €</td><td>50 V</td></tr></table>"
+  }
+]

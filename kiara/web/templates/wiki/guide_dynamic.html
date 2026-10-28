@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block title %}KIara Wiki - Guide: {{ title }}{% endblock %}
+
+{% block breadcrumb %}
+<a href="/wiki/">Wiki</a> &rsaquo; <span>Guide: {{ title }}</span>
+{% endblock %}
+
+{% block content %}
+<h1>{{ title }}</h1>
+<script id="wikiMarkdownData" type="application/json" nonce="{{ csp_nonce }}">{{ markdown_text | tojson }}</script>
+<div id="wikiMarkdownRoot" class="wiki-markdown"></div>
+<noscript>
+    <div class="wiki-placeholder-box wiki-error-box">
+        <p>Dieser Guide benötigt JavaScript für das Markdown-Rendering.</p>
+    </div>
+</noscript>
+
+<script src="/static/js/vendor/marked.min.js"></script>
+<script src="/static/js/vendor/purify.min.js"></script>
+<script nonce="{{ csp_nonce }}">
+(function () {
+    const dataNode = document.getElementById('wikiMarkdownData');
+    const root = document.getElementById('wikiMarkdownRoot');
+
+    if (!dataNode || !root || typeof marked === 'undefined' || typeof DOMPurify === 'undefined') {
+        if (root) {
+            root.innerHTML = '<div class="wiki-placeholder-box wiki-error-box"><p>Guide konnte nicht gerendert werden.</p></div>';
+        }
+        return;
+    }
+
+    try {
+        const raw = JSON.parse(dataNode.textContent);
+        const html = marked.parse(raw);
+        root.innerHTML = DOMPurify.sanitize(html);
+    } catch (err) {
+        root.innerHTML = '<div class="wiki-placeholder-box wiki-error-box"><p>Guide konnte nicht gerendert werden.</p></div>';
+    }
+})();
+</script>
+{% endblock %}

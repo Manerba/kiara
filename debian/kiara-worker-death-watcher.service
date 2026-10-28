@@ -1,0 +1,31 @@
+[Unit]
+Description=KIara uvicorn Worker Death Watcher
+Documentation=man:journalctl(1)
+After=network.target kiara.service
+Wants=kiara.service
+
+[Service]
+Type=simple
+# root noetig fuer journalctl-Stream + dmesg-Lookup im Trigger-Helper.
+User=root
+Group=root
+ExecStart=/opt/kiara/venv/bin/python3 -u -m kiara.web.worker_death_watcher
+Restart=on-failure
+RestartSec=10s
+TimeoutStopSec=15
+Environment=KIARA_CONFIG=/etc/kiara/kiara.yaml
+
+# Hardening: Watcher liest Logs + ruft kiara CLI auf, schreibt nur eigenen
+# root-owned Cursor-/Pending-State.
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+ReadWritePaths=/var/lib/kiara/worker_death_watcher /var/log/kiara
+
+[Install]
+WantedBy=multi-user.target

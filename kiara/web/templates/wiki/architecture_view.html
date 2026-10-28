@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}KIara Architektur · {{ title }}{% endblock %}
+{% block breadcrumb %}<a href="/wiki/">Wiki</a> &rsaquo; <a href="/wiki/guide/architecture">Architektur</a> &rsaquo; {{ title }}{% endblock %}
+{% macro code_link(key, line=none) -%}
+{% set ref = atlas.references[key] -%}
+<a class="atlas-code-link" href="/wiki/architecture/code/{{ key }}#L{{ line or ref.start }}">{{ ref.path }}:{{ line or ref.start }} · {{ ref.symbol }}</a>
+{%- endmacro %}
+{% block content %}
+<link rel="stylesheet" href="/static/css/architecture.css">
+<article class="atlas">
+    <p class="atlas-eyebrow">KIara verstehen · Meilenstein 1 · Tareas #79</p>
+    <h1>{{ title }}</h1>
+    <nav class="atlas-tabs" aria-label="Architekturansichten">
+        {% for slug, label in architecture_pages.items() %}
+        <a href="/wiki/guide/{{ slug }}"{% if slug == tab %} aria-current="page"{% endif %}>{{ label }}</a>
+        {% endfor %}
+    </nav>
+    <div class="atlas-state">
+        <strong>Am Code geprüft · {{ atlas.state.reviewed_at }}</strong>
+        <p>{{ atlas.state.description }}</p>
+        <details>
+            <summary>Code-Stand und Aktualisierungsregel</summary>
+            <p>Basis-Commit <code>{{ atlas.state.base_commit }}</code>. Jeder Codebeleg zeigt den geprüften Funktionsstand mit Zeilen und SHA-256 der Datei. Er ist eine Momentaufnahme, keine Anzeige des jeweils aktuellen Laufzeitcodes.</p>
+            <p>Bei Änderungen an referenzierten Funktionen: betroffene Knoten, Verbindungen und Fehlerpfade erneut lesen; <code>docs/architecture/p79/atlas.json</code> anpassen, mit <code>scripts/build_architecture_atlas.py --capture --render</code> neu bauen und <code>--check</code> ausführen. Anschließend Darstellung und Links prüfen. Hashes erst nach inhaltlichem Abgleich erneuern.</p>
+            <p>Uncommittierte Änderungen in den geprüften Dateien:</p>
+            <ul>{% for status in atlas.state.reviewed_file_status %}<li><code>{{ status }}</code></li>{% endfor %}</ul>
+        </details>
+    </div>
+    {% if tab == 'architecture' %}
+    <p class="wiki-intro">Folgen Sie zuerst dem Weg eines Dokuments in den Bestand und danach dem Weg einer Frage zur Antwort. Die Detailkarten erklären, warum ein Schritt ausgeführt, übersprungen oder abgebrochen wird.</p>
+    <div class="atlas-paths">
+        <a href="/wiki/guide/architecture-ingestion"><strong>Ein Dokument wird Wissen</strong><span>Scan → Textabschnitte → Indizes → Freigabe</span></a>
+        <a href="/wiki/guide/architecture-retrieval"><strong>Eine Frage findet Belege</strong><span>Scope → Suchpfade → Kontext → Ausgabe</span></a>
+    </div>
+    {% endif %}
+    <details class="atlas-legend" open>
+        <summary>So lesen Sie die Karten</summary>
+        <ul>{% for description in atlas.legend.values() %}<li>{{ description }}</li>{% endfor %}</ul>
+        <p>Die Schritt-IDs führen zu aufklappbaren Erklärungen. Verbindungs-IDs wie O-01 führen zu den Belegen unter der jeweiligen Karte.</p>
+    </details>
+    {% for diagram in diagrams %}
+    <section class="atlas-diagram" aria-labelledby="heading-{{ diagram.id }}">
+        <h2 id="heading-{{ diagram.id }}">{{ diagram.title }}</h2>
+        <p>{{ diagram.intro }}</p>
+        <div class="atlas-toolbar">
+            <button type="button" data-atlas-size="fit" aria-controls="canvas-{{ diagram.id }}">Einpassen</button>
+            <button type="button" data-atlas-size="actual" aria-controls="canvas-{{ diagram.id }}">Lesbare Größe</button>
+            <a href="/static/architecture/{{ diagram.id }}.svg" target="_blank" rel="noopener">SVG öffnen</a>
+            <a href="/wiki/architecture/mermaid/{{ diagram.id }}">Mermaid herunterladen</a>
+            <a href="#steps-{{ diagram.id }}">Schritte</a>
+            <a href="#edges-{{ diagram.id }}">Verbindungsbelege</a>
+        </div>
+        <div class="atlas-canvas" id="canvas-{{ diagram.id }}" tabindex="0" role="region" aria-label="{{ diagram.title }} – bei Bedarf horizontal scrollen">
+            <img src="/static/architecture/{{ diagram.id }}.svg" alt="{{ diagram.title }}. Alle Schritte und Verbindungen stehen im folgenden Text." loading="lazy">
+        </div>
+        <h3 id="steps-{{ diagram.id }}">Schritte und verantwortlicher Code</h3>
+        <nav class="atlas-step-index" aria-label="Schritte in {{ diagram.title }}">
+            {% for node in diagram.nodes %}<a href="#{{ node.id }}">{{ node.id }} · {{ node.label }}</a>{% endfor %}
+        </nav>
+        <div class="atlas-steps">
+            {% for node in diagram.nodes %}
+            <details id="{{ node.id }}" class="atlas-step atlas-kind-{{ node.kind }}">
+                <summary><span class="atlas-id">{{ node.id }}</span> {{ node.label }}</summary>
+                <p>{{ node.purpose }}</p>
+                <dl>
+                    <dt>Eingabe → Ausgabe</dt><dd>{{ node.io }}</dd>
+                    <dt>Warum dieser Pfad?</dt><dd>{{ node.config }}</dd>
+                    <dt>Fehler und Grenzen</dt><dd>{{ node.error }}</dd>
+                </dl>
+                <ul class="atlas-code-links">{% for key in node.refs %}<li>{{ code_link(key) }}</li>{% endfor %}</ul>
+                <a href="#edges-{{ diagram.id }}">Belege für die Verbindungen</a>
+            </details>
+            {% endfor %}
+        </div>
+        <details id="edges-{{ diagram.id }}" class="atlas-evidence">
+            <summary>Alle {{ diagram.edges|length }} Verbindungen am Code prüfen</summary>
+            {% for edge in diagram.edges %}
+            <div class="atlas-edge" id="{{ edge.id }}">
+                <h4>{{ edge.id }} · <a href="#{{ edge.source }}">{{ edge.source }}</a> → <a href="#{{ edge.target }}">{{ edge.target }}</a> · {{ edge.label }}</h4>
+                <p>{{ edge.proof }}</p>
+                {% for evidence in edge.evidence %}
+                <p>{{ code_link(evidence.ref, evidence.lines[0]) }}</p>
+                <ul>{% for needle in evidence.needles %}<li><code>{{ needle }}</code> (Z. {{ evidence.lines[loop.index0] }})</li>{% endfor %}</ul>
+                {% endfor %}
+            </div>
+            {% endfor %}
+        </details>
+    </section>
+    {% endfor %}
+    {% if tab == 'architecture-retrieval' %}
+    <h2>Was die Modi unterscheidet</h2>
+    <div class="atlas-table-wrap"><table>
+        <thead><tr><th>Modus</th><th>Suche</th><th>Kontext / Ausgabe</th></tr></thead>
+        <tbody>
+            <tr><td><a href="#C1">Standard</a></td><td>Optional Suchvarianten, Reranking, Nachbarn</td><td>Kontextlimit und Abstain; Such-Tab-Auswahl kann Suche ersetzen</td></tr>
+            <tr><td><a href="#C2">Agent</a></td><td>Vom Modell ausgelöste Werkzeuge, wiederholte Suche und Lesen</td><td>Budgetierte Toolresultate, optional finales Reranking, Antwortstream</td></tr>
+            <tr><td><a href="#C3">Research</a></td><td>Geplante Suchrunden und begrenzte Originalfenster</td><td>Originalbelege, Synthese, Verifier; sichtbare Abdeckungsgrenzen</td></tr>
+            <tr><td><a href="#C4">Direkt</a></td><td>Ein Retrieval, optional Reranking</td><td>Begrenzte Treffer als JSON mit Diagnose; keine Antwortgenerierung</td></tr>
+            <tr><td><a href="#S1">Such-Tab</a></td><td>Direkt ES oder Qdrant, ohne HybridRetriever</td><td>Trefferseite; abweichende Freigabeprüfung im semantischen Zweig, siehe S3</td></tr>
+        </tbody>
+    </table></div>
+    {% endif %}
+    <details class="atlas-glossary">
+        <summary>Begriffe kurz erklärt</summary>
+        <dl>{% for term, explanation in atlas.glossary.items() %}<dt>{{ term }}</dt><dd>{{ explanation }}</dd>{% endfor %}</dl>
+    </details>
+    <details class="atlas-tracing">
+        <summary>Tracing: Was bereits messbar ist – und was fehlt</summary>
+        <p>Vorhandener Explorer: <a href="/system/traces">Admin → System → Traces</a>. Konkrete Ablaufbeispiele mit Trace-IDs folgen in Teilaufgabe #416.</p>
+        {% for item in atlas.tracing %}
+        <h3>{{ item.phase }}</h3><p>{{ item.spans }}</p><p>{{ item.gap }}</p>
+        <ul class="atlas-code-links">{% for key in item.refs %}<li>{{ code_link(key) }}</li>{% endfor %}</ul>
+        {% endfor %}
+    </details>
+    <details class="atlas-findings">
+        <summary>Erkenntnisse aus dem Codeabgleich</summary>
+        <ul>{% for finding in atlas.findings %}<li>{{ finding }}</li>{% endfor %}</ul>
+    </details>
+    <aside class="atlas-scope">
+        <h2>Prüfgrenzen</h2>
+        <ul>{% for caveat in atlas.caveats %}<li>{{ caveat }}</li>{% endfor %}</ul>
+    </aside>
+</article>
+<script src="/static/js/architecture.js"></script>
+{% endblock %}

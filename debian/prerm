@@ -1,0 +1,33 @@
+#!/bin/bash
+set -e
+
+case "$1" in
+    upgrade)
+        # Stop services
+        systemctl stop kiara.service 2>/dev/null || true
+        systemctl stop kiara-admin.service 2>/dev/null || true
+        systemctl stop kiara-admin-chat.service 2>/dev/null || true
+        systemctl stop kiara-mcp.service 2>/dev/null || true
+        systemctl stop kiara-cifs-flight-recorder.service 2>/dev/null || true
+        systemctl stop kiara-smb-pcap-recorder.service 2>/dev/null || true
+        ;;
+    remove|deconfigure)
+        # Stop and disable services only when the package is actually removed.
+        systemctl stop kiara.service 2>/dev/null || true
+        systemctl stop kiara-admin.service 2>/dev/null || true
+        systemctl stop kiara-admin-chat.service 2>/dev/null || true
+        systemctl stop kiara-mcp.service 2>/dev/null || true
+        systemctl stop kiara-cifs-flight-recorder.service 2>/dev/null || true
+        systemctl stop kiara-smb-pcap-recorder.service 2>/dev/null || true
+        systemctl disable kiara.service 2>/dev/null || true
+        systemctl disable kiara-admin.service 2>/dev/null || true
+        systemctl disable kiara-admin-chat.service 2>/dev/null || true
+        systemctl disable kiara-mcp.service 2>/dev/null || true
+        systemctl disable kiara-cifs-flight-recorder.service 2>/dev/null || true
+        systemctl disable kiara-smb-pcap-recorder.service 2>/dev/null || true
+        ;;
+esac
+
+#DEBHELPER#
+
+exit 0

@@ -1,0 +1,689 @@
+{% extends "base.html" %}
+
+{% block title %}KIara Wiki — Guide: VektorDB{% endblock %}
+
+{% block breadcrumb %}
+<a href="/wiki/">Wiki</a> &rsaquo; <span>Guide: VektorDB</span>
+{% endblock %}
+
+{% block content %}
+<h1>VektorDB</h1>
+
+<p class="wiki-intro">
+    Die VektorDB speichert alle Text-Chunks als Vektoren (Embeddings) in Qdrant. Der VektorDB-Tab
+    hat zwei Bereiche: <strong>Konnektor</strong> (Verbindungseinstellungen) und
+    <strong>DB-Management</strong> (Dateiverwaltung in Qdrant). Ergänzend gibt es im System-Tab
+    die <strong>Integritätsprüfung</strong>, die alle Datenschichten auf Konsistenz prüft.
+</p>
+
+<nav class="wiki-toc">
+    <h3>Inhalt</h3>
+    <ol>
+        <li><a href="#konnektor">Sub-Tab: Konnektor</a></li>
+        <li><a href="#management">Sub-Tab: DB-Management</a>
+            <ol>
+                <li><a href="#matrix">Datenquellen-Matrix</a></li>
+                <li><a href="#datei-details">Datei-Details &amp; Löschen</a></li>
+            </ol>
+        </li>
+        <li><a href="#collections">Collections &amp; Naming</a></li>
+        <li><a href="#embedding-modelle">Embedding-Modelle</a></li>
+        <li><a href="#payload">Payload-Schema</a></li>
+        <li><a href="#integrity">Integritätsprüfung</a>
+            <ol>
+                <li><a href="#integrity-checks">Prüfungen</a></li>
+                <li><a href="#integrity-repair">Reparatur-Aktionen</a></li>
+            </ol>
+        </li>
+        <li><a href="#datenschichten">Die 4 Datenschichten</a></li>
+        <li><a href="#api-endpoints">API-Endpunkte</a> (Verweis auf API-Katalog)</li>
+        <li><a href="#troubleshooting">Troubleshooting</a></li>
+    </ol>
+</nav>
+
+<!-- ============================= -->
+<!-- KONNEKTOR                     -->
+<!-- ============================= -->
+<h2 id="konnektor">Sub-Tab: Konnektor</h2>
+
+<p>
+    Qdrant-Verbindungseinstellungen. Änderungen an der Verbindung oder Vektordimension
+    erfordern eine Neuindexierung aller Datenquellen.
+</p>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Feld</th><th>Typ</th><th>Standard</th><th>Beschreibung</th><th>Empfehlung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>qdrant_url</code></td>
+            <td>Text</td>
+            <td><code>http://localhost:6333</code></td>
+            <td>URL des Qdrant-Servers (HTTP oder gRPC).</td>
+            <td>
+                Auf dem gleichen Host: <code>http://localhost:6333</code>.<br>
+                Remote: <code>http://localhost:6333</code>.<br>
+                Qdrant Cloud: <code>https://xxx.eu-west-1-0.aws.cloud.qdrant.io:6333</code>
+            </td>
+        </tr>
+        <tr>
+            <td><code>qdrant_api_key</code></td>
+            <td>Passwort</td>
+            <td>(leer)</td>
+            <td>Optionaler API-Key für authentifizierte Qdrant-Instanzen.</td>
+            <td>Nur nötig bei Qdrant Cloud oder wenn API-Key-Auth in der Qdrant-Config aktiviert ist. Lokal meist nicht erforderlich.</td>
+        </tr>
+        <tr>
+            <td><code>qdrant_grpc</code></td>
+            <td>Checkbox</td>
+            <td>Aus</td>
+            <td>gRPC-Protokoll statt HTTP verwenden.</td>
+            <td>
+                gRPC ist schneller bei großen Batch-Operationen (Embedding-Upload).
+                Erfordert Port 6334 (gRPC) statt 6333 (HTTP). Für lokale Setups
+                ist HTTP ausreichend.
+            </td>
+        </tr>
+        <tr>
+            <td><code>vector_size</code></td>
+            <td>Zahl</td>
+            <td><code>768</code></td>
+            <td>Vektordimension. Wird normalerweise automatisch vom Embedding-Modell bestimmt.</td>
+            <td>
+                <strong>Nicht manuell ändern</strong>, es sei denn das Modell wird nicht
+                automatisch erkannt. Standard-Werte:<br>
+                <code>nomic-embed-text</code> = 768<br>
+                <code>text-embedding-3-small</code> = 1536<br>
+                <code>voyage-3</code> = 1024
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<h3>Aktionen</h3>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Button</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Verbindung testen</strong></td>
+            <td>Prüft Erreichbarkeit des Qdrant-Servers und zeigt die Anzahl vorhandener Collections.</td>
+        </tr>
+        <tr>
+            <td><strong>Speichern</strong></td>
+            <td>Speichert die Verbindungseinstellungen in der Config.</td>
+        </tr>
+        <tr>
+            <td><strong>Zurücksetzen</strong></td>
+            <td>Verwirft ungespeicherte Änderungen und lädt die aktuellen Werte.</td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box">
+    <strong>Tipp:</strong> Nach Änderung der <code>qdrant_url</code> immer zuerst
+    &raquo;Verbindung testen&laquo; klicken, bevor gespeichert wird. Ein falscher Wert
+    führt dazu, dass keine Suchergebnisse mehr geliefert werden.
+</div>
+
+<!-- ============================= -->
+<!-- MANAGEMENT                    -->
+<!-- ============================= -->
+<h2 id="management">Sub-Tab: DB-Management</h2>
+
+<p>
+    Zeigt den Inhalt der VektorDB auf Dateiebene und ermöglicht das gezielte Löschen
+    einzelner Dateien aus dem Index.
+</p>
+
+<!-- --- Matrix --- -->
+<h3 id="matrix">Datenquellen-Matrix</h3>
+
+<p>
+    Die Matrix zeigt eine Übersicht aller Datenquellen × Embedding-Modelle mit der
+    jeweiligen Chunk-Anzahl. Jede Zelle ist klickbar und öffnet die Datei-Details.
+</p>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Spalte</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Datenquelle</strong></td>
+            <td>Name der Datenquelle.</td>
+        </tr>
+        <tr>
+            <td><strong>kb_&lt;modell&gt;</strong></td>
+            <td>
+                Eine Spalte pro Embedding-Modell (= Qdrant-Collection). Zeigt die Chunk-Anzahl
+                für diese Datenquelle in diesem Modell. Klick öffnet die Datei-Details.
+            </td>
+        </tr>
+        <tr>
+            <td><strong>Gesamt</strong> (letzte Zeile)</td>
+            <td>Summe aller Chunks pro Modell über alle Datenquellen.</td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box">
+    <strong>Tipp:</strong> Wenn eine Datenquelle in mehreren Modellen indexiert ist
+    (z.B. nach einem Modellwechsel), erscheinen mehrere Spalten. Die alte Collection
+    kann über den Konnektor-Tab oder direkt in Qdrant gelöscht werden.
+</div>
+
+<!-- --- Datei-Details --- -->
+<h3 id="datei-details">Datei-Details &amp; Löschen</h3>
+
+<p>
+    Nach Klick auf eine Zelle in der Matrix öffnet sich die Datei-Detailansicht
+    für die gewählte Datenquelle + Modell-Kombination.
+</p>
+
+<h4>Toolbar</h4>
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Element</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr><td><strong>Suchfeld</strong></td><td>Filtert Dateien nach Name/Pfad (live, case-insensitiv).</td></tr>
+        <tr><td><strong>Alle auswählen</strong></td><td>Toggle: markiert/entmarkiert alle sichtbaren Dateien.</td></tr>
+        <tr><td><strong>Ausgewählte löschen (N)</strong></td><td>Löscht die markierten Dateien aus Qdrant. Bestätigung erforderlich.</td></tr>
+        <tr><td><strong>Schließen</strong></td><td>Schließt die Datei-Detailansicht.</td></tr>
+    </tbody>
+</table>
+
+<h4>Datei-Tabelle</h4>
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Spalte</th><th>Beschreibung</th><th>Sortierbar</th></tr>
+    </thead>
+    <tbody>
+        <tr><td><strong>Checkbox</strong></td><td>Auswahl für Batch-Löschen.</td><td>Nein</td></tr>
+        <tr><td><strong>Dateipfad</strong></td><td>Voller Pfad — Verzeichnis in grau, Dateiname normal.</td><td>Ja</td></tr>
+        <tr><td><strong>Typ</strong></td><td>Dateiendung (<code>.pdf</code>, <code>.docx</code>, ...).</td><td>Ja</td></tr>
+        <tr><td><strong>Chunks</strong></td><td>Anzahl der Chunks dieser Datei im Index.</td><td>Ja</td></tr>
+        <tr><td><strong>Geändert</strong></td><td>Änderungszeitpunkt der Quelldatei (aus dem Payload).</td><td>Ja</td></tr>
+    </tbody>
+</table>
+
+<h4>Löschen — Was passiert</h4>
+<p>Beim Löschen von Dateien aus der VektorDB:</p>
+<ul class="wiki-examples">
+    <li>Alle Chunks der Datei werden aus der Qdrant-Collection entfernt</li>
+    <li>Zuordnungen in <code>chunk_datasources</code> werden gelöscht</li>
+    <li>Statistiken in <code>datasource_embeddings</code> werden aktualisiert</li>
+    <li>Shared Chunks (Datei in mehreren Datenquellen) werden nicht gelöscht, nur die DS-ID entfernt</li>
+    <li>Der File-Hash wird <em>nicht</em> gelöscht — beim nächsten Indexlauf wird die Datei neu verarbeitet</li>
+</ul>
+
+<div class="wiki-tip-box">
+    <strong>Tipp:</strong> Das Löschen einzelner Dateien ist nützlich, wenn eine Datei
+    fehlerhaft indexiert wurde (z.B. durch DDU-Fehler oder falsche Chunk-Strategie).
+    Beim nächsten Indexlauf wird sie automatisch neu verarbeitet.
+</div>
+
+<!-- ============================= -->
+<!-- COLLECTIONS                   -->
+<!-- ============================= -->
+<h2 id="collections">Collections &amp; Naming</h2>
+
+<p>
+    Jedes Embedding-Modell bekommt eine eigene Qdrant-Collection. Der Name wird
+    automatisch aus dem Modellnamen abgeleitet:
+</p>
+
+<pre class="wiki-code-block"><code># Namens-Schema
+kb_{normalisierter_modellname}
+
+# Normalisierung:
+# 1. ":latest" Tag wird entfernt
+# 2. Sonderzeichen werden durch "_" ersetzt
+
+# Beispiele:
+nomic-embed-text          →  kb_nomic-embed-text
+nomic-embed-text:v1.5     →  kb_nomic-embed-text_v1.5
+text-embedding-3-small    →  kb_text-embedding-3-small
+voyage-3                  →  kb_voyage-3</code></pre>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Eigenschaft</th><th>Wert</th></tr>
+    </thead>
+    <tbody>
+        <tr><td><strong>Distance Metric</strong></td><td>COSINE</td></tr>
+        <tr><td><strong>Vektordimension</strong></td><td>Automatisch vom Modell (768, 1024, 1536, ...)</td></tr>
+        <tr><td><strong>Payload-Indexes</strong></td><td><code>source</code>, <code>source_key</code>, <code>directory</code>, <code>file_type</code>, <code>ds_ids</code>, <code>modified</code></td></tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box">
+    <strong>Tipp — Dimension-Erkennung (Cascade):</strong> Die Vektordimension wird in
+    folgender Reihenfolge ermittelt:
+    <ol>
+        <li>Aus der KI-Backend-Konfiguration (<code>embedding_dim</code>)</li>
+        <li>Live-Abfrage beim Ollama-Server (<code>/api/show</code>)</li>
+        <li>Lookup-Tabelle bekannter Modelle (<code>KNOWN_EMBEDDING_DIMENSIONS</code>)</li>
+        <li>Fallback: <code>vector_size</code> aus der Config (Standard: 768)</li>
+    </ol>
+</div>
+
+<!-- ============================= -->
+<!-- EMBEDDING-MODELLE             -->
+<!-- ============================= -->
+<h2 id="embedding-modelle">Embedding-Modelle</h2>
+
+<p>
+    KIara unterstützt drei Embedding-Provider. Welches Modell verwendet wird,
+    wird im KI-Tab unter &raquo;Backends&laquo; konfiguriert.
+</p>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Provider</th><th>Modelle (Beispiele)</th><th>Dimension</th><th>Batch-Limit</th><th>Besonderheit</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Ollama</strong> (lokal)</td>
+            <td>
+                <code>nomic-embed-text</code> (768)<br>
+                <code>mxbai-embed-large</code> (1024)<br>
+                <code>snowflake-arctic-embed</code> (1024)
+            </td>
+            <td>modellabhängig</td>
+            <td>unbegrenzt (Streaming)</td>
+            <td>
+                Läuft lokal auf der GPU. Kein API-Key nötig.
+                <code>nomic-embed-text</code> nutzt Query/Document-Prefixes
+                (<code>search_query:</code> / <code>search_document:</code>), die
+                der KIron-Embedding-Proxy serverseitig ueber den
+                <code>input_type</code>-Parameter setzt.
+            </td>
+        </tr>
+        <tr>
+            <td><strong>OpenAI</strong></td>
+            <td>
+                <code>text-embedding-3-small</code> (1536)<br>
+                <code>text-embedding-3-large</code> (3072)
+            </td>
+            <td>1536 / 3072</td>
+            <td>2048 Texte/Request</td>
+            <td>Cloud-basiert. API-Key erforderlich. Höhere Qualität, aber Kosten pro Token.</td>
+        </tr>
+        <tr>
+            <td><strong>Voyage AI</strong></td>
+            <td>
+                <code>voyage-3</code> (1024)<br>
+                <code>voyage-3-lite</code> (512)
+            </td>
+            <td>1024 / 512</td>
+            <td>1000 Texte/Request</td>
+            <td>Cloud-basiert. API-Key erforderlich. Spezialisiert auf Retrieval-Qualität.</td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box wiki-tip-warning">
+    <strong>Achtung:</strong> Ein Wechsel des Embedding-Modells erfordert eine
+    <strong>Voll-Indexierung</strong> aller Datenquellen, da die Vektordimensionen und
+    der Vektorraum zwischen Modellen nicht kompatibel sind. Die alte Collection bleibt
+    bestehen und kann manuell gelöscht werden.
+</div>
+
+<!-- ============================= -->
+<!-- PAYLOAD                       -->
+<!-- ============================= -->
+<h2 id="payload">Payload-Schema</h2>
+
+<p>
+    Jeder Vektor-Punkt in Qdrant hat neben dem Embedding-Vektor ein Payload mit Metadaten.
+    Diese Felder werden bei der Suche für Filterung und bei der Anzeige für Kontext genutzt.
+</p>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Feld</th><th>Typ</th><th>Index</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>source</code></td>
+            <td>String</td>
+            <td>KEYWORD</td>
+            <td>Absoluter Pfad der Quelldatei.</td>
+        </tr>
+        <tr>
+            <td><code>source_key</code></td>
+            <td>String</td>
+            <td>KEYWORD</td>
+            <td>Identisch zu <code>source</code>. Dedizierter Index für O(1)-Lookups.</td>
+        </tr>
+        <tr>
+            <td><code>directory</code></td>
+            <td>String</td>
+            <td>TEXT</td>
+            <td>Verzeichnispfad (ohne Dateiname).</td>
+        </tr>
+        <tr>
+            <td><code>file_type</code></td>
+            <td>String</td>
+            <td>KEYWORD</td>
+            <td>Dateiendung (z.B. <code>pdf</code>, <code>docx</code>).</td>
+        </tr>
+        <tr>
+            <td><code>ds_ids</code></td>
+            <td>Integer[]</td>
+            <td>INTEGER</td>
+            <td>
+                IDs aller Datenquellen, die diesen Chunk enthalten. Ermöglicht
+                datenquellenspezifische Suche und Berechtigungsprüfung.
+            </td>
+        </tr>
+        <tr>
+            <td><code>modified</code></td>
+            <td>Datetime</td>
+            <td>DATETIME</td>
+            <td>Änderungszeitpunkt der Quelldatei.</td>
+        </tr>
+        <tr>
+            <td><code>_text</code></td>
+            <td>String</td>
+            <td>(kein Index)</td>
+            <td>Voller Textinhalt des Chunks. Wird bei der Antwortgenerierung als Kontext verwendet.</td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box">
+    <strong>Tipp:</strong> Das <code>ds_ids</code>-Array ermöglicht, dass ein Chunk
+    mehreren Datenquellen zugeordnet sein kann (z.B. wenn derselbe Pfad in zwei
+    lokalen Datenquellen konfiguriert ist). Beim Löschen einer Datenquelle wird nur
+    die DS-ID entfernt — der Chunk bleibt erhalten, solange noch andere DS-IDs vorhanden sind.
+</div>
+
+<!-- ============================= -->
+<!-- INTEGRITAET                   -->
+<!-- ============================= -->
+<h2 id="integrity">Integritätsprüfung</h2>
+
+<p>
+    Die Integritätsprüfung (im System-Tab) vergleicht alle 4 Datenschichten
+    auf Konsistenz. Sie erkennt verwaiste Chunks, fehlende Zuordnungen und
+    Statistik-Abweichungen.
+</p>
+
+<!-- --- Checks --- -->
+<h3 id="integrity-checks">Prüfungen</h3>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Check</th><th>Beschreibung</th><th>Mögliche Befunde</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Layer-Counts</strong></td>
+            <td>
+                Vergleicht die Chunk-Zähler aller Schichten:
+                Qdrant-Punkte, Elasticsearch-Dokumente, <code>chunk_datasources</code>-Einträge
+                und <code>datasource_embeddings</code>-Summe.
+            </td>
+            <td>
+                Abweichungen deuten auf nicht synchronisierte Schichten hin
+                (z.B. nach einem Crash während der Indexierung).
+            </td>
+        </tr>
+        <tr>
+            <td><strong>DS-Coverage</strong></td>
+            <td>
+                Prüft für jede Datenquelle, ob die Chunk-Zähler in
+                <code>chunk_datasources</code>, <code>datasource_embeddings</code>
+                und <code>file_hashes</code> konsistent sind.
+            </td>
+            <td>
+                Warnungen pro Datenquelle, wenn Zähler auseinanderlaufen.
+            </td>
+        </tr>
+        <tr>
+            <td><strong>ES-Duplikate</strong></td>
+            <td>
+                Sucht nach Quellen mit ungewöhnlich vielen Elasticsearch-Einträgen
+                (Schwelle: &gt;5000 Einträge pro Quelle).
+            </td>
+            <td>
+                Hinweis auf doppelte Indexierung oder fehlende Bereinigung nach Löschen.
+            </td>
+        </tr>
+        <tr>
+            <td><strong>Orphan-Chunks</strong></td>
+            <td>
+                Stichproben-Scan: Prüft zufällige Chunks in Qdrant, ob sie eine
+                Zuordnung in <code>chunk_datasources</code> haben.
+            </td>
+            <td>
+                Verwaiste Chunks (Orphans) haben keinen Besitzer — sie belegen Speicher
+                und liefern möglicherweise veraltete Ergebnisse.
+            </td>
+        </tr>
+        <tr>
+            <td><strong>Overlapping DS</strong></td>
+            <td>
+                Erkennt Datenquellen, die auf identische oder verschachtelte Pfade zeigen.
+            </td>
+            <td>
+                Warnung bei identischen Pfaden (Duplikate) oder Unterverzeichnis-Beziehungen.
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<h4>Gesamt-Status</h4>
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Status</th><th>Bedeutung</th></tr>
+    </thead>
+    <tbody>
+        <tr><td><span class="wiki-status-bullish"><strong>OK</strong></span></td><td>Alle Schichten konsistent. Keine Aktion nötig.</td></tr>
+        <tr><td><span class="wiki-status-unclear"><strong>Degraded</strong></span></td><td>Warnungen vorhanden, aber kein Datenverlust. Reparatur empfohlen.</td></tr>
+        <tr><td><span class="wiki-status-bearish"><strong>Critical</strong></span></td><td>Schwerwiegende Inkonsistenzen. Reparatur erforderlich.</td></tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box">
+    <strong>Tipp:</strong> Für einen schnellen Überblick gibt es den <strong>Schnell-Check</strong>,
+    der nur die Layer-Counts vergleicht (wenige Sekunden). Die <strong>Vollprüfung</strong>
+    läuft im Hintergrund und kann bei großen Datenbeständen einige Minuten dauern.
+</div>
+
+<!-- --- Repair --- -->
+<h3 id="integrity-repair">Reparatur-Aktionen</h3>
+
+<p>
+    Reparatur-Aktionen werden nur angeboten, wenn die Prüfung Probleme erkennt.
+    Alle erfordern eine Bestätigung.
+</p>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Aktion</th><th>Beschreibung</th><th>Wann verwenden</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>ds_ids synchronisieren</strong></td>
+            <td>
+                Liest alle Zuordnungen aus <code>chunk_datasources</code> und schreibt
+                das <code>ds_ids</code>-Payload-Feld in Qdrant neu.
+            </td>
+            <td>
+                Wenn Datenquellen-Zuordnungen in Qdrant nicht mit der DB übereinstimmen
+                (z.B. nach manuellem DB-Eingriff).
+            </td>
+        </tr>
+        <tr>
+            <td><strong>Statistiken korrigieren</strong></td>
+            <td>
+                Zählt die tatsächlichen Chunks pro Datenquelle in <code>chunk_datasources</code>
+                und aktualisiert <code>datasource_embeddings.chunk_count</code>.
+            </td>
+            <td>
+                Wenn die Chunk-Zähler in der Matrix nicht mit der Realität übereinstimmen.
+            </td>
+        </tr>
+        <tr>
+            <td><strong>Verwaiste Chunks löschen</strong></td>
+            <td>
+                Scannt <strong>ALLE</strong> Chunks in Qdrant und löscht diejenigen
+                ohne Zuordnung in <code>chunk_datasources</code>.
+            </td>
+            <td>
+                Bei Orphan-Befund. <strong>Destruktiv</strong> — nur ausführen,
+                wenn die Vollprüfung Orphans bestätigt hat.
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box wiki-tip-warning">
+    <strong>Achtung:</strong> &raquo;Verwaiste Chunks löschen&laquo; scannt den
+    <em>gesamten</em> Qdrant-Bestand. Bei großen Collections (>100.000 Punkte)
+    kann das mehrere Minuten dauern. Die Aktion ist nicht umkehrbar —
+    gelöschte Chunks müssen bei Bedarf neu indexiert werden.
+</div>
+
+<!-- ============================= -->
+<!-- 4 DATENSCHICHTEN              -->
+<!-- ============================= -->
+<h2 id="datenschichten">Die 4 Datenschichten</h2>
+
+<p>
+    KIara speichert Indexdaten in 4 voneinander abhängigen Schichten. Beim Löschen
+    einer Datenquelle müssen <strong>alle 4 Schichten</strong> bereinigt werden,
+    damit keine verwaisten Daten zurückbleiben.
+</p>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>#</th><th>Schicht</th><th>Speicherort</th><th>Inhalt</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>1</td>
+            <td><strong>Qdrant</strong></td>
+            <td>Collection <code>kb_&lt;modell&gt;</code></td>
+            <td>Vektor-Embeddings + Payload (Text, Metadaten, ds_ids).</td>
+        </tr>
+        <tr>
+            <td>2</td>
+            <td><strong>datasource_embeddings</strong></td>
+            <td>PostgreSQL</td>
+            <td>Aggregierte Statistiken: Chunk-Count, File-Count, letzter Indexierungszeitpunkt pro DS + Modell.</td>
+        </tr>
+        <tr>
+            <td>3</td>
+            <td><strong>file_hashes</strong></td>
+            <td>PostgreSQL (<code>file_hashes</code>-Tabelle)</td>
+            <td>Hash-Tabelle für inkrementelle Indexierung (Pfad + Größe + mtime).</td>
+        </tr>
+        <tr>
+            <td>4</td>
+            <td><strong>chunk_datasources</strong></td>
+            <td>PostgreSQL</td>
+            <td>Zuordnung: welcher Chunk gehört zu welcher Datenquelle.</td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box">
+    <strong>Tipp:</strong> Wenn eine Datenquelle über die Admin-UI gelöscht wird, bereinigt
+    KIara automatisch alle 4 Schichten (DS-spezifisches Löschen via Scroll+Bulk in Qdrant,
+    Cascade in PostgreSQL, Hash-Bereinigung). Manuelles Eingreifen in einzelne Schichten
+    (z.B. direktes Löschen in Qdrant) führt zu Inkonsistenzen, die die Integritätsprüfung erkennt.
+</div>
+
+<!-- ============================= -->
+<!-- API (Verweis)                 -->
+<!-- ============================= -->
+<h2 id="api-endpoints">API-Endpunkte</h2>
+
+<p>
+    Die vollständige API-Referenz wird dynamisch aus der Admin-Registry generiert:
+</p>
+<ul class="wiki-examples">
+    <li><a href="/wiki/api/vectordb">VektorDB-API</a> — Dateiliste, Datei-Löschung, Verbindungstest</li>
+    <li><a href="/wiki/api/integrity">Integrity-API</a> — Vollprüfung, Schnell-Check, Reparatur-Aktionen</li>
+</ul>
+
+<!-- ============================= -->
+<!-- TROUBLESHOOTING               -->
+<!-- ============================= -->
+<h2 id="troubleshooting">Troubleshooting</h2>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Problem</th><th>Mögliche Ursache</th><th>Lösung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>Verbindungstest schlägt fehl</td>
+            <td>Qdrant-Container nicht gestartet, falscher Port, Firewall</td>
+            <td>
+                <code>docker ps | grep qdrant</code> prüfen.
+                <code>curl http://localhost:6333/healthz</code> testen.
+                Standard-Port: 6333 (HTTP), 6334 (gRPC).
+            </td>
+        </tr>
+        <tr>
+            <td>Collection hat falsche Dimension</td>
+            <td>Embedding-Modell gewechselt, aber alte Collection bleibt</td>
+            <td>
+                Alte Collection manuell löschen:
+                <code>curl -X DELETE http://localhost:6333/collections/kb_altes_modell</code>.
+                Dann alle Datenquellen voll-indexieren.
+            </td>
+        </tr>
+        <tr>
+            <td>Chunk-Zähler in Matrix stimmen nicht</td>
+            <td>Statistiken nach Crash nicht aktualisiert</td>
+            <td>
+                Integritätsprüfung → &raquo;Statistiken korrigieren&laquo; ausführen.
+            </td>
+        </tr>
+        <tr>
+            <td>Suchergebnisse enthalten gelöschte Dateien</td>
+            <td>Chunks in Qdrant nicht bereinigt (z.B. nach manuellem DB-Löschen)</td>
+            <td>
+                Integritätsprüfung → &raquo;Verwaiste Chunks löschen&laquo;.
+                Alternativ: Datenquelle voll-indexieren.
+            </td>
+        </tr>
+        <tr>
+            <td>Qdrant Speicherverbrauch steigt</td>
+            <td>Alte Collections nach Modellwechsel, verwaiste Chunks</td>
+            <td>
+                Nicht mehr benötigte Collections löschen.
+                Integritätsprüfung auf Orphans prüfen.
+                Qdrant-Dashboard: <code>http://localhost:6333/dashboard</code>.
+            </td>
+        </tr>
+        <tr>
+            <td>&raquo;Dimension mismatch&laquo; bei Indexierung</td>
+            <td>Collection existiert mit alter Dimension, neues Modell hat andere</td>
+            <td>
+                Collection löschen und neu indexieren. Passiert typischerweise bei
+                Wechsel von <code>nomic-embed-text</code> (768) zu <code>voyage-3</code> (1024).
+            </td>
+        </tr>
+        <tr>
+            <td>ds_ids in Qdrant stimmen nicht mit DB überein</td>
+            <td>Race Condition, manueller DB-Eingriff, Crash während Löschen</td>
+            <td>
+                Integritätsprüfung → &raquo;ds_ids synchronisieren&laquo;.
+                Schreibt alle ds_ids-Payload-Felder aus <code>chunk_datasources</code> neu.
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+{% endblock %}

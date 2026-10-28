@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block title %}KIara Wiki — Startseite{% endblock %}
+
+{% block content %}
+<h1>KIara Wiki</h1>
+
+<p class="wiki-intro">
+    Willkommen im KIara-Wiki. Hier findest du die automatisch generierte Dokumentation
+    aller Admin-Funktionen, API-Endpunkte und Konfigurationsoptionen.
+</p>
+
+<div class="wiki-stats-grid">
+    <div class="wiki-stat-card">
+        <span class="wiki-stat-number">{{ summary.total_functions }}</span>
+        <span class="wiki-stat-label">Funktionen registriert</span>
+    </div>
+    <div class="wiki-stat-card">
+        <span class="wiki-stat-number">{{ summary.total_categories }}</span>
+        <span class="wiki-stat-label">Kategorien</span>
+    </div>
+    <div class="wiki-stat-card">
+        <span class="wiki-stat-number">{{ summary.errors|length }}</span>
+        <span class="wiki-stat-label">Fehler</span>
+    </div>
+    <div class="wiki-stat-card">
+        <span class="wiki-stat-number">{{ summary.warnings|length }}</span>
+        <span class="wiki-stat-label">Warnungen</span>
+    </div>
+</div>
+
+<div class="wiki-quick-links">
+    <h2>Quick-Links</h2>
+    <div class="wiki-link-grid">
+        <a href="/wiki/guide/architecture" class="wiki-link-card">
+            <span class="wiki-link-icon" aria-hidden="true">&#8644;</span>
+            <span class="wiki-link-title">Architektur verstehen</span>
+            <span class="wiki-link-desc">Ingestion, Retrieval und geprüfte Codebelege</span>
+        </a>
+        <a href="/wiki/api/" class="wiki-link-card">
+            <span class="wiki-link-icon">&#128218;</span>
+            <span class="wiki-link-title">API-Katalog</span>
+            <span class="wiki-link-desc">Alle {{ summary.total_functions }} Admin-Funktionen</span>
+        </a>
+        <a href="/wiki/guide/datasources" class="wiki-link-card">
+            <span class="wiki-link-icon">&#128451;</span>
+            <span class="wiki-link-title">Datenquellen</span>
+            <span class="wiki-link-desc">Konnektoren &amp; Indexierung</span>
+        </a>
+        <a href="/wiki/guide/jobs" class="wiki-link-card">
+            <span class="wiki-link-icon">&#9881;</span>
+            <span class="wiki-link-title">Jobs</span>
+            <span class="wiki-link-desc">Ingestion-Pipeline</span>
+        </a>
+        <a href="/wiki/guide/system" class="wiki-link-card">
+            <span class="wiki-link-icon">&#128295;</span>
+            <span class="wiki-link-title">System</span>
+            <span class="wiki-link-desc">Services &amp; Infrastruktur</span>
+        </a>
+    </div>
+</div>
+
+<!-- Self-Check -->
+<div class="wiki-self-check">
+    <h2>Self-Check</h2>
+    <div class="self-check-box">
+        <div class="self-check-item self-check-ok">
+            &#10003; {{ summary.total_functions }} Funktionen registriert in {{ summary.total_categories }} Kategorien
+        </div>
+
+        {% if summary.errors %}
+        <div class="self-check-item self-check-error">
+            &#10007; {{ summary.errors|length }} Fehler:
+            {% for e in summary.errors[:5] %}
+                <span class="self-check-func">{{ e.function }}</span> ({{ e.message }}){% if not loop.last %}, {% endif %}
+            {% endfor %}
+            {% if summary.errors|length > 5 %} &hellip; und {{ summary.errors|length - 5 }} weitere{% endif %}
+        </div>
+        {% else %}
+        <div class="self-check-item self-check-ok">&#10003; Keine Fehler</div>
+        {% endif %}
+
+        {% if summary.warnings %}
+        <div class="self-check-item self-check-warn">
+            &#9888; {{ summary.warnings|length }} Warnungen:
+            {% for w in summary.warnings[:5] %}
+                <span class="self-check-func">{{ w.function }}</span> ({{ w.message }}){% if not loop.last %}, {% endif %}
+            {% endfor %}
+            {% if summary.warnings|length > 5 %} &hellip; und {{ summary.warnings|length - 5 }} weitere{% endif %}
+        </div>
+        {% else %}
+        <div class="self-check-item self-check-ok">&#10003; Keine Warnungen</div>
+        {% endif %}
+
+        {% if summary.infos %}
+        <div class="self-check-item self-check-info">
+            &#8505; {{ summary.infos|length }} Hinweise:
+            {% for i in summary.infos[:5] %}
+                <span class="self-check-func">{{ i.function }}</span> ({{ i.message }}){% if not loop.last %}, {% endif %}
+            {% endfor %}
+            {% if summary.infos|length > 5 %} &hellip; und {{ summary.infos|length - 5 }} weitere{% endif %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+
+{% block title %}KIara Wiki — {{ func.name }}{% endblock %}
+
+{% block breadcrumb %}
+<a href="/wiki/">Wiki</a> &rsaquo; <a href="/wiki/api/">API-Katalog</a> &rsaquo; <a href="/wiki/api/{{ func.category }}">{{ func.category }}</a> &rsaquo; <span>{{ func.name }}</span>
+{% endblock %}
+
+{% block content %}
+<h1>{{ func.name }}</h1>
+
+<div class="wiki-func-header-bar">
+    {% if func.http_method and func.http_path %}
+    <span class="wiki-http-badge wiki-http-{{ func.http_method|lower }}">{{ func.http_method }}</span>
+    <code class="wiki-http-path-lg">{{ func.http_path }}</code>
+    {% else %}
+    <span class="wiki-http-badge wiki-http-chat">Chat-only</span>
+    {% endif %}
+    <span class="wiki-category-tag">{{ func.category }}</span>
+</div>
+
+<p class="wiki-func-description-lg">{{ func.description }}</p>
+
+{% if func.help %}
+<div class="wiki-section">
+    <h2>Hilfe</h2>
+    <div class="wiki-help-text">{{ func.help }}</div>
+</div>
+{% endif %}
+
+{% if func.parameters and func.parameters.get("properties") %}
+<div class="wiki-section">
+    <h2>Parameter</h2>
+    <table class="wiki-param-table">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Typ</th>
+                <th>Required</th>
+                <th>Default</th>
+                <th>Beschreibung</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% set required_params = func.parameters.get("required", []) %}
+            {% for pname, pdef in func.parameters["properties"].items() %}
+            <tr>
+                <td><code>{{ pname }}</code></td>
+                <td>{{ pdef.get("type", "—") }}</td>
+                <td>{% if pname in required_params %}Ja{% else %}Nein{% endif %}</td>
+                <td>{{ pdef.get("default", "—") }}</td>
+                <td>{{ pdef.get("description", "—") }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+{% if func.returns %}
+<div class="wiki-section">
+    <h2>Rückgabe</h2>
+    <p>{{ func.returns }}</p>
+</div>
+{% endif %}
+
+{% if func.examples %}
+<div class="wiki-section">
+    <h2>Beispiel-Prompts</h2>
+    <ul class="wiki-examples">
+        {% for ex in func.examples %}
+        <li>{{ ex }}</li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
+{% if func.requires_confirmation %}
+<div class="wiki-section">
+    <h2>Confirmation</h2>
+    <p>Diese Funktion erfordert eine Bestätigung vor der Ausführung.</p>
+    {% if func.confirm_template %}
+    <p>Template: <code>{{ func.confirm_template }}</code></p>
+    {% endif %}
+</div>
+{% endif %}
+
+{% if func.changelog_area %}
+<div class="wiki-section">
+    <h2>Changelog</h2>
+    <p>Area: <code>{{ func.changelog_area }}</code> | Action: <code>{{ func.changelog_action }}</code></p>
+</div>
+{% endif %}
+
+<!-- HTTP-Request-Beispiel (curl) -->
+{% if func.http_method and func.http_path %}
+<div class="wiki-section">
+    <h2>HTTP-Request (curl)</h2>
+    <pre class="wiki-code-block"><code>curl -X {{ func.http_method }} 'http://HOST:8502{{ func.http_path }}' \
+  -H 'Cookie: kiara_admin_session=SESSION' \
+  -H 'X-Requested-With: XMLHttpRequest'{% if func.http_method in ['POST', 'PUT', 'PATCH', 'DELETE'] %} \
+  -H 'X-CSRF-Token: CSRF'{% endif %}{% if func.http_method in ['POST', 'PUT', 'PATCH'] and func.parameters and func.parameters.get("properties") %} \
+  -H 'Content-Type: application/json' \
+  -d '{
+    {% for pname in func.parameters["properties"].keys() %}"{{ pname }}": "..."{% if not loop.last %},
+    {% endif %}{% endfor %}
+  }'{% endif %}</code></pre>
+    {% if func.http_method in ['POST', 'PUT', 'PATCH', 'DELETE'] %}
+    <p class="wiki-note">Mutierende Aufrufe benoetigen einen CSRF-Klartext-Token.
+    Token-Beschaffung: Login-Response liefert <code>csrf_token</code>, oder
+    <code>GET /api/auth/csrf</code> mit gueltigem Session-Cookie rotiert und
+    liefert einen frischen Klartext.</p>
+    {% endif %}
+</div>
+{% endif %}
+
+<div class="wiki-section wiki-meta-section">
+    <h2>Metadaten</h2>
+    <table class="wiki-meta-table">
+        <tr><td>raw_response</td><td>{% if func.raw_response %}Ja{% else %}Nein{% endif %}</td></tr>
+        {% if func.pk_param %}
+        <tr><td>PK-Param</td><td><code>{{ func.pk_param }}</code></td></tr>
+        {% endif %}
+        <tr><td>Kategorie</td><td>{{ func.category }}</td></tr>
+    </table>
+</div>
+
+{% if func.checks %}
+<div class="wiki-section">
+    <h2>Self-Check</h2>
+    <div class="wiki-func-checks">
+        {% for check in func.checks %}
+        <span class="wiki-check-badge wiki-check-{{ check.level }}">{{ check.message }}</span>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+{% endblock %}

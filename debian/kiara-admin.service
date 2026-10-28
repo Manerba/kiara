@@ -1,0 +1,32 @@
+[Unit]
+Description=KIara Admin UI
+After=network.target
+OnFailure=kiara-failure-logger@%n.service
+
+[Service]
+Type=simple
+User=kiara
+Group=kiara
+WorkingDirectory=/opt/kiara
+ExecStart=/opt/kiara/venv/bin/kiara serve-admin
+Restart=on-failure
+RestartSec=10
+Environment=KIARA_CONFIG=/etc/kiara/kiara.yaml
+
+# Hardening
+ProtectHome=true
+PrivateTmp=true
+# NoNewPrivileges deaktiviert: Worker/Admin-Pfade nutzen sudo (mount/install/systemctl-restart/davfs-tee)
+NoNewPrivileges=false
+ProtectSystem=full
+ReadWritePaths=/etc/kiara /var/lib/kiara /var/log/kiara /etc/davfs2
+# full statt strict — Admin-UI muss auf Datasource-Pfade zugreifen
+# (SMB-Mounts browsen, Connector-Tests). full = /usr,/boot,/etc read-only.
+# Python JIT benoetigt Write+Execute
+MemoryDenyWriteExecute=false
+
+# Resource Limits
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

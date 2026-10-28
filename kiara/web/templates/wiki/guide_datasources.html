@@ -1,0 +1,1046 @@
+{% extends "base.html" %}
+
+{% block title %}KIara Wiki — Guide: Datenquellen{% endblock %}
+
+{% block breadcrumb %}
+<a href="/wiki/">Wiki</a> &rsaquo; <span>Guide: Datenquellen</span>
+{% endblock %}
+
+{% block content %}
+<h1>Datenquellen</h1>
+
+<p class="wiki-intro">
+    Datenquellen sind die Verbindung zwischen KIara und den Unternehmensdaten. Jede Datenquelle
+    verbindet einen <strong>Konnektor</strong> (Dateisystem, SMB, WebDAV, E-Mail, SQL) mit
+    konfigurierbaren <strong>Ingestion-Einstellungen</strong> (Chunking, DDU, VLM) und optionalen
+    <strong>Zugriffsrechten</strong> (Gruppen/Benutzer).
+</p>
+
+<nav class="wiki-toc">
+    <h3>Inhalt</h3>
+    <ol>
+        <li><a href="#uebersicht">Übersicht &amp; Tabelle</a></li>
+        <li><a href="#connectors">Konnektor-Typen</a>
+            <ol>
+                <li><a href="#conn-local">Lokal</a></li>
+                <li><a href="#conn-smb">SMB-Freigabe</a></li>
+                <li><a href="#conn-webdav">WebDAV</a></li>
+                <li><a href="#conn-imap">E-Mail (IMAP)</a></li>
+                <li><a href="#conn-exchange">Exchange Online</a></li>
+                <li><a href="#conn-sql">SQL-Datenbank</a></li>
+            </ol>
+        </li>
+        <li><a href="#ingestion-settings">Ingestion-Einstellungen</a>
+            <ol>
+                <li><a href="#chunking">Chunk-Strategie</a></li>
+                <li><a href="#ddu">Document Understanding (DDU)</a></li>
+                <li><a href="#vlm">Vision Language Model (VLM)</a></li>
+                <li><a href="#file-filters">Dateityp-Filter &amp; Ausschlussmuster</a></li>
+                <li><a href="#sync-interval">Sync-Intervall</a></li>
+                <li><a href="#contextual-retrieval">Contextual Retrieval</a></li>
+                <li><a href="#colbert">ColBERT</a></li>
+            </ol>
+        </li>
+        <li><a href="#access-control">Zugriffsrechte</a></li>
+        <li><a href="#ingestion-control">Indexierung steuern</a></li>
+        <li><a href="#api-endpoints">API-Endpunkte</a> (Verweis auf API-Katalog)</li>
+        <li><a href="#troubleshooting">Troubleshooting</a></li>
+    </ol>
+</nav>
+
+<!-- ============================= -->
+<!-- UEBERSICHT                    -->
+<!-- ============================= -->
+<h2 id="uebersicht">Übersicht &amp; Tabelle</h2>
+
+<p>
+    Der Datenquellen-Tab zeigt alle konfigurierten Quellen in einer zentralen Tabelle.
+    Es gibt keine Sub-Tabs — alle Aktionen (Erstellen, Bearbeiten, Indexieren, Löschen)
+    sind direkt über die Tabelle erreichbar.
+</p>
+
+<h3>Tabellen-Spalten</h3>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Spalte</th><th>Beschreibung</th><th>Hinweis</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Name</strong></td>
+            <td>Anzeigename der Datenquelle. Klick öffnet das Bearbeiten-Modal.</td>
+            <td>Frei wählbar, muss nicht eindeutig sein (die ID ist intern eindeutig).</td>
+        </tr>
+        <tr>
+            <td><strong>Typ</strong></td>
+            <td>Konnektor-Typ als farbiges Badge (z.B. &raquo;SMB-Freigabe&laquo;, &raquo;E-Mail (IMAP)&laquo;).</td>
+            <td>Wird beim Erstellen festgelegt und kann nachträglich nicht geändert werden.</td>
+        </tr>
+        <tr>
+            <td><strong>Quelle</strong></td>
+            <td>Formatierte Zusammenfassung der Verbindungsdaten (z.B. <code>server:/Share</code>).</td>
+            <td>Aus der Konnektor-Konfiguration generiert.</td>
+        </tr>
+        <tr>
+            <td><strong>Chunk-Strategie</strong></td>
+            <td>Aktive Chunk-Strategie (auto, prose, code, email, ...).</td>
+            <td>Siehe <a href="#chunking">Chunk-Strategie</a>.</td>
+        </tr>
+        <tr>
+            <td><strong>Chunks</strong></td>
+            <td>Anzahl der Chunks pro Embedding-Modell, inkl. letztem Indexierungszeitpunkt.</td>
+            <td>Wird nach jeder Indexierung aktualisiert. Mehrere Modelle möglich.</td>
+        </tr>
+        <tr>
+            <td><strong>Ingestion-Status</strong></td>
+            <td>Aktueller Status: <em>idle</em>, <em>running</em> (grün), <em>paused</em> (orange), <em>error</em> (rot).</td>
+            <td>Bei laufender Indexierung wird ein Fortschrittsbalken angezeigt.</td>
+        </tr>
+        <tr>
+            <td><strong>Zugriff</strong></td>
+            <td>Zugewiesene Gruppen und Benutzer als Tag-Liste.</td>
+            <td>Ohne Zuweisung: Alle Benutzer haben Zugriff.</td>
+        </tr>
+    </tbody>
+</table>
+
+<h3>Aktionen pro Datenquelle</h3>
+
+<p>Das Drei-Punkte-Menü jeder Zeile bietet:</p>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Aktion</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr><td><strong>Bearbeiten</strong></td><td>Öffnet das Edit-Modal mit allen Einstellungen.</td></tr>
+        <tr><td><strong>Berechtigungen</strong></td><td>Gruppen- und Benutzer-Zuweisung (siehe <a href="#access-control">Zugriffsrechte</a>).</td></tr>
+        <tr><td><strong>Verbindung testen</strong></td><td>Prüft Erreichbarkeit der Quelle (Server, Credentials, Pfad).</td></tr>
+        <tr><td><strong>Status</strong></td><td>Zeigt Ingestion-Details: Phase, Fortschritt, Fehler.</td></tr>
+        <tr><td><strong>Indexieren</strong></td><td>Inkrementelle Indexierung — nur neue/geänderte Dateien.</td></tr>
+        <tr><td><strong>Voll-Indexieren</strong></td><td>Alle Dateien neu indexieren (File-Hashes werden zurückgesetzt).</td></tr>
+        <tr><td><strong>Pause / Abbrechen</strong></td><td>Nur bei laufender Indexierung sichtbar.</td></tr>
+        <tr><td><strong>Löschen</strong></td><td>Entfernt die Datenquelle und <em>alle</em> zugehörigen Daten (irreversibel).</td></tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box wiki-tip-warning">
+    <strong>Achtung:</strong> &raquo;Löschen&laquo; entfernt die Datenquelle vollständig aus
+    allen 4 Datenschichten: Qdrant-Vektoren, Elasticsearch-Index, File-Hashes und Datenbank
+    (inkl. Chunk-Zuordnungen und Embedding-Statistiken). Dieser Vorgang ist nicht umkehrbar.
+</div>
+
+<!-- ============================= -->
+<!-- KONNEKTOR-TYPEN               -->
+<!-- ============================= -->
+<h2 id="connectors">Konnektor-Typen</h2>
+
+<p>
+    Jeder Konnektor definiert sein eigenes Config-Schema. Die Felder werden im Create/Edit-Modal
+    dynamisch anhand des gewählten Typs gerendert. Passwort-Felder (<code>secret: true</code>)
+    werden AES-verschlüsselt gespeichert und im UI maskiert angezeigt (<code>••••••••</code>).
+</p>
+
+<!-- --- LOCAL --- -->
+<h3 id="conn-local">Lokal</h3>
+
+<p>Liest Dateien aus einem lokalen Verzeichnis auf dem KIara-Server.</p>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Feld</th><th>Typ</th><th>Pflicht</th><th>Beschreibung</th><th>Empfehlung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>path</code></td>
+            <td>Text</td>
+            <td>Nein</td>
+            <td>Absoluter Pfad zum Verzeichnis. Leer = globaler Pfad aus <code>kiara.yaml</code>.</td>
+            <td>
+                Immer einen expliziten Pfad angeben — so ist die Datenquelle unabhängig von
+                der globalen Config. Beispiel: <code>/data/dokumente/technik</code>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box">
+    <strong>Tipp:</strong> Der KIara-Prozess (User <code>kiara</code>) braucht Leserechte
+    auf das Verzeichnis. Prüfen mit: <code>sudo -u kiara ls /data/dokumente/technik</code>
+</div>
+
+<!-- --- SMB --- -->
+<h3 id="conn-smb">SMB-Freigabe</h3>
+
+<p>Verbindet sich mit Windows-Dateifreigaben (SMB/CIFS). Unterstützt Domain-Authentifizierung.</p>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Feld</th><th>Typ</th><th>Pflicht</th><th>Standard</th><th>Beschreibung</th><th>Empfehlung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>server</code></td>
+            <td>Text</td>
+            <td>Ja</td>
+            <td>—</td>
+            <td>Hostname oder IP des Fileservers.</td>
+            <td>Hostname bevorzugen (<code>fileserver.firma.local</code>).</td>
+        </tr>
+        <tr>
+            <td><code>share</code></td>
+            <td>Text</td>
+            <td>Ja</td>
+            <td>—</td>
+            <td>Name der Freigabe (ohne führenden Backslash).</td>
+            <td>Beispiel: <code>Documents</code>, <code>Abteilungen$</code></td>
+        </tr>
+        <tr>
+            <td><code>username</code></td>
+            <td>Text</td>
+            <td>Nein</td>
+            <td>—</td>
+            <td>Windows-Benutzername für die Authentifizierung.</td>
+            <td>Dedizierten Service-Account verwenden (z.B. <code>svc-kiara-read</code>).</td>
+        </tr>
+        <tr>
+            <td><code>password</code></td>
+            <td>Passwort</td>
+            <td>Nein</td>
+            <td>—</td>
+            <td>Passwort. Wird AES-verschlüsselt gespeichert.</td>
+            <td>Leer lassen bei Edit = bestehendes Passwort beibehalten.</td>
+        </tr>
+        <tr>
+            <td><code>domain</code></td>
+            <td>Text</td>
+            <td>Nein</td>
+            <td>—</td>
+            <td>Windows-Domäne für die Authentifizierung.</td>
+            <td>Beispiel: <code>FIRMA</code> (NetBIOS-Name) oder <code>firma.local</code> (FQDN).</td>
+        </tr>
+        <tr>
+            <td><code>sub_path</code></td>
+            <td>Text + Browse</td>
+            <td>Nein</td>
+            <td>—</td>
+            <td>Unterverzeichnis innerhalb der Freigabe. Browse-Button verfügbar.</td>
+            <td>Nützlich um nur einen Teilbereich einer großen Freigabe zu indexieren.</td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box">
+    <strong>Tipp:</strong> Der Browse-Button neben <code>sub_path</code> zeigt den
+    Verzeichnisinhalt der Freigabe live an. Dafür müssen Server, Freigabe und Credentials
+    bereits eingetragen sein.
+</div>
+
+<!-- --- WEBDAV --- -->
+<h3 id="conn-webdav">WebDAV</h3>
+
+<p>Verbindet sich mit WebDAV-Servern (z.B. Nextcloud, ownCloud, SharePoint).</p>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Feld</th><th>Typ</th><th>Pflicht</th><th>Standard</th><th>Beschreibung</th><th>Empfehlung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>url</code></td>
+            <td>Text</td>
+            <td>Ja</td>
+            <td>—</td>
+            <td>Vollständige WebDAV-URL.</td>
+            <td>
+                Nextcloud: <code>https://cloud.firma.de/remote.php/dav/files/USERNAME/</code><br>
+                Trailingslash beachten!
+            </td>
+        </tr>
+        <tr>
+            <td><code>username</code></td>
+            <td>Text</td>
+            <td>Nein</td>
+            <td>—</td>
+            <td>WebDAV-Benutzername.</td>
+            <td>Bei Nextcloud: App-Passwort verwenden (Einstellungen → Sicherheit → App-Passwörter).</td>
+        </tr>
+        <tr>
+            <td><code>password</code></td>
+            <td>Passwort</td>
+            <td>Nein</td>
+            <td>—</td>
+            <td>Passwort. Wird verschlüsselt gespeichert.</td>
+            <td>—</td>
+        </tr>
+        <tr>
+            <td><code>base_path</code></td>
+            <td>Text + Browse</td>
+            <td>Nein</td>
+            <td><code>/</code></td>
+            <td>Basispfad innerhalb der WebDAV-Struktur. Browse-Button verfügbar.</td>
+            <td>Beispiel: <code>/Dokumente/Projekte</code></td>
+        </tr>
+    </tbody>
+</table>
+
+<!-- --- IMAP --- -->
+<h3 id="conn-imap">E-Mail (IMAP)</h3>
+
+<p>Indexiert E-Mails inkl. Anhänge über IMAP. Unterstützt SSL und Ordner-Auswahl.</p>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Feld</th><th>Typ</th><th>Pflicht</th><th>Standard</th><th>Beschreibung</th><th>Empfehlung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>server</code></td>
+            <td>Text</td>
+            <td>Ja</td>
+            <td>—</td>
+            <td>IMAP-Server (Hostname oder IP).</td>
+            <td>Beispiel: <code>mail.firma.de</code></td>
+        </tr>
+        <tr>
+            <td><code>port</code></td>
+            <td>Zahl</td>
+            <td>Nein</td>
+            <td><code>993</code></td>
+            <td>IMAP-Port. 993 = SSL (Standard), 143 = unverschlüsselt.</td>
+            <td><strong>993 mit SSL empfohlen.</strong></td>
+        </tr>
+        <tr>
+            <td><code>ssl</code></td>
+            <td>Checkbox</td>
+            <td>Nein</td>
+            <td>An</td>
+            <td>SSL/TLS-Verschlüsselung aktivieren.</td>
+            <td>Immer aktiviert lassen.</td>
+        </tr>
+        <tr>
+            <td><code>username</code></td>
+            <td>Text</td>
+            <td>Nein</td>
+            <td>—</td>
+            <td>IMAP-Benutzername (oft die E-Mail-Adresse).</td>
+            <td>Beispiel: <code>benutzer@firma.de</code></td>
+        </tr>
+        <tr>
+            <td><code>password</code></td>
+            <td>Passwort</td>
+            <td>Nein</td>
+            <td>—</td>
+            <td>IMAP-Passwort. Wird verschlüsselt gespeichert.</td>
+            <td>Bei Microsoft 365: App-Passwort verwenden (MFA-kompatibel).</td>
+        </tr>
+        <tr>
+            <td><code>folders</code></td>
+            <td>Text / Ordner-Picker</td>
+            <td>Nein</td>
+            <td><code>INBOX</code></td>
+            <td>
+                Kommaseparierte Liste oder Auswahl über den Ordner-Picker-Button.
+                Der Picker lädt die Ordner-Hierarchie vom Server.
+            </td>
+            <td>
+                Beispiel: <code>INBOX, Sent, Archive/2025</code><br>
+                Ordner-Picker empfohlen — zeigt die exakten Server-seitigen Namen.
+            </td>
+        </tr>
+        <tr>
+            <td><code>since_days</code></td>
+            <td>Zahl</td>
+            <td>Nein</td>
+            <td><code>90</code></td>
+            <td>Nur E-Mails der letzten N Tage indexieren.</td>
+            <td>
+                <strong>90-180 Tage</strong> für die meisten Fälle.
+                Zu große Zeiträume erhöhen Indexierungszeit und Speicherbedarf.
+            </td>
+        </tr>
+        <tr>
+            <td><code>download_attachments</code></td>
+            <td>Checkbox</td>
+            <td>Nein</td>
+            <td>An</td>
+            <td>E-Mail-Anhänge herunterladen und indexieren.</td>
+            <td>Aktiviert lassen — Anhänge enthalten oft die relevantesten Informationen.</td>
+        </tr>
+        <tr>
+            <td><code>max_attachment_mb</code></td>
+            <td>Zahl</td>
+            <td>Nein</td>
+            <td><code>25</code></td>
+            <td>Maximale Größe einzelner Anhänge in MB.</td>
+            <td>25 MB reicht für die meisten Dokumente. Sehr große Anhänge (CAD, Videos) sind selten nützlich für RAG.</td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box">
+    <strong>Tipp — IMAP-Ordnernamen:</strong> IMAP-Server verwenden verschiedene Namenskonventionen.
+    Der Ordner-Picker-Button lädt die exakten Namen vom Server — das vermeidet Tippfehler.
+    Häufige Unterschiede:
+    <ul>
+        <li>Outlook/Exchange: <code>Sent Items</code>, <code>Deleted Items</code></li>
+        <li>Dovecot: <code>Sent</code>, <code>Trash</code></li>
+        <li>Gmail: <code>[Gmail]/Sent Mail</code>, <code>[Gmail]/Trash</code></li>
+    </ul>
+</div>
+
+<!-- --- EXCHANGE --- -->
+<h3 id="conn-exchange">Exchange Online (OAuth2)</h3>
+
+<p>
+    Verbindet sich mit Microsoft 365 / Exchange Online über OAuth2 (App-Registrierung in Entra ID).
+    Kein Benutzer-Passwort nötig — Authentifizierung läuft über Client-ID und Client-Secret.
+</p>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Feld</th><th>Typ</th><th>Pflicht</th><th>Standard</th><th>Beschreibung</th><th>Empfehlung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>tenant_id</code></td>
+            <td>Text</td>
+            <td>Ja</td>
+            <td>—</td>
+            <td>Azure AD / Entra ID Tenant-ID (UUID).</td>
+            <td>Zu finden in Entra Admin Center → Übersicht → Tenant-ID.</td>
+        </tr>
+        <tr>
+            <td><code>client_id</code></td>
+            <td>Text</td>
+            <td>Ja</td>
+            <td>—</td>
+            <td>Anwendungs-ID der App-Registrierung (UUID).</td>
+            <td>Eigene App-Registrierung für KIara anlegen mit <code>Mail.Read</code>-Berechtigung (Application).</td>
+        </tr>
+        <tr>
+            <td><code>client_secret</code></td>
+            <td>Passwort</td>
+            <td>Ja</td>
+            <td>—</td>
+            <td>Client-Secret der App-Registrierung. Wird verschlüsselt gespeichert.</td>
+            <td>Ablaufdatum beachten! Azure-Secrets haben ein maximales Alter von 2 Jahren.</td>
+        </tr>
+        <tr>
+            <td><code>username</code></td>
+            <td>Text</td>
+            <td>Ja</td>
+            <td>—</td>
+            <td>E-Mail-Adresse des Postfachs, das gelesen werden soll.</td>
+            <td>Beispiel: <code>team-support@firma.de</code> (Shared Mailbox möglich).</td>
+        </tr>
+        <tr>
+            <td><code>folders</code></td>
+            <td>Text / Ordner-Picker</td>
+            <td>Nein</td>
+            <td><code>INBOX</code></td>
+            <td>Kommasepariert oder per Ordner-Picker.</td>
+            <td>Beispiel: <code>INBOX, Sent Items</code></td>
+        </tr>
+        <tr>
+            <td><code>since_days</code></td>
+            <td>Zahl</td>
+            <td>Nein</td>
+            <td><code>90</code></td>
+            <td>Zeitraum in Tagen.</td>
+            <td>Siehe IMAP.</td>
+        </tr>
+        <tr>
+            <td><code>download_attachments</code></td>
+            <td>Checkbox</td>
+            <td>Nein</td>
+            <td>An</td>
+            <td>Anhänge herunterladen und indexieren.</td>
+            <td>—</td>
+        </tr>
+        <tr>
+            <td><code>max_attachment_mb</code></td>
+            <td>Zahl</td>
+            <td>Nein</td>
+            <td><code>25</code></td>
+            <td>Maximale Anhang-Größe in MB.</td>
+            <td>—</td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box">
+    <strong>Tipp — Azure App-Registrierung für KIara:</strong>
+    <ol>
+        <li>Entra Admin Center → App-Registrierungen → Neue Registrierung</li>
+        <li>Name: <code>KIara Mail Reader</code></li>
+        <li>API-Berechtigungen → Microsoft Graph → Anwendungsberechtigung → <code>Mail.Read</code></li>
+        <li>Admin-Zustimmung erteilen</li>
+        <li>Zertifikate &amp; Geheimnisse → Neues Client-Secret erstellen</li>
+        <li>Tenant-ID, Client-ID und Secret in KIara eintragen</li>
+    </ol>
+</div>
+
+<!-- --- SQL --- -->
+<h3 id="conn-sql">SQL-Datenbank</h3>
+
+<p>
+    Indexiert Daten aus relationalen Datenbanken. Unterstützt PostgreSQL, MSSQL und MySQL.
+    Jede Zeile wird anhand eines konfigurierbaren Templates zu einem Text-Chunk.
+</p>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Feld</th><th>Typ</th><th>Pflicht</th><th>Standard</th><th>Beschreibung</th><th>Empfehlung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>dsn</code></td>
+            <td>Passwort</td>
+            <td>Ja</td>
+            <td>—</td>
+            <td>Verbindungsstring (DSN). Wird verschlüsselt gespeichert.</td>
+            <td>
+                Formate:<br>
+                <code>postgresql://user:pass@host:5432/dbname</code><br>
+                <code>mssql+pyodbc://user:pass@host/db?driver=ODBC+Driver+18</code><br>
+                <code>mysql://user:pass@host:3306/dbname</code>
+            </td>
+        </tr>
+        <tr>
+            <td><code>driver</code></td>
+            <td>Dropdown</td>
+            <td>Nein</td>
+            <td><code>auto</code></td>
+            <td>Datenbank-Treiber.</td>
+            <td>
+                Optionen: <code>auto</code> (aus DSN erkennen), <code>postgresql</code>,
+                <code>mssql</code>, <code>mysql</code>.<br>
+                <code>auto</code> reicht in den meisten Fällen.
+            </td>
+        </tr>
+        <tr>
+            <td><code>query</code></td>
+            <td>Textarea</td>
+            <td>Nein</td>
+            <td>—</td>
+            <td>SQL-Abfrage, die die zu indexierenden Daten liefert.</td>
+            <td>
+                Beispiel: <code>SELECT id, titel, beschreibung, kategorie FROM protokolle</code><br>
+                Die Query sollte die ID-Spalte und alle Text-relevanten Spalten enthalten.
+            </td>
+        </tr>
+        <tr>
+            <td><code>text_columns</code></td>
+            <td>Text</td>
+            <td>Nein</td>
+            <td>—</td>
+            <td>Kommaseparierte Liste der Spalten, die als Text indexiert werden.</td>
+            <td>Beispiel: <code>beschreibung, massnahme, kommentar</code></td>
+        </tr>
+        <tr>
+            <td><code>id_column</code></td>
+            <td>Text</td>
+            <td>Nein</td>
+            <td><code>id</code></td>
+            <td>Primärschlüssel-Spalte für inkrementelle Updates.</td>
+            <td>Muss eindeutig sein. Standard <code>id</code> passt für die meisten Tabellen.</td>
+        </tr>
+        <tr>
+            <td><code>timestamp_column</code></td>
+            <td>Text</td>
+            <td>Nein</td>
+            <td>—</td>
+            <td>Zeitstempel-Spalte für inkrementelle Updates.</td>
+            <td>
+                Beispiel: <code>updated_at</code>.
+                Wenn gesetzt, werden nur Zeilen indexiert, die neuer sind als der letzte Lauf.
+            </td>
+        </tr>
+        <tr>
+            <td><code>text_template</code></td>
+            <td>Text</td>
+            <td>Nein</td>
+            <td>—</td>
+            <td>Template für die Textgenerierung aus Spalten.</td>
+            <td>
+                Beispiel: <code>{titel}: {beschreibung} (Kategorie: {kategorie})</code><br>
+                Platzhalter sind Spaltennamen in geschweiften Klammern.
+                Ohne Template werden alle Text-Spalten konkateniert.
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box">
+    <strong>Tipp:</strong> Der SQL-Konnektor ist ideal für ERP-Daten, Ticket-Systeme oder
+    Protokoll-Datenbanken. Mit <code>timestamp_column</code> und <code>id_column</code>
+    werden nur geänderte Zeilen neu indexiert — das spart bei großen Tabellen erheblich Zeit.
+</div>
+
+<!-- ============================= -->
+<!-- INGESTION-EINSTELLUNGEN       -->
+<!-- ============================= -->
+<h2 id="ingestion-settings">Ingestion-Einstellungen</h2>
+
+<p>
+    Die erweiterten Einstellungen im Create/Edit-Modal steuern, wie Dokumente
+    verarbeitet und in Chunks zerlegt werden. Sie sind hinter einem
+    &raquo;Erweiterte Einstellungen&laquo;-Aufklapper gruppiert.
+</p>
+
+<!-- --- Chunking --- -->
+<h3 id="chunking">Chunk-Strategie</h3>
+
+<p>
+    Die Chunk-Strategie bestimmt, wie Dokumente in indexierbare Text-Abschnitte (Chunks)
+    zerlegt werden. Jede Strategie hat eigene Defaults für Chunk-Größe und Überlappung.
+</p>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Strategie</th><th>Chunk-Größe</th><th>Überlappung</th><th>Einsatzgebiet</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>auto</strong> (empfohlen)</td>
+            <td>variabel</td>
+            <td>variabel</td>
+            <td>Erkennt automatisch: Prosa, tabellarisch, Code, Markdown, E-Mail. Beste Wahl für gemischte Datenquellen.</td>
+        </tr>
+        <tr>
+            <td><strong>prose</strong></td>
+            <td>768</td>
+            <td>150</td>
+            <td>Fließtext, Berichte, Dokumentationen.</td>
+        </tr>
+        <tr>
+            <td><strong>tabular</strong></td>
+            <td>256</td>
+            <td>0</td>
+            <td>Tabellen, CSV, strukturierte Daten. Keine Überlappung, da Zeilen unabhängig.</td>
+        </tr>
+        <tr>
+            <td><strong>structured</strong></td>
+            <td>384</td>
+            <td>50</td>
+            <td>XML, JSON, strukturierte Konfigurationsdateien.</td>
+        </tr>
+        <tr>
+            <td><strong>code</strong></td>
+            <td>512</td>
+            <td>100</td>
+            <td>Quellcode — chunked nach Funktionen/Klassen, nicht nach Zeichenzahl.</td>
+        </tr>
+        <tr>
+            <td><strong>email</strong></td>
+            <td>640</td>
+            <td>100</td>
+            <td>E-Mails — berücksichtigt Header, Body und Signatur-Trennung.</td>
+        </tr>
+        <tr>
+            <td><strong>custom</strong></td>
+            <td>frei (100–10.000)</td>
+            <td>frei (0–5.000)</td>
+            <td>Manuelle Konfiguration. Blendet Felder für Chunk Size und Overlap ein.</td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box">
+    <strong>Tipp:</strong> <code>auto</code> ist die beste Wahl für die meisten Datenquellen.
+    <code>custom</code> nur verwenden, wenn die automatische Erkennung nachweislich
+    schlechte Ergebnisse liefert (z.B. bei sehr speziellen Dokumentformaten).
+</div>
+
+<!-- --- DDU --- -->
+<h3 id="ddu">Document Understanding (DDU)</h3>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Feld</th><th>Standard</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>DDU aktivieren</code></td>
+            <td>Aus</td>
+            <td>
+                Aktiviert Docling Document Understanding — konvertiert PDF, Office-Dokumente
+                und Bilder über ein Deep-Learning-Modell zu Markdown. Deutlich bessere
+                Ergebnisse bei komplexen Layouts (Tabellen, Spalten, Grafiken).
+            </td>
+        </tr>
+        <tr>
+            <td><code>DDU OCR für Bilder</code></td>
+            <td>An</td>
+            <td>
+                Nur wenn DDU aktiviert. Führt OCR auf eingebetteten Bildern durch.
+                Nützlich für gescannte PDFs.
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box wiki-tip-warning">
+    <strong>Achtung:</strong> DDU benötigt den Docling-Proxy-Service auf dem Ollama-Server
+    (Port 5001) und ca. 7 GiB VRAM. Die Verarbeitungszeit pro Datei ist deutlich höher als
+    ohne DDU. Für große Datenquellen (>1000 Dateien) kann die Erstindexierung mehrere Stunden dauern.
+</div>
+
+<!-- --- VLM --- -->
+<h3 id="vlm">Vision Language Model (VLM)</h3>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Feld</th><th>Standard</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>VLM aktivieren</code></td>
+            <td>Aus</td>
+            <td>
+                Aktiviert die Bildbeschreibung über ein Vision Language Model.
+                Bilder (PNG, JPG, etc.) werden durch das VLM beschrieben und der
+                resultierende Text wird indexiert. Unterstützt 20+ Bildformate.
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box">
+    <strong>Tipp:</strong> VLM ist besonders nützlich für Datenquellen mit vielen
+    Bildern (z.B. technische Zeichnungen, Fotos, Screenshots). Ohne VLM werden
+    Bilddateien übersprungen.
+</div>
+
+<!-- --- Filter --- -->
+<h3 id="file-filters">Dateityp-Filter &amp; Ausschlussmuster</h3>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Feld</th><th>Typ</th><th>Beschreibung</th><th>Beispiel</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>Dateitypen</code></td>
+            <td>Text (kommasepariert)</td>
+            <td>Nur diese Dateitypen indexieren. Leer = alle unterstützten Typen.</td>
+            <td><code>.pdf, .docx, .xlsx, .txt</code></td>
+        </tr>
+        <tr>
+            <td><code>Ausschlussmuster</code></td>
+            <td>Text (Glob-Syntax)</td>
+            <td>Dateien/Verzeichnisse ausschließen.</td>
+            <td><code>*/tmp/*, *.bak, */archiv/*</code></td>
+        </tr>
+        <tr>
+            <td><code>Alle Textdateien akzeptieren</code></td>
+            <td>Checkbox</td>
+            <td>
+                Wenn aktiviert, werden auch Dateien ohne bekannte Endung indexiert,
+                sofern sie als Text erkannt werden (Charset-Erkennung).
+            </td>
+            <td>Nützlich für Logdateien, Config-Dateien ohne Endung.</td>
+        </tr>
+        <tr>
+            <td><code>E-Mail-Anhänge indexieren</code></td>
+            <td>Checkbox (nur Mail)</td>
+            <td>Nur für IMAP/Exchange: Steuert ob Anhänge indexiert werden.</td>
+            <td>Standard: An.</td>
+        </tr>
+    </tbody>
+</table>
+
+<!-- --- Sync --- -->
+<h3 id="sync-interval">Sync-Intervall</h3>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Wert</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr><td><code>global</code></td><td>Verwendet den Systemstandard aus <code>kiara.yaml</code>.</td></tr>
+        <tr><td><code>manual</code></td><td>Keine automatische Synchronisierung — nur manuell über die UI oder API.</td></tr>
+        <tr><td><code>daily</code></td><td>Täglich (einmal pro 24h).</td></tr>
+        <tr><td><code>weekly</code></td><td>Wöchentlich.</td></tr>
+        <tr><td><code>monthly</code></td><td>Monatlich.</td></tr>
+        <tr><td><code>custom</code></td><td>Benutzerdefinierter Cron-Ausdruck.</td></tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box">
+    <strong>Tipp:</strong> Für Datenquellen die sich selten ändern (z.B. Archiv-Freigaben)
+    ist <code>weekly</code> oder <code>monthly</code> sinnvoll. Für E-Mail-Quellen
+    empfiehlt sich <code>daily</code>, damit neue Mails zeitnah verfügbar sind.
+</div>
+
+<!-- --- Contextual Retrieval --- -->
+<h3 id="contextual-retrieval">Contextual Retrieval</h3>
+
+<p>
+    Contextual Retrieval reichert Chunks waehrend der Ingestion mit LLM-generiertem
+    Kontext an. Pro Chunk wird ein 2-3-Satz-Prefix erzeugt, der den Chunk im
+    Dokumentkontext verortet. Dadurch verbessern sich sowohl Vektor-Embeddings
+    als auch BM25-Suche.
+</p>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Feld</th><th>Typ</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>Contextual Retrieval aktivieren</code></td>
+            <td>Checkbox</td>
+            <td>Aktiviert Enrichment fuer diese Datenquelle. Setzt voraus, dass
+                der globale Schalter <code>enrichment.enabled</code> aktiv ist.</td>
+        </tr>
+        <tr>
+            <td><code>Prompt-Template</code></td>
+            <td>Dropdown</td>
+            <td>Welcher Enrichment-Prompt verwendet wird.
+                <code>(Standard)</code> nutzt das System-Template.</td>
+        </tr>
+        <tr>
+            <td><code>Enrichment-Backend</code></td>
+            <td>Dropdown</td>
+            <td>Welches LLM-Backend den Kontext generiert.
+                <strong>Pflichtfeld</strong> wenn Enrichment aktiv ist.</td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box wiki-tip-warning">
+    <strong>Wichtig:</strong> Ein Enrichment-Backend muss explizit gewaehlt werden.
+    Es gibt keinen stillen Fallback auf ein Standard-Backend.
+</div>
+
+<p>
+    Ausfuehrliche Dokumentation (Prompts, Versionierung, Integritaetspruefung,
+    Performance, API-Endpunkte) im
+    <a href="/wiki/guide/contextual-retrieval">eigenen Guide &raquo;Contextual Retrieval&laquo;</a>.
+</p>
+
+<!-- --- ColBERT --- -->
+<h3 id="colbert">ColBERT</h3>
+
+<p>
+    ColBERT speichert pro Chunk Token-Level-Vektoren statt eines einzelnen Vektors.
+    Beim Retrieval wird per MaxSim-Scoring ueber alle Token-Paare gematcht &mdash;
+    ideal fuer Multi-Aspekt-Queries, bei denen verschiedene Begriffe an verschiedenen
+    Stellen im Dokument vorkommen.
+</p>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Feld</th><th>Typ</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>ColBERT</code></td>
+            <td>Checkbox</td>
+            <td>Aktiviert ColBERT-Indexierung fuer diese Datenquelle. Setzt voraus,
+                dass der globale Schalter <code>retrieval.colbert.enabled</code>
+                aktiv ist (Admin-UI &rarr; KI &rarr; Indexierung).</td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box wiki-tip-warning">
+    <strong>Speicherbedarf:</strong> ColBERT benoetigt ca. 40x mehr Speicher als
+    Standard-Embeddings. Nur fuer Datenquellen aktivieren, bei denen
+    Multi-Aspekt-Queries haeufig sind.
+</div>
+
+<p>
+    Ausfuehrliche Dokumentation (Token-Level Matching, Voraussetzungen, Speicherbedarf,
+    Wechselwirkung mit RRF-Fusion, Fallback-Verhalten) im
+    <a href="/wiki/guide/colbert">eigenen Guide &raquo;ColBERT&laquo;</a>.
+</p>
+
+<!-- ============================= -->
+<!-- ZUGRIFFSRECHTE                -->
+<!-- ============================= -->
+<h2 id="access-control">Zugriffsrechte</h2>
+
+<p>
+    Über das Berechtigungs-Modal können einer Datenquelle <strong>Gruppen</strong>
+    und/oder <strong>einzelne Benutzer</strong> zugewiesen werden. Nur zugewiesene
+    Benutzer (direkt oder über eine Gruppe) sehen Ergebnisse aus dieser Datenquelle
+    in ihren Chat-Antworten.
+</p>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Regel</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Keine Zuweisung</strong></td>
+            <td>Alle Benutzer haben Zugriff (Standard für neue Datenquellen).</td>
+        </tr>
+        <tr>
+            <td><strong>Gruppen zugewiesen</strong></td>
+            <td>Nur Mitglieder der zugewiesenen Gruppen haben Zugriff.</td>
+        </tr>
+        <tr>
+            <td><strong>Benutzer zugewiesen</strong></td>
+            <td>Nur die zugewiesenen Benutzer haben Zugriff.</td>
+        </tr>
+        <tr>
+            <td><strong>Gruppen + Benutzer</strong></td>
+            <td>Vereinigung: Gruppenmitglieder UND direkt zugewiesene Benutzer haben Zugriff.</td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box">
+    <strong>Tipp:</strong> Die Zuweisung erfolgt im <strong>Replace-All-Modus</strong> —
+    beim Speichern werden alle bestehenden Zuweisungen durch die aktuelle Auswahl ersetzt.
+    Das bedeutet: Wenn alle Checkboxen abgewählt werden, wird der Zugriff für alle geöffnet
+    (keine Einschränkung).
+</div>
+
+<!-- ============================= -->
+<!-- INDEXIERUNG                   -->
+<!-- ============================= -->
+<h2 id="ingestion-control">Indexierung steuern</h2>
+
+<h3>Inkrementelle vs. Voll-Indexierung</h3>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Modus</th><th>Beschreibung</th><th>Wann verwenden</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Indexieren</strong></td>
+            <td>
+                Vergleicht File-Hashes (Pfad + Größe + mtime). Nur neue oder geänderte
+                Dateien werden verarbeitet. Bestehende Chunks bleiben erhalten.
+            </td>
+            <td>Standardfall — für regelmäßige Updates.</td>
+        </tr>
+        <tr>
+            <td><strong>Voll-Indexieren</strong></td>
+            <td>
+                Setzt alle File-Hashes zurück und verarbeitet jede Datei neu.
+                Bestehende Chunks werden vorher gelöscht.
+            </td>
+            <td>
+                Nach Änderung der Chunk-Strategie, nach DDU-Aktivierung,
+                bei Verdacht auf inkonsistente Daten.
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<h3>Pipeline-Phasen</h3>
+<p>Die Indexierung durchläuft folgende Phasen (sichtbar im Status-Dialog):</p>
+<ol class="wiki-examples">
+    <li><strong>Scanning</strong> — Dateien auflisten und Hashes berechnen</li>
+    <li><strong>Loading</strong> — Dateien laden und in Text konvertieren (ggf. via DDU/VLM)</li>
+    <li><strong>Chunking</strong> — Text in Chunks zerlegen</li>
+    <li><strong>Embedding</strong> — Chunks vektorisieren und in Qdrant speichern</li>
+</ol>
+
+<h3>Pause und Abbruch</h3>
+<ul class="wiki-examples">
+    <li><strong>Pause</strong> — Unterbricht die Pipeline nach dem aktuellen Batch. Kann fortgesetzt werden.</li>
+    <li><strong>Abbrechen</strong> — Bricht die Pipeline ab. Bereits verarbeitete Dateien behalten ihren Hash — ein erneuter &raquo;Indexieren&laquo;-Lauf setzt an der Stelle fort.</li>
+</ul>
+
+<div class="wiki-tip-box">
+    <strong>Tipp — Circuit-Breaker:</strong> Nach 10 aufeinanderfolgenden Fehlern bricht
+    die Pipeline automatisch ab (Circuit-Breaker). Das verhindert Endlosschleifen bei
+    systematischen Problemen (z.B. DDU-Service nicht erreichbar).
+</div>
+
+<!-- ============================= -->
+<!-- API (Verweis)                 -->
+<!-- ============================= -->
+<h2 id="api-endpoints">API-Endpunkte</h2>
+
+<p>
+    Die vollständige API-Referenz für Datenquellen wird dynamisch aus der
+    Admin-Registry generiert und ist im API-Katalog verfügbar:
+</p>
+<ul class="wiki-examples">
+    <li><a href="/wiki/api/datasources">Datenquellen-API</a> — CRUD, Verbindungstest, Gruppen-/Benutzer-Zuweisung, Ingestion-Status</li>
+</ul>
+
+<!-- ============================= -->
+<!-- TROUBLESHOOTING               -->
+<!-- ============================= -->
+<h2 id="troubleshooting">Troubleshooting</h2>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Problem</th><th>Mögliche Ursache</th><th>Lösung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>Verbindungstest SMB schlägt fehl</td>
+            <td>Firewall, falscher Share-Name, fehlende Credentials</td>
+            <td>
+                Vom KIara-Server testen: <code>smbclient //server/share -U user%pass</code>.
+                Domain-Format prüfen: <code>DOMAIN\user</code> oder <code>user@domain</code>.
+            </td>
+        </tr>
+        <tr>
+            <td>WebDAV &raquo;401 Unauthorized&laquo;</td>
+            <td>Falsches Passwort oder App-Passwort nötig</td>
+            <td>
+                Bei Nextcloud mit 2FA: App-Passwort generieren unter
+                Einstellungen → Sicherheit → Geräte &amp; Sitzungen.
+            </td>
+        </tr>
+        <tr>
+            <td>IMAP-Ordner werden nicht gefunden</td>
+            <td>Falsche Ordnernamen, Server-spezifische Konvention</td>
+            <td>Ordner-Picker verwenden statt manueller Eingabe.</td>
+        </tr>
+        <tr>
+            <td>Exchange: &raquo;Token-Fehler&laquo;</td>
+            <td>Client-Secret abgelaufen, fehlende Admin-Zustimmung</td>
+            <td>
+                Entra Admin Center: App → Zertifikate &amp; Geheimnisse prüfen.
+                API-Berechtigungen: Admin-Zustimmung erteilt?
+            </td>
+        </tr>
+        <tr>
+            <td>SQL: &raquo;Treiber nicht gefunden&laquo;</td>
+            <td>Fehlende System-Bibliothek</td>
+            <td>
+                MSSQL: <code>apt install unixodbc-dev</code> + ODBC-Treiber installieren.<br>
+                MySQL: <code>pip install pymysql</code> im KIara-venv.
+            </td>
+        </tr>
+        <tr>
+            <td>Indexierung bricht nach 10 Dateien ab</td>
+            <td>Circuit-Breaker ausgelöst (10 aufeinanderfolgende Fehler)</td>
+            <td>
+                Ursache im Ingestion-Status prüfen (Fehlermeldung pro Datei).
+                Häufig: DDU-Timeout, Dateiberechtigungen, korrupte Dateien.
+            </td>
+        </tr>
+        <tr>
+            <td>Chunks sind 0 nach Indexierung</td>
+            <td>Keine unterstützten Dateitypen, Dateityp-Filter zu restriktiv</td>
+            <td>
+                Dateityp-Filter prüfen. <code>Alle Textdateien akzeptieren</code>
+                aktivieren für Dateien ohne Endung.
+            </td>
+        </tr>
+        <tr>
+            <td>DDU-Fehler: &raquo;Timeout&laquo;</td>
+            <td>Docling-Proxy nicht erreichbar oder überlastet</td>
+            <td>
+                Status prüfen: <code>systemctl status docling-proxy</code> auf dem
+                Ollama-Server (gpu-server.local). VRAM-Auslastung prüfen: <code>nvidia-smi</code>.
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+{% endblock %}

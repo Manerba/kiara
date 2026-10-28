@@ -1,0 +1,71 @@
+.idea/
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+.cache/
+.ruff_cache/
+*.deb
+*.changes
+*.buildinfo
+website/*
+!website/admin/
+!website/chat_backend/
+!website/publish.sh
+
+# Sensitive Dateien
+.env*
+*.key
+secret.key
+*.pem
+*.cer
+*.crt
+
+# Datenbanken
+*.db
+*.sqlite
+
+# Logs
+*.log
+
+# BugScan-Arbeitsverzeichnisse
+docs/TODOS/BugScan/runs/
+
+# Plan-Iterationen und Review-Notizen fuer Codequalitaets-Punkt 7
+# Kanonisch sind TODO_CODEQUALITY_P7_EXCEPTION_AUDIT.md und
+# TODO_CODEQUALITY_P7_EXCEPTION_AUDIT_V15.md. Versions-Drafts und
+# .tmp-Review-Notizen werden nicht ins Repo gepusht.
+docs/TODOS/TODO_CODEQUALITY_P7_EXCEPTION_AUDIT_V1.md
+docs/TODOS/TODO_CODEQUALITY_P7_EXCEPTION_AUDIT_V2.md
+docs/TODOS/TODO_CODEQUALITY_P7_EXCEPTION_AUDIT_V3.md
+docs/TODOS/TODO_CODEQUALITY_P7_EXCEPTION_AUDIT_V4.md
+docs/TODOS/TODO_CODEQUALITY_P7_EXCEPTION_AUDIT_V5.md
+docs/TODOS/TODO_CODEQUALITY_P7_EXCEPTION_AUDIT_V6.md
+docs/TODOS/TODO_CODEQUALITY_P7_EXCEPTION_AUDIT_V7.md
+docs/TODOS/TODO_CODEQUALITY_P7_EXCEPTION_AUDIT_V8.md
+docs/TODOS/TODO_CODEQUALITY_P7_EXCEPTION_AUDIT_V9.md
+docs/TODOS/TODO_CODEQUALITY_P7_EXCEPTION_AUDIT_V1[0-4].md
+docs/TODOS/TODO_CODEQUALITY_P7_EXCEPTION_AUDIT_V1[6-9].md
+docs/TODOS/TODO_CODEQUALITY_P7_EXCEPTION_AUDIT_V[2-9][0-9].md
+docs/TODOS/TODO_CODEQUALITY_P7_EXCEPTION_AUDIT_CHANGELOG.md
+docs/TODOS/TODO_CODEQUALITY_P7_EXCEPTION_AUDIT_*_REVIEW_NOTES.tmp.md
+
+# Weitere sensitive Dateien
+credentials.json
+*.p12
+*.pfx
+*.jks
+config.local.yaml
+
+# Build-Artefakte
+debian/kiara/
+
+# ISO — nur Config-Dateien tracken, keine Build-Artefakte/Screenshots
+iso/build/
+iso/vm*-screen*.png
+
+# Review-Bundle (Code-Auszug fuer externe Reviewer wie Copilot M365)
+kiara-review-bundle*

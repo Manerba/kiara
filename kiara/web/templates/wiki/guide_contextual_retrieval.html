@@ -1,0 +1,436 @@
+{% extends "base.html" %}
+
+{% block title %}KIara Wiki — Guide: Contextual Retrieval{% endblock %}
+
+{% block breadcrumb %}
+<a href="/wiki/">Wiki</a> &rsaquo; <span>Guide: Contextual Retrieval</span>
+{% endblock %}
+
+{% block content %}
+<h1>Contextual Retrieval</h1>
+
+<p class="wiki-intro">
+    Contextual Retrieval reichert Chunks waehrend der Ingestion mit LLM-generiertem Kontext an.
+    Pro Chunk wird ein 2-3-Satz-Prefix generiert, der den Chunk in den Dokumentkontext einordnet.
+    Dadurch verbessern sich sowohl Vektor-Embeddings als auch BM25-Suche.
+</p>
+
+<nav class="wiki-toc">
+    <h3>Inhalt</h3>
+    <ol>
+        <li><a href="#ueberblick">Ueberblick</a>
+            <ol>
+                <li><a href="#funktionsprinzip">Funktionsprinzip</a></li>
+                <li><a href="#pipeline-position">Position in der Pipeline</a></li>
+            </ol>
+        </li>
+        <li><a href="#konfiguration">Konfiguration</a>
+            <ol>
+                <li><a href="#global">Globaler Schalter</a></li>
+                <li><a href="#datasource">Datenquellen-Einstellungen</a></li>
+                <li><a href="#backend-auswahl">Backend-Auswahl</a></li>
+            </ol>
+        </li>
+        <li><a href="#prompts">Enrichment-Prompts</a>
+            <ol>
+                <li><a href="#standard-prompt">Standard-Prompt</a></li>
+                <li><a href="#eigene-prompts">Eigene Prompts erstellen</a></li>
+                <li><a href="#platzhalter">Platzhalter-Referenz</a></li>
+                <li><a href="#prompt-test">Prompt testen</a></li>
+            </ol>
+        </li>
+        <li><a href="#versionierung">Prompt-Versionierung</a>
+            <ol>
+                <li><a href="#history">Versionshistorie</a></li>
+                <li><a href="#rollback">Rollback</a></li>
+            </ol>
+        </li>
+        <li><a href="#integritaet">Integritaetspruefung</a></li>
+        <li><a href="#performance">Performance</a>
+            <ol>
+                <li><a href="#parallelisierung">Parallelisierung</a></li>
+                <li><a href="#skip-logik">Skip-Logik</a></li>
+                <li><a href="#statistiken">Statistiken</a></li>
+            </ol>
+        </li>
+        <li><a href="#api-endpoints">API-Endpunkte</a></li>
+    </ol>
+</nav>
+
+<!-- ============================= -->
+<!-- UEBERBLICK                    -->
+<!-- ============================= -->
+<h2 id="ueberblick">Ueberblick</h2>
+
+<h3 id="funktionsprinzip">Funktionsprinzip</h3>
+<p>
+    Beim Chunking gehen Dokumentzusammenhaenge verloren. Ein Chunk wie
+    <em>&bdquo;Die Lieferung erfolgt in 6 Wochen&ldquo;</em> ist ohne Kontext
+    (welcher Auftrag? welcher Kunde?) kaum sinnvoll retrievebar.
+</p>
+<p>
+    Contextual Retrieval loest dieses Problem: Vor dem Embedding wird jedem Chunk ein
+    LLM-generierter Kontext-Prefix vorangestellt, der den Chunk im Gesamtdokument verortet.
+    Das Ergebnis sieht so aus:
+</p>
+
+<pre class="wiki-code-block"><code>Dieser Abschnitt stammt aus einer Auftragsbestaetigung fuer
+Kunde Mustermann AG (Auftrag A-2024-0815) und beschreibt
+den voraussichtlichen Lieferzeitplan.
+
+Die Lieferung erfolgt in 6 Wochen. Der Kunde wurde
+per E-Mail informiert. Die Teillieferung ...</code></pre>
+
+<p>
+    Der Prefix (erste 3 Zeilen) wird vom LLM generiert. Der Rest ist der Original-Chunk.
+    Sowohl das Vektor-Embedding als auch der BM25-Index enthalten den Kontext &mdash;
+    Suchanfragen wie <em>&bdquo;Lieferzeit Mustermann&ldquo;</em> finden diesen Chunk nun zuverlaessig.
+</p>
+
+<h3 id="pipeline-position">Position in der Pipeline</h3>
+<p>Der Enrichment-Schritt ist zwischen Chunking und Embedding eingebettet:</p>
+
+<table class="wiki-param-table">
+    <thead><tr><th>Schritt</th><th>Beschreibung</th></tr></thead>
+    <tbody>
+        <tr><td>1. Laden</td><td>Datei laden (Docling/DDU, VLM, Standard-Loader)</td></tr>
+        <tr><td>2. Chunking</td><td>Text in Chunks aufteilen (RecursiveCharacterTextSplitter)</td></tr>
+        <tr><td>3. Dedup</td><td>Unveraenderte Chunks ueberspringen (Hash-Vergleich)</td></tr>
+        <tr><td><strong>4. Enrichment</strong></td><td><strong>LLM-Kontext-Prefix pro Chunk generieren</strong></td></tr>
+        <tr><td>5. Embedding</td><td>Chunks in Vektoren umwandeln und in Qdrant speichern</td></tr>
+    </tbody>
+</table>
+
+<!-- ============================= -->
+<!-- KONFIGURATION                 -->
+<!-- ============================= -->
+<h2 id="konfiguration">Konfiguration</h2>
+
+<h3 id="global">Globaler Schalter</h3>
+<p>
+    Contextual Retrieval wird ueber zwei Bedingungen gesteuert &mdash; beide muessen
+    erfuellt sein:
+</p>
+<ol>
+    <li><strong>Globaler Kill-Switch</strong> in <code>/etc/kiara/kiara.yaml</code>
+        oder Admin-UI &rarr; <strong>KI</strong> &rarr; <strong>Indexierung</strong></li>
+    <li><strong>Per-Datasource-Flag</strong> in den Datenquellen-Einstellungen</li>
+</ol>
+
+<pre class="wiki-code-block"><code># /etc/kiara/kiara.yaml
+enrichment:
+  enabled: true               # Globaler Schalter (default: false)
+  max_context_chars: 6000      # Max. Dokumentkontext fuer den Prompt
+  max_workers: 2               # Parallele LLM-Aufrufe</code></pre>
+
+<div class="wiki-tip-box">
+    <strong>Hinweis:</strong> Ohne <code>enrichment.enabled: true</code> in der Config
+    wird kein Enrichment durchgefuehrt &mdash; unabhaengig von den Datenquellen-Einstellungen.
+    Aenderungen am globalen Schalter erzeugen erst bei zukuenftigen Indexierungen
+    oder Re-Index-Laeufen neue angereicherte Chunks.
+</div>
+
+<h3 id="datasource">Datenquellen-Einstellungen</h3>
+<p>
+    Im Tab <strong>Datenquellen</strong> &rarr; Datenquelle bearbeiten &rarr;
+    <strong>Erweiterte Einstellungen</strong> finden sich drei Felder:
+</p>
+
+<table class="wiki-param-table">
+    <thead><tr><th>Feld</th><th>Beschreibung</th></tr></thead>
+    <tbody>
+        <tr>
+            <td><strong>Contextual Retrieval aktivieren</strong></td>
+            <td>Checkbox &mdash; aktiviert Enrichment fuer diese Datenquelle</td>
+        </tr>
+        <tr>
+            <td><strong>Prompt-Template</strong></td>
+            <td>Dropdown &mdash; welcher Enrichment-Prompt verwendet wird.
+                <code>(Standard)</code> nutzt das System-Template <code>enrichment_default</code>.</td>
+        </tr>
+        <tr>
+            <td><strong>Enrichment-Backend</strong></td>
+            <td>Dropdown &mdash; welches LLM-Backend den Kontext generiert.
+                <strong>Pflichtfeld</strong> wenn Enrichment aktiv ist.
+                Zur Auswahl stehen alle konfigurierten Backends der Kategorie
+                <code>llm</code> oder <code>cloud</code>.</td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box wiki-tip-warning">
+    <strong>Wichtig:</strong> Ein Enrichment-Backend muss explizit gewaehlt werden.
+    Es gibt keinen stillen Fallback auf ein Standard-Backend. Wird kein Backend
+    gewaehlt, erscheint eine Fehlermeldung beim Speichern.
+</div>
+
+<h3 id="backend-auswahl">Backend-Auswahl</h3>
+<p>Jedes konfigurierte LLM- oder Cloud-Backend kann fuer Enrichment genutzt werden:</p>
+
+<table class="wiki-param-table">
+    <thead><tr><th>Backend-Typ</th><th>Vorteile</th><th>Nachteile</th></tr></thead>
+    <tbody>
+        <tr>
+            <td><strong>Ollama (lokal)</strong></td>
+            <td>Kostenlos, datenschutzkonform, keine Latenz</td>
+            <td>Qualitaet abhaengig vom Modell, VRAM-Bedarf</td>
+        </tr>
+        <tr>
+            <td><strong>Anthropic (Claude)</strong></td>
+            <td>Hohe Qualitaet, grosse Kontextfenster</td>
+            <td>Kosten pro Token, Daten werden an API gesendet</td>
+        </tr>
+        <tr>
+            <td><strong>OpenAI (GPT)</strong></td>
+            <td>Hohe Qualitaet, schnell</td>
+            <td>Kosten pro Token, Daten werden an API gesendet</td>
+        </tr>
+    </tbody>
+</table>
+
+<p>
+    Bei Cloud-Backends wird automatisch die Anonymisierung aktiviert
+    (sofern das Backend nicht als <em>trusted</em> markiert ist),
+    um personenbezogene Daten zu schuetzen.
+</p>
+
+<!-- ============================= -->
+<!-- PROMPTS                       -->
+<!-- ============================= -->
+<h2 id="prompts">Enrichment-Prompts</h2>
+
+<h3 id="standard-prompt">Standard-Prompt</h3>
+<p>
+    KIara liefert einen vorinstallierten Enrichment-Prompt (<code>enrichment_default</code>)
+    mit, der fuer die meisten Anwendungsfaelle geeignet ist. Dieser System-Prompt kann
+    editiert, aber nicht geloescht werden.
+</p>
+
+<h3 id="eigene-prompts">Eigene Prompts erstellen</h3>
+<p>
+    Im Tab <strong>KI</strong> &rarr; <strong>Chat (Prompt-Templates)</strong> koennen
+    neue Enrichment-Templates angelegt werden:
+</p>
+<ol>
+    <li>Neues Template erstellen</li>
+    <li><code>chain_type</code> auf <strong>enrichment</strong> setzen</li>
+    <li>Prompt-Text mit Platzhaltern verfassen</li>
+    <li>Speichern</li>
+</ol>
+<p>
+    Das neue Template steht anschliessend im Dropdown der Datenquellen-Einstellungen
+    zur Verfuegung. So koennen verschiedene Prompts fuer verschiedene Datenquellen
+    verwendet werden &mdash; z.B. ein technischer Prompt fuer CAD-Dokumente und ein
+    allgemeiner fuer E-Mails.
+</p>
+
+<h3 id="platzhalter">Platzhalter-Referenz</h3>
+<p>
+    Enrichment-Templates verwenden Platzhalter, die zur Laufzeit durch die
+    tatsaechlichen Werte ersetzt werden:
+</p>
+
+<table class="wiki-param-table">
+    <thead><tr><th>Platzhalter</th><th>Beschreibung</th><th>Pflicht</th></tr></thead>
+    <tbody>
+        <tr>
+            <td><code>{document_context}</code></td>
+            <td>Zusammengesetzter Dokumentkontext (Header + Nachbar-Chunks)</td>
+            <td>Nein</td>
+        </tr>
+        <tr>
+            <td><code>{chunk_text}</code></td>
+            <td>Der aktuelle Chunk-Text</td>
+            <td><strong>Ja</strong></td>
+        </tr>
+        <tr>
+            <td><code>{file_type}</code></td>
+            <td>Dateityp (z.B. <code>.pdf</code>, <code>.docx</code>)</td>
+            <td>Nein</td>
+        </tr>
+        <tr>
+            <td><code>{source}</code></td>
+            <td>Dateipfad</td>
+            <td>Nein</td>
+        </tr>
+        <tr>
+            <td><code>{datasource_name}</code></td>
+            <td>Name der Datenquelle</td>
+            <td>Nein</td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box">
+    <strong>Validierung:</strong> Der Platzhalter <code>{chunk_text}</code> muss im
+    Template enthalten sein. Fehlt er, wird beim Speichern eine Fehlermeldung angezeigt.
+</div>
+
+<h3 id="prompt-test">Prompt testen</h3>
+<p>
+    Bevor ein Prompt produktiv eingesetzt wird, kann er im Tab
+    <strong>KI</strong> &rarr; <strong>Chat (Prompt-Templates)</strong> getestet werden:
+</p>
+<ol>
+    <li>Enrichment-Template oeffnen</li>
+    <li>Im Bereich <strong>Prompt testen</strong> ein Backend waehlen</li>
+    <li>Einen Beispieltext eingeben</li>
+    <li><strong>Test ausfuehren</strong> klicken</li>
+</ol>
+<p>
+    Das Ergebnis zeigt den generierten Kontext-Prefix, den vollstaendig gerenderten
+    Prompt und die Verarbeitungsdauer.
+</p>
+
+<!-- ============================= -->
+<!-- VERSIONIERUNG                 -->
+<!-- ============================= -->
+<h2 id="versionierung">Prompt-Versionierung</h2>
+
+<h3 id="history">Versionshistorie</h3>
+<p>
+    Jede Aenderung an einem Enrichment-Template wird automatisch versioniert.
+    Die aeltere Version wird in der <strong>Prompt-History</strong> gespeichert
+    (Tabelle <code>prompt_template_history</code>), inklusive:
+</p>
+<ul>
+    <li>Alter Prompt-Content</li>
+    <li>SHA256-Hash des Contents</li>
+    <li>Zeitstempel der Aenderung</li>
+</ul>
+<p>
+    Die Historie ist ueber <strong>KI</strong> &rarr; <strong>Chat (Prompt-Templates)</strong>
+    &rarr; Template oeffnen &rarr; <strong>Versionen</strong> einsehbar.
+</p>
+
+<h3 id="rollback">Rollback</h3>
+<p>
+    Eine fruehere Version kann jederzeit wiederhergestellt werden:
+</p>
+<ol>
+    <li>Template oeffnen &rarr; <strong>Versionen</strong></li>
+    <li>Gewuenschte Version waehlen &rarr; <strong>Wiederherstellen</strong></li>
+    <li>Bestaetigung</li>
+</ol>
+<p>
+    Beim Rollback wird die aktuelle Version ebenfalls archiviert &mdash;
+    es geht keine Version verloren. Nach einem Rollback stimmen die
+    bestehenden Chunks nicht mehr mit dem wiederhergestellten Prompt ueberein.
+    Ein <strong>Reindex</strong> der betroffenen Datenquellen ist empfohlen.
+</p>
+
+<!-- ============================= -->
+<!-- INTEGRITAET                   -->
+<!-- ============================= -->
+<h2 id="integritaet">Integritaetspruefung</h2>
+<p>
+    Im Tab <strong>System</strong> &rarr; <strong>Integritaet</strong> gibt es eine
+    eigene Pruefung fuer die Enrichment-Prompt-Konsistenz:
+</p>
+<p>
+    <strong>Was wird geprueft?</strong> Fuer jede Datenquelle mit aktivem Contextual
+    Retrieval werden die Qdrant-Chunks mit dem aktuellen Prompt-Hash verglichen.
+    Jeder enrichte Chunk speichert den SHA256-Hash des Prompts, mit dem er
+    erzeugt wurde (<code>enrichment_prompt_hash</code> im Qdrant-Payload).
+</p>
+
+<table class="wiki-param-table">
+    <thead><tr><th>Status</th><th>Bedeutung</th><th>Aktion</th></tr></thead>
+    <tbody>
+        <tr>
+            <td><strong>OK</strong></td>
+            <td>Alle Chunks wurden mit dem aktuellen Prompt enriched</td>
+            <td>Keine</td>
+        </tr>
+        <tr>
+            <td><strong>Warnung</strong></td>
+            <td>Einige Chunks wurden mit einem aelteren Prompt enriched</td>
+            <td>Reindex der betroffenen Datenquelle oder Prompt-Rollback</td>
+        </tr>
+    </tbody>
+</table>
+
+<p>
+    Die Pruefung zeigt pro Datenquelle eine Aufschluesselung: wie viele Chunks
+    mit welchem Prompt-Hash (und welcher Version) enriched wurden. So laesst sich
+    nachvollziehen, ob eine Prompt-Aenderung bereits durch einen Reindex
+    propagiert wurde.
+</p>
+
+<!-- ============================= -->
+<!-- PERFORMANCE                   -->
+<!-- ============================= -->
+<h2 id="performance">Performance</h2>
+
+<h3 id="parallelisierung">Parallelisierung</h3>
+<p>
+    Bei mehr als 3 Chunks pro Datei werden die LLM-Aufrufe parallelisiert
+    (ThreadPoolExecutor). Die Anzahl paralleler Aufrufe wird ueber
+    <code>enrichment.max_workers</code> in der Config gesteuert (Default: 2).
+</p>
+<p>
+    <strong>Einschraenkung:</strong> Parallelisierung ist nur bei lokalen
+    (Ollama) Backends aktiv. Cloud-Backends mit Anonymisierung werden
+    sequenziell verarbeitet, um Thread-Safety zu gewaehrleisten.
+</p>
+
+<h3 id="skip-logik">Skip-Logik</h3>
+<p>
+    Chunks unter 50 Zeichen (z.B. Ueberschriften, Code-Einzeiler) werden
+    automatisch uebersprungen &mdash; der Kontext waere laenger als der Chunk.
+    Diese Chunks behalten ihren Original-Text.
+</p>
+
+<h3 id="statistiken">Statistiken</h3>
+<p>
+    Nach Abschluss der Ingestion werden Enrichment-Statistiken im Log und
+    in den Job-Details angezeigt:
+</p>
+
+<table class="wiki-param-table">
+    <thead><tr><th>Feld</th><th>Beschreibung</th></tr></thead>
+    <tbody>
+        <tr><td><code>enrichment_chunks</code></td><td>Erfolgreich angereicherte Chunks</td></tr>
+        <tr><td><code>enrichment_skipped</code></td><td>Uebersprungene Chunks (zu kurz)</td></tr>
+        <tr><td><code>enrichment_errors</code></td><td>Fehlgeschlagene LLM-Aufrufe</td></tr>
+        <tr><td><code>enrichment_time_ms</code></td><td>Gesamtdauer des Enrichments in Millisekunden</td></tr>
+    </tbody>
+</table>
+
+<!-- ============================= -->
+<!-- API-ENDPUNKTE                 -->
+<!-- ============================= -->
+<h2 id="api-endpoints">API-Endpunkte</h2>
+
+<table class="wiki-param-table">
+    <thead><tr><th>Methode</th><th>Pfad</th><th>Beschreibung</th></tr></thead>
+    <tbody>
+        <tr>
+            <td><code>POST</code></td>
+            <td><code>/api/admin/ki/enrichment/test</code></td>
+            <td>Enrichment-Prompt mit Beispieltext testen</td>
+        </tr>
+        <tr>
+            <td><code>GET</code></td>
+            <td><code>/api/admin/ki/prompt-templates/{id}/history</code></td>
+            <td>Versionshistorie eines Templates abrufen</td>
+        </tr>
+        <tr>
+            <td><code>POST</code></td>
+            <td><code>/api/admin/ki/prompt-templates/{id}/rollback/{history_id}</code></td>
+            <td>Fruehere Prompt-Version wiederherstellen</td>
+        </tr>
+        <tr>
+            <td><code>GET</code></td>
+            <td><code>/api/admin/integrity/enrichment-prompts</code></td>
+            <td>Enrichment-Prompt-Konsistenz pruefen</td>
+        </tr>
+    </tbody>
+</table>
+
+<p>
+    Weitere Details zu den einzelnen Endpunkten finden sich im
+    <a href="/wiki/api/">API-Katalog</a>.
+</p>
+
+{% endblock %}

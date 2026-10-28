@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Codebeleg · {{ reference.symbol }}{% endblock %}
+{% block breadcrumb %}<a href="/wiki/">Wiki</a> &rsaquo; <a href="/wiki/guide/architecture">Architektur</a> &rsaquo; Codebeleg{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="/static/css/architecture.css">
+<article class="atlas">
+    <p class="atlas-eyebrow">Geprüfter Quellcode · {{ state.reviewed_at }}</p>
+    <h1>{{ reference.symbol }}</h1>
+    <p><code>{{ reference.path }}</code> · Zeilen {{ reference.start }}–{{ reference.end }}</p>
+    <div class="atlas-state">
+        <strong>Momentaufnahme des geprüften Arbeitsbaums</strong>
+        <p>{{ state.description }}</p>
+        <p>Basis-Commit: <code>{{ state.base_commit }}</code><br>SHA-256 der vollständigen Quelldatei: <code>{{ reference.sha256 }}</code></p>
+    </div>
+    <nav class="atlas-step-index" aria-label="Zurück zu den erklärten Schritten">
+        {% for usage in usages %}<a href="/wiki/guide/{{ usage.page }}#{{ usage.id }}">{{ usage.id }} · {{ usage.label }}</a>{% endfor %}
+    </nav>
+    <pre class="atlas-source" tabindex="0" aria-label="Python-Quellcode mit Zeilennummern"><code>{% for number, line in source_lines %}<span id="L{{ number }}" class="atlas-source-line"><a href="#L{{ number }}" aria-label="Zeile {{ number }}">{{ number }}</a> {{ line }}</span>
+{% endfor %}</code></pre>
+</article>
+{% endblock %}

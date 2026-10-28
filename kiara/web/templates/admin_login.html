@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csp-nonce" content="{{ csp_nonce }}">
+    <title>KIara Admin - Anmeldung</title>
+    <link rel="stylesheet" href="/static/ui_core/css/tokens.css">
+    <link rel="stylesheet" href="/static/ui_core/css/theme.css">
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/login.css">
+    <style nonce="{{ csp_nonce }}">
+        .login-title { margin-bottom: 4px; }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-title">KIara</div>
+        <div class="login-badge"><span>Admin</span></div>
+        <div class="login-subtitle">Admin-Anmeldung</div>
+
+        <div class="login-error" id="loginError"></div>
+
+        <form id="loginForm" autocomplete="on">
+            <div class="login-field">
+                <label for="loginUsername">Benutzername</label>
+                <input type="text" id="loginUsername" name="username" autocomplete="username" autofocus>
+            </div>
+
+            <div class="login-field">
+                <label for="loginPassword">Passwort</label>
+                <input type="password" id="loginPassword" name="password" autocomplete="current-password">
+            </div>
+
+            <button type="submit" class="login-btn" id="loginBtn">Anmelden</button>
+        </form>
+
+        <!-- Passwort-Wechsel-Dialog (erst nach Login sichtbar) -->
+        <form id="pwChangePanel" class="login-panel-hidden" autocomplete="on">
+            <div class="login-subtitle login-subtitle-spaced">Neues Passwort setzen</div>
+            <div class="login-field">
+                <label for="newPassword">Neues Passwort</label>
+                <input type="password" id="newPassword" name="new-password" autocomplete="new-password" minlength="8">
+            </div>
+            <div class="login-field">
+                <label for="confirmPassword">Passwort bestätigen</label>
+                <input type="password" id="confirmPassword" name="confirm-password" autocomplete="new-password">
+            </div>
+            <button type="submit" class="login-btn" id="pwChangeBtn">Passwort ändern</button>
+        </form>
+    </div>
+
+    <script nonce="{{ csp_nonce }}">
+        let _raw = null;
+        try { _raw = localStorage.getItem('kiara-theme'); } catch (e) { _raw = null; }
+        const savedTheme = ['light','dark','kontrast'].includes(_raw) ? _raw : 'light';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+
+        const usernameInput = document.getElementById('loginUsername');
+        const passwordInput = document.getElementById('loginPassword');
+        const loginBtn = document.getElementById('loginBtn');
+        const errorDiv = document.getElementById('loginError');
+
+        usernameInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                passwordInput.focus();
+            }
+        });
+
+        document.getElementById('loginForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            doLogin();
+        });
+
+        async function doLogin() {
+            const username = usernameInput.value.trim();
+            const password = passwordInput.value;
+
+            if (!username || !password) {
+                showError('Bitte Benutzername und Passwort eingeben.');
+                return;
+            }
+
+            loginBtn.disabled = true;
+            loginBtn.textContent = 'Anmeldung...';
+            errorDiv.style.display = 'none';
+
+            try {
+                const resp = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                    body: JSON.stringify({ username, password }),
+                });
+
+                if (!resp.ok) {
+                    const data = await resp.json().catch(() => ({}));
+                    throw new Error(data.detail || 'Anmeldung fehlgeschlagen');
+                }
+
+                const result = await resp.json();
+
+                // CSRF-Token lokal behalten (Must-Change-Flow nutzt ihn, Redirect uebernimmt ihn).
+                _csrfToken = result.csrf_token || '';
+                if (_csrfToken && window.SharedUi && window.SharedUi._config) {
+                    window.SharedUi._config().csrfTokenValue = _csrfToken;
+                }
+
+                if (!result.user || !result.user.is_admin) {
+                    const logoutHeaders = window.SharedUi && window.SharedUi.fetch && window.SharedUi.fetch.csrfHeaders
+                        ? window.SharedUi.fetch.csrfHeaders()
+                        : { 'X-Requested-With': 'XMLHttpRequest' };
+                    if (_csrfToken) {
+                        logoutHeaders['X-CSRF-Token'] = _csrfToken;
+                    }
+                    await fetch('/api/auth/logout', { method: 'POST', headers: logoutHeaders });
+                    throw new Error('Kein Admin-Zugriff');
+                }
+
+                if (result.user.must_change_password) {
+                    showPasswordChange(password);
+                    return;
+                }
+
+                const params = new URLSearchParams(window.location.search);
+                const next = params.get('next');
+                window.location.href = (next && /^\/[^\/\\]/.test(next)) ? next : '/';
+            } catch (error) {
+                showError(error.message);
+                loginBtn.disabled = false;
+                loginBtn.textContent = 'Anmelden';
+            }
+        }
+
+        let _currentPassword = '';
+        let _csrfToken = '';
+
+        function showPasswordChange(oldPw) {
+            _currentPassword = oldPw;
+            document.getElementById('loginForm').style.display = 'none';
+            errorDiv.style.display = 'none';
+            document.querySelector('.login-subtitle').textContent = 'Passwort muss geändert werden';
+            document.getElementById('pwChangePanel').style.display = 'block';
+            document.getElementById('newPassword').focus();
+        }
+
+        document.getElementById('pwChangePanel')?.addEventListener('submit', (e) => {
+            e.preventDefault();
+            doPwChange();
+        });
+
+        async function doPwChange() {
+            const newPw = document.getElementById('newPassword').value;
+            const confirmPw = document.getElementById('confirmPassword').value;
+
+            if (newPw.length < 8) { showError('Mindestens 8 Zeichen.'); return; }
+            if (newPw !== confirmPw) { showError('Passwörter stimmen nicht überein.'); return; }
+            if (newPw === _currentPassword) { showError('Neues Passwort darf nicht dem alten entsprechen.'); return; }
+
+            errorDiv.style.display = 'none';
+            const btn = document.getElementById('pwChangeBtn');
+            btn.disabled = true;
+            btn.textContent = 'Wird geändert...';
+
+            try {
+                const pwHeaders = Object.assign(
+                    { 'Content-Type': 'application/json' },
+                    window.SharedUi && window.SharedUi.fetch && window.SharedUi.fetch.csrfHeaders
+                        ? window.SharedUi.fetch.csrfHeaders()
+                        : { 'X-Requested-With': 'XMLHttpRequest' }
+                );
+                if (_csrfToken) {
+                    pwHeaders['X-CSRF-Token'] = _csrfToken;
+                }
+                const resp = await fetch('/api/auth/password', {
+                    method: 'PUT',
+                    headers: pwHeaders,
+                    body: JSON.stringify({ old_password: _currentPassword, new_password: newPw }),
+                });
+                if (!resp.ok) {
+                    const data = await resp.json().catch(() => ({}));
+                    throw new Error(data.detail || 'Fehler beim Passwort-Wechsel');
+                }
+                // Rotierten Token fuer SharedUi-Bootstrap auf naechster Seite hinterlegen
+                try {
+                    const body = await resp.json();
+                    if (body && body.csrf_token && window.SharedUi && window.SharedUi._config) {
+                        window.SharedUi._config().csrfTokenValue = body.csrf_token;
+                    }
+                } catch (_) { /* leerer Body ok */ }
+                window.location.href = '/';
+            } catch (error) {
+                showError(error.message);
+                btn.disabled = false;
+                btn.textContent = 'Passwort ändern';
+            }
+        }
+
+        function showError(msg) {
+            errorDiv.textContent = msg;
+            errorDiv.style.display = 'block';
+        }
+    </script>
+    <script src="/static/ui_core/js/core.js"></script>
+    <script src="/static/ui_core/js/theme.js"></script>
+    <script src="/static/ui_core/js/fetch.js"></script>
+    <script src="/static/js/kiara_bootstrap.js"></script>
+</body>
+</html>

@@ -1,0 +1,269 @@
+"""Gemeinsame Basisklasse fuer Cloud-Adapter (Anthropic, OpenAI).
+
+Extrahiert identische Logik aus AnthropicToolAdapter und OpenAIToolAdapter:
+Anonymisierung/De-Anonymisierung, Usage-Tracking, Parameter-Handling,
+gemeinsame __init__-Initialisierung.
+
+Beziehungen:
+    - Erbt von kiara.generation.adapters.base.BaseToolAdapter
+    - kiara.generation.adapters.anthropic / openai erben CloudAdapterBase
+    - Ollama bleibt bei BaseToolAdapter (keine Anonymisierung, anderes Pattern)
+"""
+
+from __future__ import annotations
+
+import logging
+import unicodedata
+from abc import abstractmethod
+from collections.abc import Iterator
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from kiara.anonymization.base import BaseAnonymizer
+
+from kiara.generation.adapters.base import (
+    BaseToolAdapter,
+    PreparedToolText,
+    ToolAdapterError,
+)
+from kiara.shared.constants import (
+    DEFAULT_LLM_TEMPERATURE,
+    DEFAULT_MAX_TOKENS,
+)
+from kiara.tools.base import ToolDefinition
+
+logger = logging.getLogger(__name__)
+
+
+def _source_entity_spans(text: str, spans: list[tuple[int, int]]) -> tuple[tuple[int, int], ...]:
+    """Alle NFC-Bereiche in einem Durchlauf auf ganze Eingabegruppen abbilden.
+
+    Die sortierten Bereiche bleiben einzeln erhalten, damit Ersatzwerte auch
+    bei mehreren Entitaeten in derselben Normalisierungsgruppe zugeordnet bleiben.
+    """
+    if not spans or unicodedata.is_normalized("NFC", text):
+        return tuple(sorted(spans))
+
+    # Ein Starter und seine kombinierenden Zeichen bilden eine Gruppe.
+    # Hangul-Jamo koennen auch ueber Startergrenzen hinweg komponieren.
+    def groups():
+        start, normalized_start = 0, 0
+        for index, char in enumerate(text):
+            if index == start or unicodedata.combining(unicodedata.normalize("NFD", char)[0]):
+                continue
+            normalized = unicodedata.normalize("NFC", text[start:index])
+            following = unicodedata.normalize("NFC", char)
+            if unicodedata.normalize("NFC", normalized + following) != normalized + following:
+                continue
+            yield normalized_start, normalized_start + len(normalized), start, index
+            normalized_start += len(normalized)
+            start = index
+        normalized = unicodedata.normalize("NFC", text[start:])
+        yield normalized_start, normalized_start + len(normalized), start, len(text)
+
+    mapped = []
+    normalized_groups = groups()
+    group = next(normalized_groups)
+    for low, high in sorted(spans):
+        while group[1] <= low:
+            group = next(normalized_groups)
+        raw_start = group[2]
+        while group[1] < high:
+            group = next(normalized_groups)
+        raw_end = group[3]
+        mapped.append((raw_start, raw_end))
+    return tuple(mapped)
+
+
+class CloudAdapterBase(BaseToolAdapter):
+    """Gemeinsame Basisklasse fuer Cloud-LLM-Adapter (Anthropic, OpenAI).
+
+    Stellt bereit:
+    - Anonymisierung/De-Anonymisierung Hilfsmethoden
+    - Gemeinsame __init__-Logik (Config-Parsing, Usage-Dict)
+    - deanonymize_params() — identisch fuer alle Cloud-Adapter
+    - last_usage — identisches Format fuer alle Cloud-Adapter
+
+    Subklassen muessen implementieren:
+    - _create_client(backend) — Provider-spezifischen Client erstellen
+    - init_conversation(), step(), add_tool_result(), add_tool_results()
+    - stream_final(), last_conversation
+    """
+
+    def __init__(
+        self, backend: dict, config: dict, anonymizer: BaseAnonymizer | None = None
+    ) -> None:
+        self._model = backend["model"]
+        self._anonymizer: BaseAnonymizer | None = anonymizer
+        self._requires_anonymizer = bool(config.get("_kiara_cloud_requires_anonymizer", False))
+
+        cloud_cfg = config.get("cloud", {})
+        self._max_tokens = cloud_cfg.get("max_tokens", DEFAULT_MAX_TOKENS)
+        self._temperature = cloud_cfg.get("temperature", DEFAULT_LLM_TEMPERATURE)
+
+        self._messages: list[dict] = []
+        self._tool_defs: list[dict] = []
+        self._usage: dict = {"input": 0, "output": 0}
+        self._think: bool = False  # Extended Thinking (gesetzt von AgentChain)
+
+    # -- Anonymisierung Hilfsmethoden --
+
+    def _require_anonymizer(self, operation: str) -> None:
+        """Bricht Cloud-Pfade ab, wenn Anonymisierung policy-seitig Pflicht ist."""
+        if self._anonymizer is None and self._requires_anonymizer:
+            raise ToolAdapterError(
+                f"Cloud-{operation} erfordert Anonymisierung, aber kein "
+                "Anonymizer ist initialisiert",
+                retryable=False,
+            )
+
+    def _anonymize(self, text: str) -> str:
+        """Anonymisiert Text falls ein Anonymizer konfiguriert ist."""
+        if self._anonymizer:
+            return self._anonymizer.anonymize(text)
+        self._require_anonymizer("Anonymisierung")
+        return text
+
+    def _deanonymize(self, text: str) -> str:
+        """De-anonymisiert Text falls ein Anonymizer konfiguriert ist."""
+        if self._anonymizer:
+            try:
+                return self._anonymizer.deanonymize(text)
+            except Exception as exc:
+                logger.warning("De-Anonymisierung (Adapter) fehlgeschlagen: %s", exc)
+                raise ToolAdapterError(
+                    "Cloud-De-Anonymisierung fehlgeschlagen",
+                    retryable=False,
+                ) from exc
+        self._require_anonymizer("De-Anonymisierung")
+        return text
+
+    # -- Gemeinsame Methoden --
+
+    @property
+    def requires_document_context(self) -> bool:
+        return self._anonymizer is not None or self._requires_anonymizer
+
+    def prepare_tool_text(self, text: str) -> PreparedToolText:
+        """Anonymisiert vor der Auswahl; vorbereitete Inhalte bleiben unveraendert."""
+        if isinstance(text, PreparedToolText):
+            return text
+        clean = self._anonymize(text)
+        from kiara.anonymization.anonymizer import AnonymizationResult
+
+        result = getattr(self._anonymizer, "last_result", None)
+        replacements = ()
+        if isinstance(result, AnonymizationResult) and result.clean_text == clean:
+            entities = sorted(
+                result.entities_found, key=lambda entity: (entity["start"], entity["end"])
+            )
+            mapped = _source_entity_spans(
+                text, [(entity["start"], entity["end"]) for entity in entities]
+            )
+            pseudonyms = {value: key for key, value in result.mapping.items()}
+            replacements = tuple(
+                (*span, pseudonyms[entity["value"]])
+                for span, entity in zip(mapped, entities, strict=True)
+            )
+            spans = []
+            for low, high in mapped:
+                if spans and low < spans[-1][1]:
+                    spans[-1] = spans[-1][0], max(spans[-1][1], high)
+                else:
+                    spans.append((low, high))
+            spans = tuple(spans)
+        else:
+            # Andere Anonymizer ohne Positionsbericht duerfen veraenderten
+            # Text nur als Ganzes liefern, statt unbekannte Entitaeten zu teilen.
+            spans = ((0, len(text)),) if clean != text else ()
+        return PreparedToolText(clean, protected_spans=spans, replacements=replacements)
+
+    def deanonymize_params(self, params: dict) -> dict:
+        """De-anonymisiert Tool-Parameter rekursiv (Strings, Listen, Dicts)."""
+        if not self._anonymizer:
+            self._require_anonymizer("Tool-Parameter-De-Anonymisierung")
+            return {**params}  # IMMER neues Dict — kein Shared-Reference-Risiko
+
+        def _deep(val):
+            if isinstance(val, str):
+                return self._anonymizer.deanonymize(val)
+            if isinstance(val, dict):
+                return {k: _deep(v) for k, v in val.items()}
+            if isinstance(val, list):
+                return [_deep(item) for item in val]
+            return val
+
+        return {k: _deep(v) for k, v in params.items()}
+
+    @property
+    def last_usage(self) -> dict:
+        """Gibt aggregierte Token-Usage-Statistiken zurueck."""
+        return {
+            "prompt_tokens": self._usage["input"],
+            "response_tokens": self._usage["output"],
+            "total_duration_ms": 0,
+            "num_ctx": 0,
+            "model": self._model,
+        }
+
+    def _build_tool_name_map(self, tools: list[ToolDefinition]) -> dict[str, str]:
+        """Baut Tool-Name-Map: API-konformer Name → Original-Name.
+
+        Cloud-APIs (Anthropic, OpenAI) erlauben nur [a-zA-Z0-9_-] in
+        Tool-Namen. Admin-Funktionen nutzen Punkt-Notation (z.B. "backup.list")
+        → Punkte werden fuer die API durch Unterstriche ersetzt.
+
+        Returns:
+            Dict {api_name: original_name} fuer Rueck-Mapping im step().
+        """
+        name_map = {}
+        for td in tools:
+            api_name = td.name.replace(".", "_")
+            name_map[api_name] = td.name
+        return name_map
+
+    def _collect_and_deanonymize(self, chunks: list[str]) -> str:
+        """Joined gesammelte Stream-Chunks und de-anonymisiert das Ergebnis."""
+        full_text = "".join(chunks)
+        return self._deanonymize(full_text)
+
+    # -- Template Methods (gemeinsames Skelett, Provider-spezifische Hooks) --
+
+    @abstractmethod
+    def _is_retryable(self, exc: Exception) -> bool:
+        """Prueft ob ein Provider-Fehler retryable ist (Rate-Limit, Netzwerk)."""
+
+    @abstractmethod
+    def _append_context(self, anon_ctx: str) -> None:
+        """Fuegt anonymisierten Zusatzkontext in die Messages ein.
+
+        Provider-spezifisch: Anthropic nutzt content-block-Listen,
+        OpenAI nutzt String-Concatenation.
+        """
+
+    @abstractmethod
+    def _stream_chunks(self) -> Iterator[str]:
+        """Streamt Text-Chunks vom Provider (provider-spezifische API).
+
+        Wird innerhalb von stream_final() aufgerufen. Darf Exceptions
+        werfen — die Fehlerbehandlung erfolgt im Template.
+        """
+
+    def stream_final(self, additional_context: str = "", think: bool = False) -> Iterator[str]:
+        """Streamt die finale Antwort nach dem Tool-Loop (Template Method).
+
+        Gemeinsames Skelett fuer alle Cloud-Adapter:
+        1. Optional: Zusatzkontext anonymisieren und anhaengen
+        2. Stream starten und Chunks sammeln
+        3. Ergebnis de-anonymisieren und yielden
+        """
+        self._think = think
+        if additional_context:
+            self._append_context(self._anonymize(additional_context))
+        try:
+            chunks = list(self._stream_chunks())
+        except Exception as exc:
+            raise ToolAdapterError(str(exc), retryable=self._is_retryable(exc)) from exc
+        final_anon_text = "".join(chunks)
+        self._messages.append({"role": "assistant", "content": final_anon_text})
+        yield self._deanonymize(final_anon_text)

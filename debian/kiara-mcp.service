@@ -1,0 +1,28 @@
+[Unit]
+Description=KIara MCP Server
+After=network.target kiara.service
+Wants=kiara.service
+OnFailure=kiara-failure-logger@%n.service
+
+[Service]
+Type=simple
+User=kiara
+Group=kiara
+WorkingDirectory=/var/lib/kiara
+ExecStart=/opt/kiara/venv/bin/python -m kiara.mcp_server
+Restart=on-failure
+RestartSec=5
+Environment=KIARA_CONFIG=/etc/kiara/kiara.yaml
+
+# Hardening
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+# NoNewPrivileges deaktiviert: Worker/Admin-Pfade nutzen sudo (mount/install/systemctl-restart/davfs-tee)
+NoNewPrivileges=false
+ReadWritePaths=/var/lib/kiara /var/log/kiara /etc/davfs2
+# Python JIT benoetigt Write+Execute
+MemoryDenyWriteExecute=false
+
+[Install]
+WantedBy=multi-user.target

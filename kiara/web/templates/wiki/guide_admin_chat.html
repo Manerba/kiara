@@ -1,0 +1,401 @@
+{% extends "base.html" %}
+
+{% block title %}KIara Wiki — Guide: Admin-Chat{% endblock %}
+
+{% block breadcrumb %}
+<a href="/wiki/">Wiki</a> &rsaquo; <span>Guide: Admin-Chat</span>
+{% endblock %}
+
+{% block content %}
+<h1>Admin-Chat</h1>
+
+<p class="wiki-intro">
+    Der Admin-Chat ist eine konversationelle Schnittstelle zur Verwaltung und Konfiguration
+    von KIara. Statt Formulare auszufüllen und durch Menüs zu navigieren, können Administratoren
+    Aufgaben in natürlicher Sprache beschreiben — das System führt sie aus.
+</p>
+
+<nav class="wiki-toc">
+    <h3>Inhalt</h3>
+    <ol>
+        <li><a href="#overview">Was ist der Admin-Chat?</a></li>
+        <li><a href="#access">Zugang und Voraussetzungen</a></li>
+        <li><a href="#ui">Chat-Oberfläche</a></li>
+        <li><a href="#scope">Funktionsumfang</a></li>
+        <li><a href="#confirmation">Confirmation-Flow</a></li>
+        <li><a href="#wizard">Wizard-System</a></li>
+        <li><a href="#setup">Setup-Modus</a></li>
+        <li><a href="#backend">Backend-Auswahl</a></li>
+        <li><a href="#persistence">Chat-Persistenz</a></li>
+        <li><a href="#examples">Beispiel-Dialoge</a></li>
+        <li><a href="#tips">Tipps und Best Practices</a></li>
+        <li><a href="#troubleshooting">Fehlerbehebung</a></li>
+    </ol>
+</nav>
+
+<!-- ============================= -->
+<!-- ÜBERBLICK                     -->
+<!-- ============================= -->
+<h2 id="overview">Was ist der Admin-Chat?</h2>
+
+<p>
+    Der Admin-Chat ist ein KI-gestützter Assistent, der speziell für die Administration von
+    KIara entwickelt wurde. Er basiert auf einem <strong>ReAct-Agenten mit Tool-Use</strong>
+    und hat Zugriff auf alle Admin-Funktionen des Systems. Im Gegensatz zum normalen Benutzer-Chat
+    (der die Wissensbasis durchsucht) führt der Admin-Chat <strong>aktive Änderungen</strong>
+    am System durch.
+</p>
+<p>
+    Der Admin-Chat läuft als eigener Service (<code>kiara-admin-chat.service</code>, Port 8503)
+    und kommuniziert über <strong>Server-Sent Events (SSE)</strong> für Echtzeit-Streaming
+    der Antworten. Er nutzt dasselbe LLM-Backend wie der Benutzer-Chat, hat aber Zugriff auf
+    eine erweiterte Tool-Registry mit über 100 administrativen Funktionen.
+</p>
+
+<!-- ============================= -->
+<!-- ZUGANG                        -->
+<!-- ============================= -->
+<h2 id="access">Zugang und Voraussetzungen</h2>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Eigenschaft</th><th>Wert</th></tr>
+    </thead>
+    <tbody>
+        <tr><td><strong>Erreichbar über</strong></td><td>Admin-UI (Port 8502), Tab „KIara"</td></tr>
+        <tr><td><strong>Berechtigung</strong></td><td>Nur Benutzer mit Admin-Rechten</td></tr>
+        <tr><td><strong>LLM-Backend</strong></td><td>Benötigt ein konfiguriertes und erreichbares LLM (lokal oder Cloud)</td></tr>
+        <tr><td><strong>Service</strong></td><td><code>kiara-admin-chat.service</code> muss aktiv sein</td></tr>
+        <tr><td><strong>Authentifizierung</strong></td><td>Admin-Session-Cookie + CSRF-Header</td></tr>
+    </tbody>
+</table>
+
+<!-- ============================= -->
+<!-- OBERFLÄCHE                    -->
+<!-- ============================= -->
+<h2 id="ui">Chat-Oberfläche</h2>
+
+<h3>Layout</h3>
+<p>Die Chat-Oberfläche besteht aus zwei Bereichen:</p>
+<ul class="wiki-examples">
+    <li><strong>Sidebar (links):</strong> Liste aller bisherigen Chats mit Titel, Datum und Nachrichtenzahl. Button „+ Neuer Chat" startet einen neuen Dialog. Die Sidebar ist ein-/ausklappbar.</li>
+    <li><strong>Chat-Bereich (rechts):</strong> Nachrichtenverlauf, Eingabefeld und Backend-Auswahl.</li>
+</ul>
+
+<h3>Eingabe-Bereich</h3>
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Element</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr><td><strong>Eingabefeld</strong></td><td>Mehrzeiliges Textfeld für die Frage/Anweisung.</td></tr>
+        <tr><td><strong>Senden</strong></td><td>Sendet die Nachricht und startet den SSE-Stream.</td></tr>
+        <tr><td><strong>Abbrechen</strong></td><td>Nur während laufender Antwort sichtbar — bricht den Stream ab.</td></tr>
+        <tr><td><strong>Backend-Dropdown</strong></td><td>Wahl des LLM-Backends: „Standard-Backend" (automatisch) oder ein spezifisches Backend.</td></tr>
+    </tbody>
+</table>
+
+<h3>Nachrichten-Typen</h3>
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Typ</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr><td><strong>Benutzer</strong></td><td>Eigene Nachrichten (blaue Blase).</td></tr>
+        <tr><td><strong>Assistent</strong></td><td>KIara-Antworten (graue Blase) mit optionalen Tool-Calls, Quellen und Usage-Stats.</td></tr>
+        <tr><td><strong>Bestätigung</strong></td><td>Gelbe Blase bei destruktiven Aktionen — erwartet die Eingabe eines Bestätigungstextes.</td></tr>
+        <tr><td><strong>Wizard</strong></td><td>Checkliste mit gesammelten/fehlenden Parametern bei mehrstufigen Aktionen.</td></tr>
+        <tr><td><strong>Fehler</strong></td><td>Rote Fehlermeldung bei LLM- oder Tool-Fehlern.</td></tr>
+    </tbody>
+</table>
+
+<h3>Denk-Blöcke (Think)</h3>
+<p>
+    Bei Modellen mit erweiterten Reasoning-Fähigkeiten (z.B. Anthropic Claude) zeigt der
+    Chat optionale Denk-Blöcke an. Diese werden <strong>nicht</strong> in der Datenbank
+    gespeichert und erscheinen nicht in der Chat-Historie — sie dienen nur der Transparenz
+    während der laufenden Antwort.
+</p>
+
+<!-- ============================= -->
+<!-- FUNKTIONSUMFANG               -->
+<!-- ============================= -->
+<h2 id="scope">Funktionsumfang</h2>
+
+<p>
+    Der Admin-Chat kann alle Aufgaben ausführen, die auch über die Admin-UI möglich sind.
+    Über 100 registrierte Admin-Funktionen in folgenden Kategorien:
+</p>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Kategorie</th><th>Beispiel-Funktionen</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr><td><strong>Datenquellen</strong></td><td><code>datasource.list</code>, <code>datasource.create</code>, <code>datasource.delete</code></td><td>Anlegen, bearbeiten, löschen, Verbindungen testen, Berechtigungen zuweisen.</td></tr>
+        <tr><td><strong>Jobs</strong></td><td><code>jobs.start</code>, <code>jobs.pause</code>, <code>jobs.cancel</code></td><td>Indexierung starten, pausieren, abbrechen, Historie einsehen.</td></tr>
+        <tr><td><strong>KI-Backends</strong></td><td><code>ki.backends.create</code>, <code>ki.backends.test</code></td><td>Backends anlegen, testen, Modelle wechseln, Cloud-Provider einrichten.</td></tr>
+        <tr><td><strong>System</strong></td><td><code>system.health</code>, <code>system.metrics</code></td><td>Systemstatus, Services neustarten, Integrität prüfen, Backup/Restore.</td></tr>
+        <tr><td><strong>Benutzer</strong></td><td><code>users.create</code>, <code>users.update</code>, <code>ldap.sync</code></td><td>Benutzer verwalten, LDAP-Konfiguration, Gruppen synchronisieren.</td></tr>
+        <tr><td><strong>Netzwerk</strong></td><td><code>network.ping</code>, <code>network.dns</code>, <code>network.portscan</code></td><td>Diagnose-Tools ohne SSH-Zugang.</td></tr>
+        <tr><td><strong>Compliance</strong></td><td><code>compliance.audit</code>, <code>compliance.vvt</code></td><td>Audit-Trail, Anonymisierungsstatistik (read-only).</td></tr>
+        <tr><td><strong>Tools</strong></td><td><code>tools.connections.list</code>, <code>mcp.keys.create</code></td><td>ERP-Verbindungen, MCP-API-Keys, Workflows.</td></tr>
+        <tr><td><strong>VektorDB</strong></td><td><code>vectordb.files</code>, <code>vectordb.delete_files</code></td><td>Dateien löschen, Collections verwalten.</td></tr>
+    </tbody>
+</table>
+
+<!-- ============================= -->
+<!-- CONFIRMATION                  -->
+<!-- ============================= -->
+<h2 id="confirmation">Confirmation-Flow</h2>
+
+<p>
+    Destruktive Aktionen erfordern eine explizite Bestätigung. Der Agent zeigt einen
+    Bestätigungsdialog mit einem <strong>Bestätigungstext</strong>, den der Admin exakt
+    eintippen muss.
+</p>
+
+<h3>Ablauf</h3>
+<ol class="wiki-examples">
+    <li>Admin gibt Anweisung: „Lösche die Datenquelle Alte Dokumente"</li>
+    <li>Agent erkennt: <code>datasource.delete</code> erfordert Bestätigung</li>
+    <li>SSE sendet <code>confirmation_required</code> mit Bestätigungstext</li>
+    <li>Frontend zeigt gelbe Bestätigungs-Blase mit Warnung und Bestätigungstext</li>
+    <li>Admin tippt den exakten Text: <code>datasource 7 loeschen</code></li>
+    <li>System prüft: exakte Übereinstimmung (case-insensitiv)</li>
+    <li>Funktion wird ausgeführt, Changelog-Eintrag erstellt</li>
+</ol>
+
+<h3>Regeln</h3>
+<ul class="wiki-examples">
+    <li><strong>Ablaufzeit:</strong> 30 Minuten. Danach wird die Bestätigung automatisch verworfen.</li>
+    <li><strong>Abbrechen:</strong> Jede andere Eingabe (außer dem exakten Bestätigungstext) verwirft die Aktion.</li>
+    <li><strong>Nur ein Pending:</strong> Pro Chat kann nur eine Bestätigung gleichzeitig offen sein.</li>
+</ul>
+
+<h3>Aktionen mit Bestätigung (Beispiele)</h3>
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Aktion</th><th>Bestätigungstext-Muster</th></tr>
+    </thead>
+    <tbody>
+        <tr><td>Datenquelle löschen</td><td><code>datasource {id} loeschen</code></td></tr>
+        <tr><td>Benutzer löschen</td><td><code>benutzer {id} loeschen</code></td></tr>
+        <tr><td>Job abbrechen</td><td><code>job {id} abbrechen</code></td></tr>
+        <tr><td>Backup wiederherstellen</td><td><code>backup {filename} restore</code></td></tr>
+        <tr><td>Collection leeren</td><td><code>collection {name} loeschen</code></td></tr>
+        <tr><td>LDAP-Config löschen</td><td><code>ldap config loeschen</code></td></tr>
+    </tbody>
+</table>
+
+<!-- ============================= -->
+<!-- WIZARD                        -->
+<!-- ============================= -->
+<h2 id="wizard">Wizard-System</h2>
+
+<p>
+    Bei Funktionen mit mehreren Pflichtparametern sammelt der <strong>Wizard</strong> die
+    Werte schrittweise ein. Der Admin muss nicht alle Parameter auf einmal angeben.
+</p>
+
+<h3>Ablauf</h3>
+<ol class="wiki-examples">
+    <li>Admin: „Erstelle einen neuen Benutzer"</li>
+    <li>Agent ruft <code>users.create</code> auf — Pflichtfelder fehlen</li>
+    <li>SSE sendet <code>wizard_update</code> mit Checkliste (erfasste, fehlende, optionale Felder)</li>
+    <li>Admin: „Benutzername: jdoe, Passwort: Geheim123!"</li>
+    <li>Agent erkennt Wizard-Kontext, ruft Funktion mit gesammelten Werten erneut auf</li>
+    <li>Wizard abgeschlossen → Funktion wird ausgeführt</li>
+</ol>
+
+<h3>Regeln</h3>
+<ul class="wiki-examples">
+    <li><strong>Ein Wizard pro Chat:</strong> Es kann nur ein aktiver Wizard gleichzeitig existieren.</li>
+    <li><strong>Kontext-Erkennung:</strong> Der Agent erkennt automatisch, dass ein Wizard läuft, und ordnet neue Eingaben den offenen Feldern zu.</li>
+    <li><strong>Abbrechen:</strong> Der Wizard wird verworfen, wenn der Admin ein anderes Thema anspricht.</li>
+</ul>
+
+<!-- ============================= -->
+<!-- SETUP-MODUS                   -->
+<!-- ============================= -->
+<h2 id="setup">Setup-Modus</h2>
+
+<p>
+    Wenn <strong>kein LLM-Backend konfiguriert</strong> ist (z.B. bei der Ersteinrichtung),
+    schaltet der Admin-Chat in einen regelbasierten Setup-Modus. Hier ist kein LLM nötig —
+    die Antworten werden statisch generiert.
+</p>
+
+<h3>Verfügbare Setup-Befehle</h3>
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Befehl</th><th>Beschreibung</th></tr>
+    </thead>
+    <tbody>
+        <tr><td><code>cloud anthropic</code></td><td>Cloud-Backend mit Anthropic einrichten. Fragt nach API-Key.</td></tr>
+        <tr><td><code>cloud openai</code></td><td>Cloud-Backend mit OpenAI einrichten. Fragt nach API-Key.</td></tr>
+        <tr><td><code>lokal &lt;url&gt;</code></td><td>Lokales Ollama-Backend einrichten. Testet die URL und zeigt verfügbare Modelle.</td></tr>
+        <tr><td><code>abbrechen</code> / <code>zurück</code></td><td>Setup-Schritt abbrechen.</td></tr>
+        <tr><td><code>help</code></td><td>Verfügbare Befehle anzeigen.</td></tr>
+    </tbody>
+</table>
+
+<div class="wiki-tip-box">
+    <strong>Tipp:</strong> API-Keys werden in der Chat-Historie als „(API-Key eingegeben)"
+    maskiert gespeichert — sie sind nach der Eingabe nicht mehr sichtbar.
+</div>
+
+<!-- ============================= -->
+<!-- BACKEND-AUSWAHL               -->
+<!-- ============================= -->
+<h2 id="backend">Backend-Auswahl</h2>
+
+<p>
+    Über das Dropdown im Eingabebereich kann das LLM-Backend pro Nachricht gewechselt werden:
+</p>
+<ul class="wiki-examples">
+    <li><strong>Standard-Backend:</strong> KIara wählt automatisch das aktive Backend mit der höchsten Priorität.</li>
+    <li><strong>Spezifisches Backend:</strong> Alle konfigurierten und aktiven Backends (lokal + Cloud) stehen zur Auswahl.</li>
+</ul>
+
+<div class="wiki-tip-box">
+    <strong>Tipp:</strong> Für komplexe Fragen das Cloud-Backend wählen, für einfache
+    Status-Abfragen reicht das lokale Modell. So lassen sich Kosten und Qualität pro
+    Anfrage steuern.
+</div>
+
+<!-- ============================= -->
+<!-- PERSISTENZ                    -->
+<!-- ============================= -->
+<h2 id="persistence">Chat-Persistenz</h2>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Zeitpunkt</th><th>Verhalten</th></tr>
+    </thead>
+    <tbody>
+        <tr><td><strong>Tab öffnen</strong></td><td>Draft-Modus: Begrüßung wird angezeigt, aber kein DB-Eintrag erstellt.</td></tr>
+        <tr><td><strong>Erste Nachricht</strong></td><td>Lazy-Creation: Chat wird in der DB angelegt, Begrüßung + Nachricht + Antwort gespeichert.</td></tr>
+        <tr><td><strong>Weitere Nachrichten</strong></td><td>Jede Nachricht (User + Assistant) wird sofort in <code>admin_chat_messages</code> gespeichert.</td></tr>
+        <tr><td><strong>Chat wechseln</strong></td><td>Alle Nachrichten des gewählten Chats werden aus der DB geladen.</td></tr>
+        <tr><td><strong>Chat löschen</strong></td><td>Chat + alle Nachrichten + Confirmations + Wizards werden kaskadierend gelöscht.</td></tr>
+    </tbody>
+</table>
+
+<h3>Historie im LLM-Kontext</h3>
+<ul class="wiki-examples">
+    <li>Die letzten <strong>20 Nachrichten</strong> werden als Kontext an das LLM übergeben.</li>
+    <li>Setup-Nachrichten werden gefiltert (nicht im LLM-Kontext).</li>
+    <li>Denk-Blöcke werden <strong>vor</strong> der DB-Speicherung entfernt (History-Leak-Prevention).</li>
+</ul>
+
+<!-- ============================= -->
+<!-- BEISPIELE                     -->
+<!-- ============================= -->
+<h2 id="examples">Beispiel-Dialoge</h2>
+
+<h3>Datenquelle anlegen</h3>
+<pre class="wiki-code-block"><code>Admin: Erstelle eine neue SMB-Datenquelle "Technik-Dokumente" mit Server
+       fileserver.firma.local, Freigabe "Technik" und Benutzer svc-kiara-read.
+
+KIara: Ich erstelle die Datenquelle mit den angegebenen Parametern.
+       [Tool: datasource.create]
+       Die Datenquelle "Technik-Dokumente" wurde erfolgreich angelegt (ID: 12).
+       Soll ich die Verbindung testen?</code></pre>
+
+<h3>System-Status prüfen</h3>
+<pre class="wiki-code-block"><code>Admin: Wie ist der aktuelle Systemstatus?
+
+KIara: [Tool: system.health]
+       Systemstatus:
+       - CPU: 23%, RAM: 4.2/16 GB
+       - Services: alle 5 aktiv
+       - Qdrant: erreichbar, 3 Collections, 45.230 Vektoren
+       - Letzter Job: vor 2h, erfolgreich (DS "E-Mail Archiv")</code></pre>
+
+<h3>Destruktive Aktion mit Bestätigung</h3>
+<pre class="wiki-code-block"><code>Admin: Lösche Datenquelle 7.
+
+KIara: Systembestätigung
+       Datenquelle "Alte Dokumente" (ID: 7) enthält 12.450 Chunks.
+       Das Löschen entfernt alle Daten aus allen 4 Schichten. Nicht umkehrbar.
+       Tippen Sie zur Bestätigung: datasource 7 loeschen
+
+Admin: datasource 7 loeschen
+
+KIara: Datenquelle "Alte Dokumente" wurde gelöscht.
+       12.450 Chunks aus Qdrant entfernt, File-Hashes bereinigt.</code></pre>
+
+<h3>Netzwerk-Diagnose</h3>
+<pre class="wiki-code-block"><code>Admin: Ist der Ollama-Server erreichbar?
+
+KIara: [Tool: network.ping → gpu-server.local]
+       [Tool: network.http_check → http://gpu-server.local:11434]
+       Der Ollama-Server (gpu-server.local) ist erreichbar:
+       - Ping: 0.3ms
+       - HTTP-Status: 200 OK
+       - Latenz: 12ms</code></pre>
+
+<!-- ============================= -->
+<!-- TIPPS                         -->
+<!-- ============================= -->
+<h2 id="tips">Tipps und Best Practices</h2>
+
+<ul class="wiki-examples">
+    <li><strong>Spezifisch formulieren:</strong> Je präziser die Anweisung, desto besser das Ergebnis. Statt „Erstelle eine Datenquelle" besser „Erstelle eine lokale Datenquelle mit Pfad /data/projekte".</li>
+    <li><strong>Schritt für Schritt:</strong> Bei komplexen Aufgaben (z.B. Ersteinrichtung) die Schritte einzeln durchgehen, statt alles auf einmal zu verlangen.</li>
+    <li><strong>Status prüfen:</strong> Nach Änderungen den Status abfragen, um das Ergebnis zu verifizieren.</li>
+    <li><strong>Chat-Historie nutzen:</strong> Der Admin-Chat merkt sich den Kontext innerhalb einer Session. Bezugnahmen auf vorherige Aktionen sind möglich.</li>
+    <li><strong>Backend wechseln:</strong> Für komplexe Fragen das Cloud-Backend wählen, für einfache Status-Abfragen reicht das lokale Modell.</li>
+    <li><strong>Wizard nutzen:</strong> Bei Funktionen mit vielen Parametern nicht alles auf einmal angeben — der Wizard fragt die fehlenden Felder nach.</li>
+</ul>
+
+<!-- ============================= -->
+<!-- TROUBLESHOOTING               -->
+<!-- ============================= -->
+<h2 id="troubleshooting">Fehlerbehebung</h2>
+
+<table class="wiki-param-table">
+    <thead>
+        <tr><th>Problem</th><th>Ursache</th><th>Lösung</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>Admin-Chat reagiert nicht</td>
+            <td>Service nicht gestartet</td>
+            <td><code>systemctl status kiara-admin-chat.service</code> prüfen, ggf. <code>systemctl restart kiara-admin-chat.service</code></td>
+        </tr>
+        <tr>
+            <td>„Kein LLM-Backend konfiguriert"</td>
+            <td>Kein aktives LLM-Backend</td>
+            <td>Im KI-Tab ein Backend anlegen und aktivieren, oder den Setup-Modus nutzen.</td>
+        </tr>
+        <tr>
+            <td>Tool-Aufruf schlägt fehl</td>
+            <td>Fehlende Berechtigung oder Ziel-Service nicht erreichbar</td>
+            <td>Fehlermeldung im Chat prüfen, ggf. Service neustarten.</td>
+        </tr>
+        <tr>
+            <td>Antwort sehr langsam</td>
+            <td>LLM überlastet oder Cloud-Latenz</td>
+            <td>System-Monitor prüfen, ggf. auf lokales LLM wechseln.</td>
+        </tr>
+        <tr>
+            <td>Bestätigung abgelaufen</td>
+            <td>30-Minuten-Timeout überschritten</td>
+            <td>Anweisung erneut eingeben — der Agent erstellt eine neue Bestätigung.</td>
+        </tr>
+        <tr>
+            <td>Wizard hängt</td>
+            <td>Agent erkennt Kontext nicht</td>
+            <td>„Abbrechen" eingeben und die Anweisung neu formulieren.</td>
+        </tr>
+        <tr>
+            <td>SSE-Verbindung bricht ab</td>
+            <td>Proxy-Timeout oder Netzwerkproblem</td>
+            <td>Seite neu laden — der Chat-Verlauf ist in der DB gespeichert.</td>
+        </tr>
+    </tbody>
+</table>
+
+{% endblock %}

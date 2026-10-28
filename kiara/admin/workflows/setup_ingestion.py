@@ -1,0 +1,92 @@
+from kiara.admin.workflows.base import WorkflowDefinition, WorkflowStep
+
+SETUP_INGESTION = WorkflowDefinition(
+    name="setup.ingestion",
+    label="Indexierung einrichten",
+    description="Datenquelle auswaehlen, optionalen Schedule setzen und Ingestion starten.",
+    category="setup",
+    help_text=(
+        "Fuehrt durch Auswahl der Datenquelle, optionale Zeitplanung und "
+        "Start einer inkrementellen oder vollen Ingestion."
+    ),
+    steps=[
+        WorkflowStep(
+            id="list_datasources",
+            label="Datenquellen anzeigen",
+            description="Lade verfuegbare Datenquellen ueber `datasource.list`.",
+            action="datasource.list",
+            next_step_ids=["collect_ingestion_plan"],
+        ),
+        WorkflowStep(
+            id="collect_ingestion_plan",
+            label="Ingestion-Plan erfassen",
+            description="Sammle `ds_id` und Modus (`incremental` oder `full`); `schedule_enabled` ist optional.",
+            required_inputs=["ds_id", "mode"],
+            optional_inputs=["schedule_enabled"],
+            next_step_ids=["collect_schedule", "start_incremental", "start_full"],
+        ),
+        WorkflowStep(
+            id="collect_schedule",
+            label="Schedule erfassen",
+            description="Wenn gewuenscht, sammle einen echten Cron-Ausdruck (`cron_expr`).",
+            required_inputs=["cron_expr"],
+            next_step_ids=["set_schedule"],
+            condition="schedule_enabled == True",
+        ),
+        WorkflowStep(
+            id="set_schedule",
+            label="Schedule setzen",
+            description="Rufe `jobs.schedule.set` mit `ds_id` und `cron_expr` auf.",
+            action="jobs.schedule.set",
+            required_inputs=["ds_id", "cron_expr"],
+            param_mapping={"ds_id": "ds_id", "cron_expr": "cron_expr"},
+            next_step_ids=["start_incremental", "start_full"],
+            condition="schedule_enabled == True",
+        ),
+        WorkflowStep(
+            id="start_incremental",
+            label="Inkrementelle Ingestion starten",
+            description="Rufe `jobs.start` mit `ds_id` auf.",
+            action="jobs.start",
+            required_inputs=["ds_id"],
+            param_mapping={"ds_id": "ds_id"},
+            output_keys=["job_id"],
+            next_step_ids=["track_job"],
+            condition="mode == 'incremental'",
+        ),
+        WorkflowStep(
+            id="start_full",
+            label="Vollstaendige Ingestion starten",
+            description="Rufe `jobs.start_full` mit `ds_id` auf.",
+            action="jobs.start_full",
+            required_inputs=["ds_id"],
+            param_mapping={"ds_id": "ds_id"},
+            output_keys=["job_id"],
+            next_step_ids=["track_job"],
+            condition="mode == 'full'",
+        ),
+        WorkflowStep(
+            id="track_job",
+            label="Job-Status verfolgen",
+            description="Pruefe den gestarteten Job ueber `jobs.status` mit `job_id`.",
+            action="jobs.status",
+            required_inputs=["job_id"],
+            param_mapping={"job_id": "job_id"},
+            next_step_ids=["done"],
+        ),
+        WorkflowStep(
+            id="done",
+            label="Abgeschlossen",
+            description="Die Ingestion ist gestartet; weitere Kontrolle erfolgt ueber `jobs.status` oder `jobs.list`.",
+        ),
+    ],
+    required_functions=[
+        "datasource.list",
+        "jobs.schedule.set",
+        "jobs.start",
+        "jobs.start_full",
+        "jobs.status",
+    ],
+    resume_checks=["jobs.list", "jobs.status", "jobs.schedule"],
+    can_auto_execute=False,
+)

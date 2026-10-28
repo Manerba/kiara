@@ -1,0 +1,421 @@
+{
+  "source": "KIron /api/tags + /api/show, read-only capture 2026-09-28; full original contracts, no regenerated compatibility IDs",
+  "contracts": {
+    "hellord/e5-mistral-7b-instruct:Q4_0": {
+      "schema_version": 1,
+      "canonical_model_id": "hellord/e5-mistral-7b-instruct:Q4_0",
+      "aliases": [
+        "e5-mistral-7b-instruct",
+        "hellord/e5-mistral-7b-instruct"
+      ],
+      "profiles": [
+        {
+          "profile_id": "ollama-e5-mistral-dense-v1",
+          "kind": "dense",
+          "endpoint": "/api/embed",
+          "default_for_endpoint": true,
+          "backend": {
+            "type": "ollama",
+            "implementation": "ollama",
+            "implementation_revision": "0.18.0"
+          },
+          "artifact": {
+            "repository": null,
+            "revision": null,
+            "manifest_digest": "sha256:c53c78f9f295165b7b4311cec0063639e1675f699584fd955253944bb35b50b5",
+            "weights": [
+              {
+                "path": "model",
+                "sha256": "f75c0e30696fa7f1656320905943fb42e489e7c4156c37f37e9a17060b5e3e89",
+                "size_bytes": 4108916960
+              }
+            ],
+            "auxiliary": []
+          },
+          "dimensions": 4096,
+          "max_input_tokens": {
+            "unit": "tokenizer_tokens",
+            "counting": "after_server_formatting_including_special_tokens",
+            "truncation": "none",
+            "overflow": "reject",
+            "by_role": {
+              "search_document": 4096,
+              "search_query": 4096
+            }
+          },
+          "output_normalized": true,
+          "similarity": "cosine",
+          "input_type": {
+            "supported": [
+              "search_document",
+              "search_query"
+            ],
+            "additional_task_roles": [],
+            "aliases": [],
+            "role_sensitive": true,
+            "required": true,
+            "default": null,
+            "missing_role_behavior": "reject"
+          },
+          "formatting_owner": "server",
+          "pipeline": {
+            "tokenizer": {
+              "repository": "ollama/hellord/e5-mistral-7b-instruct",
+              "revision": "sha256:f75c0e30696fa7f1656320905943fb42e489e7c4156c37f37e9a17060b5e3e89"
+            },
+            "formatting": {
+              "search_document": {
+                "template": "{text}</s>",
+                "parameters": {}
+              },
+              "search_query": {
+                "template": "Instruct: Given a web search query, retrieve relevant passages that answer the query\nQuery: {text}</s>",
+                "parameters": {}
+              }
+            },
+            "pooling": {
+              "method": "last_token",
+              "parameters": {
+                "attention": "causal",
+                "position": "last_token_after_truncation"
+              }
+            },
+            "normalization": {
+              "method": "l2",
+              "dtype": "float32",
+              "scope": "vector"
+            },
+            "parameters": {
+              "request_options": {
+                "num_ctx": 4096,
+                "num_batch": 512
+              },
+              "request_adapter": "kiron-ollama-embedding-v1",
+              "quantization": "Q4_0",
+              "add_bos_token": true,
+              "add_eos_token": false,
+              "parse_special": true,
+              "eos_suffix_token_id": 2,
+              "truncate": false
+            }
+          },
+          "verification": {
+            "status": "verified",
+            "evidence": [
+              "independent-cpu-llama.cpp:9a9394a:exact-gguf:last-token-forward-and-negative-controls",
+              "kiron-ollama-embedding-v1:server-role-formatting-eos-and-complete-input-guard",
+              "local-ollama-manifest-sha256:c53c78f9f295165b7b4311cec0063639e1675f699584fd955253944bb35b50b5",
+              "local-ollama-model-blob-sha256:f75c0e30696fa7f1656320905943fb42e489e7c4156c37f37e9a17060b5e3e89",
+              "ollama-api-version:0.18.0",
+              "pinned-quantized-vector-space:upstream-full-precision-equivalence-not-asserted",
+              "reference-vectors:scripts/fixtures/hellord-e5-mistral-v1.reference.json@sha256:602ad65221530b19658e28a8431eab26c328d0a9669842b64717b97b1d625e2d",
+              "upstream-formatting:intfloat/e5-mistral-7b-instruct@d62cc4417be0e3289c03dd459d1ef2d137e2554e"
+            ],
+            "blocking_reasons": []
+          },
+          "index_compatibility_id": "sha256:1f92b3b8a653901de9059e8fa032bd33e85d85a0ccea391677f71ccb7cae2e19",
+          "query_compatibility_id": "sha256:78273146de3d7ad5e3a24b319113a8ab32463a5bf04a41cc76a0b46e9da121ab"
+        }
+      ]
+    },
+    "nomic-embed-text:latest": {
+      "schema_version": 1,
+      "canonical_model_id": "nomic-embed-text:latest",
+      "aliases": [
+        "nomic-embed-text"
+      ],
+      "profiles": [
+        {
+          "profile_id": "kiron-nomic-dense-v1",
+          "kind": "dense",
+          "endpoint": "/api/embed",
+          "default_for_endpoint": true,
+          "backend": {
+            "type": "kiron_embeddings",
+            "implementation": "sentence-transformers",
+            "implementation_revision": "5.6.0"
+          },
+          "artifact": {
+            "repository": "nomic-ai/nomic-embed-text-v1.5",
+            "revision": "e9b6763023c676ca8431644204f50c2b100d9aab",
+            "manifest_digest": null,
+            "weights": [
+              {
+                "path": "model.safetensors",
+                "sha256": "9e7d262b1fe5ea350782829496efa831901b77486bbde1cea54a4c822d010d5c",
+                "size_bytes": null
+              }
+            ],
+            "auxiliary": []
+          },
+          "dimensions": 768,
+          "max_input_tokens": {
+            "unit": "tokenizer_tokens",
+            "counting": "after_server_formatting_including_special_tokens",
+            "truncation": "right",
+            "overflow": "truncate",
+            "by_role": {
+              "search_document": 8192,
+              "search_query": 8192
+            }
+          },
+          "output_normalized": true,
+          "similarity": "cosine",
+          "input_type": {
+            "supported": [
+              "search_document",
+              "search_query"
+            ],
+            "additional_task_roles": [
+              "classification",
+              "clustering"
+            ],
+            "aliases": [],
+            "role_sensitive": true,
+            "required": true,
+            "default": null,
+            "missing_role_behavior": "reject"
+          },
+          "formatting_owner": "server",
+          "pipeline": {
+            "tokenizer": {
+              "repository": "nomic-ai/nomic-embed-text-v1.5",
+              "revision": "e9b6763023c676ca8431644204f50c2b100d9aab"
+            },
+            "formatting": {
+              "search_document": {
+                "template": "search_document: {text}",
+                "parameters": {}
+              },
+              "search_query": {
+                "template": "search_query: {text}",
+                "parameters": {}
+              }
+            },
+            "pooling": {
+              "method": "mean",
+              "parameters": {
+                "pooling_mode_mean_tokens": true
+              }
+            },
+            "normalization": {
+              "method": "l2",
+              "dtype": "float32",
+              "scope": "vector"
+            },
+            "parameters": {}
+          },
+          "verification": {
+            "status": "verified",
+            "evidence": [
+              "hf-readme:nomic-ai/nomic-embed-text-v1.5@e9b6763023c676ca8431644204f50c2b100d9aab",
+              "local-weight-sha256:9e7d262b1fe5ea350782829496efa831901b77486bbde1cea54a4c822d010d5c",
+              "runtime-pipeline:kiron-embeddings-nomic-prefix-mean-fp32-l2"
+            ],
+            "blocking_reasons": []
+          },
+          "index_compatibility_id": "sha256:bcd5ff914e77b0472a1ea5785c67eb93ed9d327870b4df0500b728070ad4f7f7",
+          "query_compatibility_id": "sha256:d1768f20ad55fcaef6b3a5ddf8aa474e3da33f15d5e4e616f2fe55b9522d8bcf"
+        },
+        {
+          "profile_id": "kiron-nomic-late-v1",
+          "kind": "late_chunking",
+          "endpoint": "/api/embed_late",
+          "default_for_endpoint": true,
+          "backend": {
+            "type": "kiron_embeddings",
+            "implementation": "kiron-late-chunking",
+            "implementation_revision": "v2"
+          },
+          "artifact": {
+            "repository": "nomic-ai/nomic-embed-text-v1.5",
+            "revision": "e9b6763023c676ca8431644204f50c2b100d9aab",
+            "manifest_digest": null,
+            "weights": [
+              {
+                "path": "model.safetensors",
+                "sha256": "9e7d262b1fe5ea350782829496efa831901b77486bbde1cea54a4c822d010d5c",
+                "size_bytes": null
+              }
+            ],
+            "auxiliary": []
+          },
+          "dimensions": 768,
+          "max_input_tokens": {
+            "unit": "tokenizer_tokens",
+            "counting": "after_server_formatting_including_special_tokens",
+            "truncation": "right",
+            "overflow": "late_chunk_fallback",
+            "by_role": {
+              "search_document": 8192,
+              "search_query": 8192
+            }
+          },
+          "output_normalized": true,
+          "similarity": "cosine",
+          "input_type": {
+            "supported": [
+              "search_document",
+              "search_query"
+            ],
+            "additional_task_roles": [
+              "classification",
+              "clustering"
+            ],
+            "aliases": [],
+            "role_sensitive": true,
+            "required": true,
+            "default": null,
+            "missing_role_behavior": "reject"
+          },
+          "formatting_owner": "server",
+          "pipeline": {
+            "tokenizer": {
+              "repository": "nomic-ai/nomic-embed-text-v1.5",
+              "revision": "e9b6763023c676ca8431644204f50c2b100d9aab"
+            },
+            "formatting": {
+              "search_document": {
+                "template": "search_document: {text}",
+                "parameters": {}
+              },
+              "search_query": {
+                "template": "search_query: {text}",
+                "parameters": {}
+              }
+            },
+            "pooling": {
+              "method": "late_chunk_mean",
+              "parameters": {
+                "exclude_prefix_tokens": true,
+                "exclude_special_tokens": true,
+                "overlap_assignment": "character_offsets",
+                "special_token_detection": "tokenizer_all_special_ids"
+              }
+            },
+            "normalization": {
+              "method": "l2",
+              "dtype": "float32",
+              "scope": "vector"
+            },
+            "parameters": {
+              "empty_overlap_fallback": "dense_encode",
+              "empty_span_fallback": "dense_encode",
+              "partially_covered_chunks": "pool_visible_tokens",
+              "fallback_pooling": "attention_mask_mean_including_prefix_and_special_tokens"
+            }
+          },
+          "verification": {
+            "status": "verified",
+            "evidence": [
+              "hf-readme:nomic-ai/nomic-embed-text-v1.5@e9b6763023c676ca8431644204f50c2b100d9aab",
+              "local-weight-sha256:9e7d262b1fe5ea350782829496efa831901b77486bbde1cea54a4c822d010d5c",
+              "reference-check:scripts/verify_nomic_late.py",
+              "reference-vectors:scripts/fixtures/nomic-late-v1.reference.json@sha256:02d12dd56ddc4c69899a7833c524baafcfeecaa94ba105ceda54f1953f77bb6e",
+              "runtime-pipeline:kiron-embed-late-custom"
+            ],
+            "blocking_reasons": []
+          },
+          "index_compatibility_id": "sha256:dd9b890356d523fb89ce53913c58b5c03a37b8b4f15f1d9ff8458da124c94533",
+          "query_compatibility_id": "sha256:15b064fcb667e5b3936ad98bd93cef87e9bb33511d2645054bc033566facc21a"
+        },
+        {
+          "profile_id": "ollama-nomic-dense-v1",
+          "kind": "dense",
+          "endpoint": "/api/embed",
+          "default_for_endpoint": false,
+          "backend": {
+            "type": "ollama",
+            "implementation": "ollama",
+            "implementation_revision": "0.18.0"
+          },
+          "artifact": {
+            "repository": null,
+            "revision": null,
+            "manifest_digest": "sha256:0a109f422b47e3a30ba2b10eca18548e944e8a23073ee3f3e947efcf3c45e59f",
+            "weights": [
+              {
+                "path": "model",
+                "sha256": "970aa74c0a90ef7482477cf803618e776e173c007bf957f635f1015bfcfef0e6",
+                "size_bytes": null
+              }
+            ],
+            "auxiliary": []
+          },
+          "dimensions": 768,
+          "max_input_tokens": {
+            "unit": "tokenizer_tokens",
+            "counting": "after_server_formatting_including_special_tokens",
+            "truncation": "unknown",
+            "overflow": "unknown",
+            "by_role": {
+              "search_document": null,
+              "search_query": null
+            }
+          },
+          "output_normalized": null,
+          "similarity": "unknown",
+          "input_type": {
+            "supported": [
+              "search_document",
+              "search_query"
+            ],
+            "additional_task_roles": [],
+            "aliases": [],
+            "role_sensitive": null,
+            "required": false,
+            "default": null,
+            "missing_role_behavior": "unknown"
+          },
+          "formatting_owner": "server",
+          "pipeline": {
+            "tokenizer": {
+              "repository": null,
+              "revision": null
+            },
+            "formatting": {
+              "search_document": {
+                "template": null,
+                "parameters": {}
+              },
+              "search_query": {
+                "template": null,
+                "parameters": {}
+              }
+            },
+            "pooling": {
+              "method": "unknown",
+              "parameters": {
+                "observed_gguf_pooling_type": 1
+              }
+            },
+            "normalization": {
+              "method": "unknown",
+              "dtype": "unknown",
+              "scope": "unknown"
+            },
+            "parameters": {
+              "observed_gguf_context_length": 2048,
+              "observed_num_ctx": 8192
+            }
+          },
+          "verification": {
+            "status": "unverified",
+            "evidence": [
+              "local-ollama-manifest-sha256:0a109f422b47e3a30ba2b10eca18548e944e8a23073ee3f3e947efcf3c45e59f",
+              "local-ollama-model-blob-sha256:970aa74c0a90ef7482477cf803618e776e173c007bf957f635f1015bfcfef0e6",
+              "ollama-api-version:0.18.0"
+            ],
+            "blocking_reasons": [
+              "conflicting_effective_context_evidence",
+              "missing_exact_upstream_revision_and_conversion_provenance",
+              "missing_role_pooling_normalization_reference_witness"
+            ]
+          },
+          "index_compatibility_id": null,
+          "query_compatibility_id": null
+        }
+      ]
+    }
+  }
+}

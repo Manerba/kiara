@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csp-nonce" content="{{ csp_nonce }}">
+    <title>KIara - Editor</title>
+    <style nonce="{{ csp_nonce }}">
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { overflow: hidden; }
+        #editorContainer { width: 100vw; height: 100vh; }
+        .editor-loading { display: flex; align-items: center; justify-content: center; height: 100vh; font-family: Arial, sans-serif; color: #666; }
+        .editor-error { display: flex; align-items: center; justify-content: center; height: 100vh; font-family: Arial, sans-serif; }
+        .editor-error-box { text-align: center; padding: 40px; }
+        .editor-error-box h2 { color: #ef4444; margin-bottom: 12px; }
+        .editor-close-row { margin-top: 12px; }
+        .editor-close-btn { color: #3b82f6; background: none; border: none; cursor: pointer; font: inherit; padding: 0; text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <div id="editorContainer">
+        <div class="editor-loading">Lade Editor...</div>
+    </div>
+    <script nonce="{{ csp_nonce }}">
+        async function initEditor() {
+            const params = new URLSearchParams(window.location.search);
+            const filePath = params.get('file');
+            if (!filePath) {
+                showError('Kein Dateipfad angegeben');
+                return;
+            }
+
+            try {
+                const resp = await fetch(`/api/onlyoffice/open?file_path=${encodeURIComponent(filePath)}`);
+                if (!resp.ok) {
+                    const err = await resp.json().catch(() => ({}));
+                    throw new Error(err.detail || 'Fehler beim Oeffnen');
+                }
+                const data = await resp.json();
+                loadOnlyOffice(data);
+            } catch (e) {
+                showError(e.message);
+            }
+        }
+
+        function loadOnlyOffice(data) {
+            const script = document.createElement('script');
+            script.src = `${data.document_server_url}/web-apps/apps/api/documents/api.js`;
+            script.onload = () => {
+                new DocsAPI.DocEditor('editorContainer', data.config);
+            };
+            script.onerror = () => showError('OnlyOffice Document Server nicht erreichbar');
+            document.head.appendChild(script);
+        }
+
+        function showError(message) {
+            const container = document.getElementById('editorContainer');
+            container.textContent = '';
+            const wrapper = document.createElement('div');
+            wrapper.className = 'editor-error';
+            const box = document.createElement('div');
+            box.className = 'editor-error-box';
+            const h2 = document.createElement('h2');
+            h2.textContent = 'Fehler';
+            const p = document.createElement('p');
+            p.textContent = message;
+            const pLink = document.createElement('p');
+            pLink.className = 'editor-close-row';
+            const closeBtn = document.createElement('button');
+            closeBtn.type = 'button';
+            closeBtn.className = 'editor-close-btn';
+            closeBtn.textContent = 'Fenster schliessen';
+            closeBtn.addEventListener('click', () => window.close());
+            pLink.appendChild(closeBtn);
+            box.append(h2, p, pLink);
+            wrapper.appendChild(box);
+            container.appendChild(wrapper);
+        }
+
+        initEditor();
+    </script>
+</body>
+</html>

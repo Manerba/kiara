@@ -1,0 +1,24 @@
+{# description: Besprechungsprotokoll #}
+{# variables: title, date, participants, agenda_items, decisions #}
+# Protokoll: {{ title }}
+
+**Datum:** {{ date }}
+**Teilnehmer:** {{ participants | join(", ") }}
+
+## Tagesordnung
+
+{% for item in agenda_items %}
+### {{ loop.index }}. {{ item.topic }}
+
+{{ item.notes | default("(Keine Notizen)") }}
+
+{% endfor %}
+
+## Beschlüsse & Aufgaben
+
+{% for decision in decisions | default([]) %}
+- **{{ decision.what }}** → {{ decision.who }} (bis {{ decision.deadline | default("offen") }})
+{% endfor %}
+
+---
+*Generiert von OpenRAG*

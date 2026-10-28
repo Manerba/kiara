@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csp-nonce" content="{{ csp_nonce }}">
+    <title>KIara Admin</title>
+    <link rel="stylesheet" href="/static/ui_core/css/tokens.css?v=1">
+    <link rel="stylesheet" href="/static/ui_core/css/theme.css?v=1">
+    <link rel="stylesheet" href="/static/ui_core/css/layout.css?v=1">
+    <link rel="stylesheet" href="/static/ui_core/css/forms.css?v=1">
+    <link rel="stylesheet" href="/static/ui_core/css/notifications.css?v=1">
+    <link rel="stylesheet" href="/static/ui_core/css/modal.css?v=1">
+    <link rel="stylesheet" href="/static/ui_core/css/markdown.css?v=1">
+    <link rel="stylesheet" href="/static/ui_core/css/chat.css?v=1">
+    <link rel="stylesheet" href="/static/ui_core/css/table.css?v=1">
+    <link rel="stylesheet" href="/static/css/style.css?v=1">
+    <link rel="stylesheet" href="/static/css/chat.css?v=3">
+    <link rel="stylesheet" href="/static/css/admin_chat.css?v=1">
+</head>
+<body data-admin-mode="true" data-cookie="kiara_admin_session">
+    <!-- Header -->
+    <header class="header">
+        <h1>
+            <img src="/static/img/brain.svg" class="logo-brain" alt="Kiara Logo">
+            <span><span class="logo-ki">KI</span><span class="logo-ara">ara</span><span class="logo-suffix">Admin</span></span>
+        </h1>
+        <div class="header-controls">
+            <span class="header-username" id="headerUsername"></span>
+            <div class="settings-dropdown-wrapper">
+                <button class="settings-btn" id="settingsBtn">&#x2699;&#xFE0F;</button>
+                <nav class="settings-dropdown is-hidden" id="settingsDropdown">
+                    <div class="settings-menu">
+                        <div class="settings-item" id="changePasswordBtn">
+                            <span class="settings-icon">&#x1F511;</span>
+                            <span class="settings-label">Passwort aendern</span>
+                        </div>
+                        <div class="settings-item settings-danger" id="logoutBtn">
+                            <span class="settings-icon">&#x2192;</span>
+                            <span class="settings-label">Abmelden</span>
+                        </div>
+                        <div class="settings-divider"></div>
+                        <div class="settings-item settings-theme-selector">
+                            <span class="settings-icon">&#x1F3A8;</span>
+                            <span class="settings-label">Theme</span>
+                            <div class="theme-options">
+                                <button class="theme-option" data-theme="light">Light</button>
+                                <button class="theme-option" data-theme="dark">Dark</button>
+                                <button class="theme-option" data-theme="kontrast">Kontrast</button>
+                            </div>
+                        </div>
+                        <div class="settings-item" id="densityToggle">
+                            <span class="settings-icon">&#x2630;</span>
+                            <span class="settings-label">Kompakte Ansicht</span>
+                            <span class="settings-value" id="densityStatus">Aus</span>
+                        </div>
+                        <div class="settings-divider"></div>
+                        <div class="settings-item settings-danger" id="restartBtn">
+                            <span class="settings-icon">&#x21BB;</span>
+                            <span class="settings-label">Restart Services</span>
+                        </div>
+                    </div>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <!-- Tabs -->
+    <nav class="tabs main-tabs" id="mainTabs">
+        <a class="tab active" href="#" data-tab="kiara">KIara</a>
+        <a class="tab" href="#" data-tab="benutzer">Benutzerverwaltung</a>
+        <a class="tab" href="#" data-tab="datenquellen">Datenquellen</a>
+        <a class="tab" href="#" data-tab="jobs">Jobs</a>
+        <a class="tab" href="#" data-tab="vektordb">VektorDB</a>
+        <a class="tab" href="#" data-tab="ki">KI</a>
+        <a class="tab" href="#" data-tab="benchmark">Benchmark</a>
+        <a class="tab" href="#" data-tab="tools">Tools &amp; Integrationen</a>
+        <a class="tab" href="#" data-tab="compliance">Compliance</a>
+        <a class="tab" href="#" data-tab="system">System</a>
+        <a id="tabHelpLink" class="tab-help-btn" href="/wiki/" target="_blank" rel="noopener noreferrer" title="Wiki / Hilfe">?</a>
+    </nav>
+
+    <nav class="tabs sub-tabs is-hidden" id="subTabs"></nav>
+
+    <div class="info-panel is-hidden" id="infoPanel">
+        <div class="info-panel-content" id="infoPanelContent"></div>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="filter-bar is-hidden" id="filterBar"></div>
+
+    <!-- Content Container -->
+    <main class="container" id="contentContainer">
+        <div class="table-loading">
+            <div class="spinner"></div>
+        </div>
+    </main>
+
+    <!-- Utilities -->
+    <script src="/static/ui_core/js/core.js?v=1"></script>
+    <script src="/static/ui_core/js/theme.js?v=1"></script>
+    <script src="/static/ui_core/js/fetch.js?v=1"></script>
+    <script src="/static/ui_core/js/runtime.js?v=1"></script>
+    <script src="/static/ui_core/js/runtime_style.js?v=1"></script>
+    <script src="/static/ui_core/js/notifications.js?v=1"></script>
+    <script src="/static/js/vendor/purify.min.js?v=1"></script>
+    <script src="/static/ui_core/js/modal.js?v=1"></script>
+    <script src="/static/js/kiara_bootstrap.js?v=1"></script>
+    <script src="/static/ui_core/js/markdown.js?v=1"></script>
+    <script src="/static/ui_core/js/chat_primitives.js?v=1"></script>
+    <script src="/static/ui_core/js/table.js?v=1"></script>
+    <script src="/static/ui_core/js/forms.js?v=1"></script>
+    <script src="/static/js/app_core.js?v=1"></script>
+
+    <!-- Unveränderte Tabs -->
+    <script src="/static/js/tab_benutzer.js?v=1"></script>
+    <script src="/static/js/tab_ldap.js?v=1"></script>
+    <script src="/static/js/tab_datenquellen.js?v=1"></script>
+    <script src="/static/js/tab_jobs.js?v=1"></script>
+    <script src="/static/js/tab_gruppen.js?v=1"></script>
+    <script src="/static/js/tab_onlyoffice.js?v=1"></script>
+    <script src="/static/js/tab_mail.js?v=1"></script>
+
+    <!-- Aufgeteilte Tabs (ehemals tab_allgemein.js) -->
+    <script src="/static/js/tab_allgemein_web.js?v=1"></script>
+    <script src="/static/js/tab_allgemein_vektordb.js?v=1"></script>
+    <!-- Aufgeteilte Tabs (ehemals tab_ki.js) -->
+    <script src="/static/js/tab_ki_modelle.js?v=1"></script>
+    <script src="/static/js/tab_ki_ingestion.js?v=1"></script>
+    <script src="/static/js/tab_ki_retrieval.js?v=5"></script>
+    <script src="/static/js/tab_ki_chat.js?v=4"></script>
+    <script src="/static/js/tab_ki_graph.js?v=1"></script>
+    <script src="/static/js/tab_ki_benchmarks.js?v=1"></script>
+
+    <!-- Admin-Chat (SharedUi.chat.ChatView aus ui_core/js/chat_primitives.js; SharedUi.markdown
+         aus ui_core/js/markdown.js fuer Copy/Think/Markdown; chat_utils.js nur fuer
+         formatKiaraTimestamp; chat.js noch geladen fuer Trace-Debug + Degradation-Banner) -->
+    <script src="/static/js/chat_utils.js?v=1"></script>
+    <script src="/static/js/chat.js?v=4"></script>
+    <script src="/static/js/admin_chat.js?v=1"></script>
+    <script nonce="{{ csp_nonce }}">window.ADMIN_CHAT_PORT={{ admin_chat_port }};</script>
+    <script src="/static/js/tab_kiara.js?v=1"></script>
+
+    <!-- Neue Tabs -->
+    <script src="/static/js/tab_mcp.js?v=1"></script>
+    <script src="/static/js/tab_tools.js?v=1"></script>
+    <script src="/static/js/tab_workflows.js?v=1"></script>
+    <script src="/static/js/tab_compliance_anon.js?v=1"></script>
+    <script src="/static/js/tab_compliance_prompt_schutz.js?v=1"></script>
+    <script src="/static/js/tab_compliance_audit.js?v=1"></script>
+    <script src="/static/js/tab_compliance_berichte.js?v=1"></script>
+    <script src="/static/js/tab_compliance_matrix.js?v=1"></script>
+    <script src="/static/js/vendor/chart.umd.min.js?v=1"></script>
+    <script src="/static/js/vendor/chartjs-adapter-date-fns.bundle.min.js?v=1"></script>
+    <script src="/static/js/storage_ui.js?v=1"></script>
+    <script src="/static/js/monitoring_chart.js?v=1"></script>
+    <script src="/static/js/monitoring_history.js?v=1"></script>
+    <script src="/static/js/tab_monitoring.js?v=1"></script>
+    <script src="/static/js/tab_backup.js?v=1"></script>
+    <script src="/static/js/tab_performance.js?v=1"></script>
+    <script src="/static/js/tab_integrity.js?v=1"></script>
+    <script src="/static/js/tab_testsuite.js?v=1"></script>
+    <script src="/static/js/tab_system_aenderungen.js?v=1"></script>
+    <script src="/static/js/tab_system_traces.js?v=1"></script>
+    <script src="/static/js/tab_system_traces_panels.js?v=1"></script>
+    <script src="/static/js/tab_system_logs.js?v=1"></script>
+    <script src="/static/js/tab_vektordb_management.js?v=1"></script>
+
+    <script nonce="{{ csp_nonce }}">
+        const TAB_CONFIG = {
+            kiara:        { label: 'KIara', children: null },
+            benutzer:     { label: 'Benutzerverwaltung', children: {
+                'benutzer-liste':   { label: 'Benutzer',  init: 'initBenutzerTab' },
+                'benutzer-gruppen': { label: 'Gruppen',   init: 'initGruppenTab' },
+                'benutzer-ldap':    { label: 'LDAP',      init: 'initLdapTab' },
+            }},
+            datenquellen: { label: 'Datenquellen', children: null },
+            jobs:         { label: 'Jobs', children: null },
+            vektordb:     { label: 'VektorDB', children: {
+                'vektordb-konnektor':  { label: 'Konnektor',      init: 'initAllgemeinVektordbTab' },
+                'vektordb-management': { label: 'DB-Management',  init: 'initVektordbManagementTab' },
+            }},
+            ki:           { label: 'KI', children: {
+                'ki-modelle':       { label: 'Modelle & Backend', init: 'initKiModelleTab' },
+                'ki-ingestion':     { label: 'Ingestion',        init: 'initKiIngestionTab' },
+                'ki-retrieval':     { label: 'Retrieval',        init: 'initKiRetrievalTab' },
+                'ki-graph':         { label: 'Wissensgraph',      init: 'initKiGraphTab' },
+                'ki-chat':          { label: 'Chat',              init: 'initKiChatTab' },
+            }},
+            benchmark:    { label: 'Benchmark', children: {
+                'benchmark-crag':         { label: 'CRAG',          init: 'initBenchmarkCragTab' },
+                'benchmark-beir':         { label: 'BEIR',          init: 'initBenchmarkBeirTab' },
+                'benchmark-mteb':         { label: 'MTEB',          init: 'initBenchmarkMtebTab' },
+                'benchmark-miracl':       { label: 'MIRACL',        init: 'initBenchmarkMiraclTab' },
+                'benchmark-msmarco':      { label: 'MS MARCO',      init: 'initBenchmarkMsMarcoTab' },
+                'benchmark-nq-hotpotqa':  { label: 'NQ / HotpotQA', init: 'initBenchmarkNqHotpotqaTab' },
+            }},
+            tools:        { label: 'Tools & Integrationen', children: {
+                'tools-erp':        { label: 'ERP-Tools',   init: 'initToolsTab' },
+                'tools-mcp':        { label: 'MCP / API-Keys', init: 'initMcpTab' },
+                'tools-workflows':  { label: 'Workflows',   init: 'initWorkflowsTab' },
+                'tools-onlyoffice': { label: 'OnlyOffice',  init: 'initOnlyOfficeTab' },
+            }},
+            compliance:   { label: 'Compliance', children: {
+                'compliance-anon':           { label: 'Anonymisierung',      init: 'initComplianceAnonTab' },
+                'compliance-prompt-schutz':  { label: 'Prompt-Schutz',       init: 'initCompliancePromptSchutzTab' },
+                'compliance-audit':          { label: 'Audit-Trail',         init: 'initComplianceAuditTab' },
+                'compliance-berichte':       { label: 'Berichte',            init: 'initComplianceBerichteTab' },
+                'compliance-matrix':         { label: 'Berechtigungsmatrix', init: 'initComplianceMatrixTab' },
+            }},
+            system:       { label: 'System', children: {
+                'system-web':        { label: 'Web',               init: 'initAllgemeinWebTab' },
+                'system-mail':       { label: 'Mail',              init: 'initMailTab' },
+                'system-monitoring':  { label: 'System-Monitor',      init: 'initMonitoringTab' },
+                'system-traces':     { label: 'Traces',             init: 'initSystemTracesTab' },
+                'system-backup':     { label: 'Backup & Restore',   init: 'initBackupTab' },
+                'system-performance': { label: 'Performance',        init: 'initPerformanceTab' },
+                'system-integrity':  { label: 'Integritaet',        init: 'initIntegrityTab' },
+                'system-selbsttest': { label: 'Selbsttest',         init: 'initSelbsttestTab' },
+                'system-logs':       { label: 'System-Log',         init: 'initSystemLogsTab' },
+                'system-aenderungen': { label: 'Aenderungen',       init: 'initSystemAenderungenTab' },
+            }},
+        };
+
+        const TAB_INFO = {
+            'kiara':                'KIara Admin-Chat. Stellen Sie Fragen zum System oder fuehren Sie Admin-Funktionen per Chat aus.',
+            'vektordb-konnektor':   'Qdrant-Verbindungseinstellungen und Test. Aenderungen erfordern eine Neuindexierung.',
+            'vektordb-management': 'Dateien in der VektorDB verwalten: Anzeige und Loeschung einzelner Dateien pro Datenquelle und Embedding-Modell.',
+            'system-web':           'Netzwerkeinstellungen fuer die Web-Oberflaechen. Aenderungen an Host und Ports erfordern einen Neustart des Dienstes.',
+            'system-mail':          'SMTP-Konfiguration fuer Admin-Benachrichtigungen. Das System sendet Mails bei Ausfaellen (Ollama, Datenquellen) und optionale Statusberichte.',
+            'benutzer-liste':       'Lokale und LDAP-Benutzer verwalten. LDAP-Benutzer werden automatisch synchronisiert, lokale Benutzer manuell angelegt.',
+            'benutzer-gruppen':     'LDAP-Gruppen steuern den Zugriff auf Datenquellen und ERP-Tools. Gruppen werden aus dem Active Directory importiert.',
+            'benutzer-ldap':        'Verbindung zum Active Directory / LDAP-Server. Hier wird die Quelle fuer Benutzer und Gruppen konfiguriert.',
+            'datenquellen':         'Datenquellen (Fileserver, WebDAV, lokal) fuer die RAG-Wissensbasis. Jede Quelle kann eigene Chunk-Einstellungen und Zugriffsgruppen haben.',
+            'jobs':                 'Ingestion-Jobs: Warteschlange, laufende und abgeschlossene Indexierungs-Auftraege. Jobs werden sequentiell abgearbeitet um GPU-Konkurrenz zu vermeiden.',
+            'ki-modelle':           'Konfiguration der KI-Backends: lokales Ollama (Embedding + LLM) und optionale Cloud-KI (Anthropic/OpenAI) mit automatischem Routing.',
+            'ki-ingestion':         'Globale Einstellungen fuer die Dokumentenindexierung: Chunk-Groesse, Ueberlappung, Batch-Groesse, Late Chunking, VLM-Prompt und Textdatei-Blocklist.',
+            'ki-retrieval':         'Konfiguration der Suchstrategie: Hybrid-Suche (BM25 + semantisch), Cross-Encoder Reranking und LLM-basierte Query-Expansion. Aenderungen gelten nach Service-Neustart.',
+            'ki-chat':              'Prompt-Templates steuern, wie das LLM auf Benutzeranfragen antwortet. Jedes Template mit aktivem Chat-Toggle erscheint als eigener Modus im Chat-Dropdown.\n\nDer Typ bestimmt die Ausfuehrungspipeline:\n\u2022 Standard — RAG-Chain: Retrieval \u2192 Kontext \u2192 LLM (Platzhalter: {context}, {question})\n\u2022 Unchained — Direkt-LLM ohne Retrieval, keine Quellen, keine RAG-Filter\n\u2022 Agent — ReAct-Loop mit Werkzeug-Aufrufen (Platzhalter: {tools_prompt})\n\nMehrere Templates koennen denselben Typ nutzen, z.B. \"IT-Helpdesk\" und \"Zusammenfasser\" beide als Standard — gleiche RAG-Pipeline, aber unterschiedliche Prompt-Anweisungen.',
+            'ki-graph':             'Der Wissensgraph verbindet Dokumente, ERP-Stammdaten und extrahierte Entitaeten zu einem Beziehungsnetzwerk. Bei Suchanfragen werden Zusammenhaenge ueber mehrere Dokumente hinweg gefunden, die eine reine Textsuche nicht herstellen kann.',
+            'benchmark-crag':        'CRAG-Benchmark-Ergebnisse aus /var/lib/kiara/benchmarks: Scores, Retrieval-Treffer, Latenzen und Ablation-Vergleiche.',
+            'benchmark-beir':        'BEIR ist eine Sammlung etablierter Information-Retrieval-Datasets fuer Corpus-Retrieval. Der Tab kann vorbereitete BEIR-Datenquellen benchmarken, historische Runs anzeigen und die Run-Settings persistieren.',
+            'benchmark-mteb':        'MTEB ist ein breites Embedding-Evaluationsframework mit Retrieval-Aufgaben. Dieser Benchmark ist in KIara noch nicht implementiert.',
+            'benchmark-miracl':      'MIRACL testet mehrsprachiges Retrieval ueber kuratierte Korpora und Queries. Dieser Benchmark ist in KIara noch nicht implementiert.',
+            'benchmark-msmarco':     'MS MARCO misst Web-Passage-Retrieval mit grossen Query- und Relevanzsets. Dieser Benchmark ist in KIara noch nicht implementiert.',
+            'benchmark-nq-hotpotqa': 'Natural Questions und HotpotQA testen QA-orientiertes Retrieval, inklusive Multi-Hop-Fragen. Dieser Benchmark ist in KIara noch nicht implementiert.',
+            'tools-erp':            'ERP-Tools ermoeglichen dem LLM, das ERP-System live abzufragen (Auftragsstatus, Lagerbestaende etc.). Hier wird festgelegt, welche LDAP-Gruppe welche Tools nutzen darf.',
+            'tools-mcp':            'MCP (Model Context Protocol) erlaubt externen KI-Clients (VS Code, Cursor, Claude Desktop) die Wissensbasis ueber API-Keys abzufragen. Antworten werden vom lokalen LLM generiert — keine Rohchunks verlassen das System.',
+            'tools-workflows':      'Dokumenten-Templates (Jinja2) fuer Checklisten, Protokolle und Statusmails. Templates koennen hier verwaltet und Exporte eingesehen werden.',
+            'tools-onlyoffice':     'OnlyOffice ermoeglicht Benutzern, Dokumente aus Suchergebnissen direkt im Browser zu oeffnen und zu bearbeiten.',
+            'compliance-anon':      'Vierstufige Anonymisierung zum Schutz sensibler Daten: (1) ERP-Stammdaten via Aho-Corasick, (2) LDAP/AD-Mitarbeiter, (3) Regex-Muster, (4) LLM-basierte PII-Erkennung.',
+            'compliance-audit':     'Durchsuchbares Protokoll aller KI-Anfragen. Anfrageinhalte werden als SHA256-Hash gespeichert, nicht als Klartext.',
+            'compliance-berichte':  'DSGVO-Berichte generieren: Verzeichnis der Verarbeitungstaetigkeiten (VVT) und Datenschutz-Folgenabschaetzung (DSFA) als PDF oder DOCX.',
+            'compliance-matrix':    'Uebersicht: Welche LDAP-Gruppe hat Zugriff auf welche Datenquellen und ERP-Tools? Zeigt die effektive Berechtigungsstruktur.',
+            'system-monitoring':    'Systemressourcen mit CPU-, RAM-, Disk-I/O- und Netzwerkdiagrammen. Live-Verlauf für 1 und 10 Minuten im 250-ms-Takt, Langzeithistorie bis 1 Jahr. Speichergrößen, Dienststatus und letzte Systemfehler.',
+            'system-traces':       'Verwaltet und analysiert aufgezeichnete Traces mit Filter, Vergleich und Export.',
+            'system-backup':        'Sicherung und Wiederherstellung: Datenbank, Konfiguration und Templates mit SHA256-Pruefsummen. Qdrant-Collections werden separat per Re-Ingest oder Qdrant-Snapshot wiederhergestellt.',
+            'system-performance':   'Query-Cache-Statistiken: Hit-Rate, Groesse, TTL. Der Cache beschleunigt wiederkehrende Anfragen und wird bei Neuindexierung automatisch invalidiert.',
+            'system-integrity':    'Prueft die Konsistenz aller Datenschichten: Qdrant, Elasticsearch, chunk_datasources und file_hashes. Erkennt Duplikate, verwaiste Chunks und fehlende DS-Zuordnungen.',
+            'system-selbsttest':   'Fuehrt die gesamte Testsuite aus und zeigt das Ergebnis. Prueft alle Systemkomponenten auf korrekte Funktion.',
+            'system-logs':         'Chronologisches Protokoll aller Security-Events (Logins, Rate-Limits, LDAP-Fehler, Passwort-Aenderungen). Filter nach Zeitraum, Level, reason und Volltextsuche; Detail-View mit vollstaendigen strukturierten Feldern; CSV-Export der gefilterten Ansicht.',
+            'system-aenderungen':  'Chronologisches Protokoll aller Konfigurationsaenderungen (Prompt-Templates, System-Einstellungen). Zeigt wer wann was geaendert hat.',
+        };
+
+        let adminCurrentTab = 'kiara';
+        let adminCurrentSubTab = null;
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            await loadCurrentUser();
+
+            document.querySelectorAll('.main-tabs .tab').forEach(tabEl => {
+                tabEl.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    switchAdminTab(this.dataset.tab);
+                });
+            });
+
+            document.addEventListener('click', function(e) {
+                const actionEl = e.target.closest('[data-admin-action]');
+                if (!actionEl) return;
+                if (actionEl.getAttribute('data-admin-action') === 'toggle-info') {
+                    e.preventDefault();
+                    toggleInfoPanel();
+                }
+            });
+
+            const path = window.location.pathname.replace(/^\/+|\/+$/g, '');
+            const parts = path.split('/');
+            const initialTab = parts[0] || 'kiara';
+            const initialSubTab = parts[1] || null;
+
+            if (TAB_CONFIG[initialTab]) {
+                switchAdminTab(initialTab, initialSubTab ? `${initialTab}-${initialSubTab}` : null);
+            } else {
+                switchAdminTab('kiara');
+            }
+        });
+
+        function switchAdminTab(tab, subtab) {
+            const cfg = TAB_CONFIG[tab];
+            if (!cfg) {
+                console.error('switchAdminTab: unbekannter Tab "' + tab + '"');
+                return;
+            }
+
+            const oldMainTab = adminCurrentTab;
+            const oldCfg = TAB_CONFIG[oldMainTab];
+
+            // Cleanup nur bei echtem Tab-Wechsel
+            if (oldMainTab !== tab) {
+                if (oldCfg && oldCfg.children) {
+                    _runSubTabCleanups(oldMainTab);
+                }
+                _runTabCleanups(oldMainTab);
+            }
+
+            adminCurrentTab = tab;
+
+            document.querySelectorAll('.main-tabs .tab').forEach(t => {
+                t.classList.toggle('active', t.dataset.tab === tab);
+            });
+
+            const infoPanel = document.getElementById('infoPanel');
+            if (infoPanel) infoPanel.style.display = 'none';
+
+            const filterBar = document.getElementById('filterBar');
+            if (filterBar) {
+                filterBar.innerHTML = '';
+                filterBar.style.display = '';
+                filterBar.classList.remove('u-flex', 'u-visible', 'u-block');
+                filterBar.classList.add('u-hidden');
+            }
+
+            const subTabsNav = document.getElementById('subTabs');
+
+            if (cfg.children) {
+                const childKeys = Object.keys(cfg.children);
+                const defaultSubTab = subtab && cfg.children[subtab] ? subtab : childKeys[0];
+
+                let subHtml = '';
+                childKeys.forEach(key => {
+                    const active = key === defaultSubTab ? ' active' : '';
+                    subHtml += `<a class="tab${active}" href="#" data-subtab="${key}">${cfg.children[key].label}</a>`;
+                });
+
+                subHtml += '<button class="info-toggle-btn" data-admin-action="toggle-info" title="Info">\u24D8</button>';
+
+                subTabsNav.innerHTML = subHtml;
+                subTabsNav.style.display = 'flex';
+                document.getElementById('mainTabs').classList.add('has-subtabs');
+
+                subTabsNav.querySelectorAll('.tab').forEach(st => {
+                    st.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        switchSubTab(this.dataset.subtab);
+                    });
+                });
+
+                switchSubTab(defaultSubTab);
+            } else {
+                subTabsNav.style.display = 'none';
+                subTabsNav.innerHTML = '';
+                adminCurrentSubTab = null;
+                document.getElementById('mainTabs').classList.remove('has-subtabs');
+
+                const urlPath = tab === 'kiara' ? '/' : `/${tab}`;
+                history.replaceState({}, '', urlPath);
+
+                callInitFunction(tab, cfg);
+            }
+
+            // Wiki-Help-Link aktualisieren bei Tab-Wechsel
+            const WIKI_TAB_MAP = {
+                'kiara': 'admin-chat',
+                'benutzer': 'users',
+                'datenquellen': 'datasources',
+                'jobs': 'jobs',
+                'vektordb': 'vectordb',
+                'ki': 'ki',
+                'benchmark': 'benchmark',
+                'tools': 'tools',
+                'compliance': 'compliance',
+                'system': 'system',
+            };
+            const helpLink = document.getElementById('tabHelpLink');
+            if (helpLink) {
+                const wikiTab = WIKI_TAB_MAP[tab] || tab;
+                helpLink.href = '/wiki/guide/' + wikiTab;
+            }
+        }
+
+        async function switchSubTab(subtab) {
+            const cfg = TAB_CONFIG[adminCurrentTab];
+            if (!cfg || !cfg.children || !cfg.children[subtab]) return;
+
+            const oldSubTab = adminCurrentSubTab;
+
+            // Cleanup nur bei echtem Subtab-Wechsel
+            if (oldSubTab && oldSubTab !== subtab) {
+                _runTabCleanups(oldSubTab);
+            }
+
+            adminCurrentSubTab = subtab;
+
+            document.querySelectorAll('.sub-tabs .tab').forEach(t => {
+                t.classList.toggle('active', t.dataset.subtab === subtab);
+            });
+
+            const infoPanel = document.getElementById('infoPanel');
+            if (infoPanel) infoPanel.style.display = 'none';
+
+            const subPart = subtab.replace(`${adminCurrentTab}-`, '');
+            history.replaceState({}, '', `/${adminCurrentTab}/${subPart}`);
+
+            const initName = cfg.children[subtab].init;
+            const initFn = typeof window[initName] === 'function' ? window[initName] : null;
+            if (initFn) {
+                try { await initFn(); } catch(e) {
+                    console.error('Tab-Init Fehler (' + initName + '):', e);
+                    const container = document.getElementById('contentContainer');
+                    if (container) container.innerHTML = '<div class="no-data">Fehler beim Laden: ' + SharedUi.runtime.escapeHtml(e.message) + '</div>';
+                }
+            } else {
+                console.error('Tab-Funktion nicht gefunden: ' + initName, 'typeof=' + typeof window[initName], 'window keys sample:', Object.keys(window).filter(k => k.startsWith('init')).join(','));
+                const container = document.getElementById('contentContainer');
+                var dbg = window._toolsDbg ? JSON.stringify(window._toolsDbg) : 'no debug';
+                if (container) container.innerHTML = '<div class="no-data">Funktion <code>' + SharedUi.runtime.escapeHtml(initName) + '</code> nicht gefunden.<br><br><b>Debug:</b> <pre class="admin-debug-pre">' + SharedUi.runtime.escapeHtml(dbg) + '</pre></div>';
+            }
+        }
+
+        function callInitFunction(tab, cfg) {
+            const initMap = {
+                'kiara': typeof initKiaraTab !== 'undefined' ? initKiaraTab : null,
+                'datenquellen': typeof initDatenquellenTab !== 'undefined' ? initDatenquellenTab : null,
+                'jobs': typeof initJobsTab !== 'undefined' ? initJobsTab : null,
+            };
+            const initFn = initMap[tab];
+            if (initFn) {
+                try { initFn(); } catch(e) {
+                    console.error('Tab-Init Fehler (' + tab + '):', e);
+                    const container = document.getElementById('contentContainer');
+                    if (container) container.innerHTML = '<div class="no-data">Fehler beim Laden: ' + SharedUi.runtime.escapeHtml(e.message) + '</div>';
+                }
+            } else {
+                const container = document.getElementById('contentContainer');
+                if (container) container.innerHTML = '<div class="no-data">Dieser Tab wird geladen...</div>';
+            }
+        }
+
+        function toggleInfoPanel() {
+            const panel = document.getElementById('infoPanel');
+            const content = document.getElementById('infoPanelContent');
+            if (!panel || !content) return;
+
+            if (panel.style.display === 'none' || !panel.style.display) {
+                const key = adminCurrentSubTab || adminCurrentTab;
+                const text = TAB_INFO[key] || 'Keine Info verfuegbar.';
+                content.textContent = text;
+                panel.style.display = 'block';
+                requestAnimationFrame(() => panel.classList.add('open'));
+            } else {
+                panel.classList.remove('open');
+                setTimeout(() => { panel.style.display = 'none'; }, 300);
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,32 @@
+[Unit]
+Description=KIara CIFS Ingestion Flight Recorder
+Documentation=man:trace-cmd(1)
+After=systemd-modules-load.service
+Before=kiara-worker.service
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+ExecStartPre=/usr/sbin/modprobe cifs
+ExecStart=/opt/kiara/venv/bin/kiara prepare-cifs-flight-recorder
+RemainAfterExit=yes
+
+# Der kurzlebige Setup-Prozess darf nur das benoetigte CIFS-Modul laden und
+# innerhalb von tracefs schreiben. /sys bleibt ausserhalb dieses Teilbaums RO.
+CapabilityBoundingSet=CAP_SYS_MODULE
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectControlGroups=true
+ProtectKernelLogs=true
+ProtectClock=true
+RestrictSUIDSGID=true
+LockPersonality=true
+ReadOnlyPaths=/sys
+ReadWritePaths=/sys/kernel/tracing
+
+[Install]
+WantedBy=multi-user.target

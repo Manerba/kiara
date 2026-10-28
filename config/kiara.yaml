@@ -1,0 +1,127 @@
+datasource:
+  path: /mnt/knowledgebase
+  file_types:
+    - .docx
+    - .txt
+    - .pdf
+    - .ps1
+    - .cs
+    - .vb
+    - .xml
+    - .odt
+    - .xlsx
+    - .xlsm
+    - .md
+    - .py
+    - .json
+    - .html
+    - .bat
+    - .sh
+    - .config
+    - .ini
+    - .pl
+    - .js
+    - .css
+    - .sln
+    - .pptx
+    - .csv
+  exclude_patterns:
+    - "*/bin/*"
+    - "*/obj/*"
+    - "*/.git/*"
+
+ollama:
+  url: http://localhost:11434
+  llm_model: qwen3:8b
+  embedding_model: nomic-embed-text
+
+vectordb:
+  path: /var/lib/kiara/chromadb
+  collection: knowledgebase
+
+database:
+  backend: postgresql
+  postgresql:
+    dsn: postgresql://kiara:kiara@localhost:5432/kiara
+    statement_timeout_ms: 30000
+    # Kapazitaet je Prozess; verschachtelte Kontexte leihen getrennte Sessions.
+    pool_max_size: 16
+    pool_wait_seconds: 5
+
+ingestion:
+  # Ein ausgewählter Originalbody je Mail; außerhalb indexierter Verzeichnisse.
+  mail_archive:
+    path: /var/lib/kiara/mail-originals
+    max_body_bytes: 26214400
+  chunk_size: 1000
+  chunk_overlap: 200
+  batch_size: 100
+  # Zusammengefasste Admin-Aggregation im Hintergrund; Fortschritt bleibt live.
+  admin_cache_refresh_seconds: 3
+  ds_ids_sync_attempts: 3
+  stall_detection:
+    enabled: true
+    poll_interval_seconds: 5
+    warning_after_seconds: 30
+    timeout_seconds: 120
+
+index_contract:
+  discovery_timeout_seconds: 10
+  discovery_attempts: 3
+  discovery_backoff_initial_seconds: 0.25
+  discovery_backoff_max_seconds: 2
+  recovery_poll_seconds: 5
+
+enrichment:
+  enabled: false
+  max_context_chars: 6000
+  max_workers: 2
+  late_chunking: true
+
+# tracing:
+#   enabled: false              # OpenTelemetry-Tracing aktivieren
+#   exporter: postgresql        # "postgresql", "otlp" oder "both"
+#   retention_days: 7
+#   pipelines:
+#     retrieval: true
+#     agent: true
+#     ingestion: true
+#   otlp:                       # OTLP-Export (S9)
+#     endpoint: ""              # Leer = deaktiviert. z.B. "http://otel-collector.local:4317"
+#     insecure: true            # Kein TLS fuer internes Netz
+#   chat_debug: false           # Trace-Timing-Bar in Chat-UI (S7)
+
+web:
+  host: 0.0.0.0
+  port: 8501
+  admin_port: 8502
+  mcp_port: 8504
+  mcp_enabled: false
+  mcp_retrieval_enabled: false
+  oidc_retrieval:
+    enabled: false
+    issuer: "https://id.opendesk.hirschgasse5.de/realms/opendesk"
+    discovery_url: "https://id.opendesk.hirschgasse5.de/realms/opendesk/.well-known/openid-configuration"
+    jwks_url: ""
+    audience: "kiara-retrieval"
+    client_binding_claim: "azp"
+    client_binding_value: "open-webui"
+    algorithms:
+      - RS256
+    identity_claim: "ad_sid"
+    identity_claim_format: "ad_object_sid_or_base64"
+    required_scopes: []
+    required_roles: []
+    clock_skew_seconds: 60
+    ca_bundle_path: ""
+    allow_admin_full_access: false
+
+security:
+  cookie_secure: false
+  hsts_max_age: 0
+  # V30 Welle 5 (#1049): Default-Flip — Strict-CSP im Enforce-Modus.
+  # Report-Only bleibt parallel aktiv (Observability-Kanal, Browser
+  # sendet CSP-Violations an csp_report_uri auch bei Enforcement-Block).
+  csp_strict: true
+  csp_report_only: true
+  csp_report_uri: "/api/admin/csp-report"

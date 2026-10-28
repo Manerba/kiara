@@ -1,0 +1,5 @@
+{
+  "source": "/var/lib/kiara/benchmarks/crag/documents/task1/1d2e8c37-296a-4309-83a2-e84d66dd4bb0/web_001.html",
+  "sha256": "3f0afda8f919fb51fef0cbc3c597d116eaae934d5172a85c0e74173ab410cfd0",
+  "purpose": "Unmodified real source for R1; contradictory spans preserved"
+}
