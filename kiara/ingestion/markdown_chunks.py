@@ -4,7 +4,7 @@ import re
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-from kiara.exceptions import ChunkingContentError
+from kiara.exceptions import ChunkingConfigError, ChunkingContentError
 
 HTML_CHUNKING_REVISION = "html-markdown-tables-v2"
 _SEPARATOR = re.compile(r":?-{3,}:?\Z")
@@ -101,7 +101,7 @@ def prepare_markdown_chunks(
     Absatz-/Zeilensplitter einschließlich des konfigurierten Overlaps.
     """
     if chunk_size <= 0 or not 0 <= chunk_overlap < chunk_size:
-        raise ValueError("Ungültiges Chunk-Budget oder Chunk-Overlap")
+        raise ChunkingConfigError("Ungültiges Chunk-Budget oder Chunk-Overlap")
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=chunk_size, chunk_overlap=chunk_overlap, add_start_index=True
     )

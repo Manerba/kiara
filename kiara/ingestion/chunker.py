@@ -5,6 +5,7 @@ from langchain_text_splitters import (
     RecursiveCharacterTextSplitter,
 )
 
+from kiara.exceptions import ChunkingConfigError
 from kiara.shared.constants import CODE_EXTENSIONS
 
 _LANG_MAP = {
@@ -93,9 +94,9 @@ def chunk_document(
         List of dicts with 'text', 'metadata', 'char_start', 'char_end' keys.
     """
     if chunk_size <= 0:
-        raise ValueError(f"chunk_size must be > 0, got {chunk_size}")
+        raise ChunkingConfigError(f"chunk_size must be > 0, got {chunk_size}")
     if not (0 <= chunk_overlap < chunk_size):
-        raise ValueError(
+        raise ChunkingConfigError(
             f"chunk_overlap must be >= 0 and < chunk_size ({chunk_size}), got {chunk_overlap}"
         )
 

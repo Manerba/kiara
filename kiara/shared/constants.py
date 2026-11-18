@@ -751,6 +751,16 @@ toleriert; bei einem systematischen Ausfall (>= Schwellwert) bricht die
 Pipeline sofort mit RuntimeError ab.
 """
 
+INGESTION_MAX_CONSECUTIVE_UNEXPECTED_ERRORS_DEFAULT: int = 50
+"""Lawinenschutz fuer unerwartete Ausnahmen einzelner Dateien.
+
+Eine unerwartete Ausnahme beim Laden oder Chunken einer Datei wird als
+Dateifehler verbucht, der Job laeuft weiter. Wirft dieselbe Ausnahme
+(Typ und Codestelle) bei so vielen Dateien hintereinander, liegt ein
+systematischer Fehler vor und der Job bricht ab. Config:
+``ingestion.max_consecutive_unexpected_errors``.
+"""
+
 # ---------------------------------------------------------------------------
 # Contextual Retrieval (Phase 16)
 # ---------------------------------------------------------------------------

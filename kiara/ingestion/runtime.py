@@ -13,7 +13,9 @@ import logging
 import os
 import threading
 import time
+import traceback
 from collections.abc import Callable
+from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -21,9 +23,14 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 from kiara_ingestion_core.models import FileLogEntry, ProcessingContext
+from psycopg2 import Error as _DatabaseError
 
 from kiara.backend_selector import BackendUnavailableError
-from kiara.exceptions import ChunkingContentError, VectorDBConnectionError
+from kiara.exceptions import (
+    ChunkingContentError,
+    ConfigurationError,
+    VectorDBConnectionError,
+)
 from kiara.ingestion._file_utils import (
     ChunkDatasources,
     HashStore,
@@ -47,6 +54,7 @@ from kiara.shared.constants import (
     HASH_CHECKPOINT_INTERVAL,
     INDEX_CONTRACT_RECOVERY_POLL_SECS_DEFAULT,
     INGESTION_MAX_CONSECUTIVE_ERRORS,
+    INGESTION_MAX_CONSECUTIVE_UNEXPECTED_ERRORS_DEFAULT,
 )
 from kiara.shared.date_utils import elapsed_ms
 from kiara.shared.secret_redact import redact_secrets_in_text
@@ -91,6 +99,19 @@ _CATEGORICAL_ERRORS: tuple[type[Exception], ...] = (
     BackendUnavailableError,
     VectorDBConnectionError,
     *_NETWORK_ERRORS,
+)
+
+# Fehler beim Laden/Chunken, die den ganzen Job zu Recht stoppen. Jede andere
+# Ausnahme betrifft nur die aktuelle Datei und wird als Dateifehler verbucht.
+# Netzwerkfehler sind OSError und laufen weiterhin ueber den bestehenden
+# OSError-Zweig.
+_JOB_STOPPING_ERRORS: tuple[type[Exception], ...] = (
+    *_CATEGORICAL_ERRORS,
+    IndexCompatibilityError,
+    ConfigurationError,
+    _DatabaseError,
+    _CancelledError,
+    MemoryError,
 )
 
 
@@ -161,6 +182,8 @@ class _IngestionContext:
     file_preparation_callback: Callable[[str, list[dict], list[str]], bool] | None = None
     file_loading_context: Callable | None = None
     consecutive_errors: int = 0
+    unexpected_error_kind: str = ""
+    unexpected_error_streak: int = 0
     skipped: int = 0
     total: int = 0
     progress_callback: Callable | None = None
@@ -222,6 +245,71 @@ def _record_error(
         file_log.status = "error"
         file_log.error_message = str(exc)[:200]
         file_log.error_phase = phase
+
+
+@contextmanager
+def _file_phase(phase: str):
+    """Merkt an unerwarteten Ausnahmen, in welcher Dateiphase sie entstanden."""
+    try:
+        yield
+    except Exception as exc:
+        if getattr(exc, "ingestion_phase", None) is None:
+            try:
+                exc.ingestion_phase = phase
+            except AttributeError:
+                pass
+        raise
+
+
+def _record_unexpected_file_error(ictx, file_log, file_path, exc) -> bool:
+    """Verbucht eine unerwartete Ausnahme beim Laden/Chunken als Dateifehler.
+
+    Muss im except-Block aufgerufen werden (Traceback im Log). Ohne Hash
+    wird die Datei beim naechsten Lauf erneut versucht.
+
+    Returns:
+        True → naechste Datei verarbeiten.
+        False → Lawinenschutz: dieselbe Ausnahme bei zu vielen Dateien
+        hintereinander, ``abort_reason`` ist gesetzt.
+    """
+    phase = getattr(exc, "ingestion_phase", None) or "loading"
+    frames = traceback.extract_tb(exc.__traceback__)
+    where = f"{Path(frames[-1].filename).name}:{frames[-1].lineno}" if frames else "?"
+    kind = f"{type(exc).__name__} in {where}"
+    logger.error(
+        "Unerwarteter Fehler bei '%s' (Phase %s, %s): %s — Datei wird uebersprungen",
+        file_path,
+        phase,
+        kind,
+        exc,
+        exc_info=True,
+    )
+    _record_error(ictx, file_log, file_path, f"{type(exc).__name__}: {exc} ({where})", phase)
+    ictx.stats["unexpected_file_errors"] = ictx.stats.get("unexpected_file_errors", 0) + 1
+
+    if kind == ictx.unexpected_error_kind:
+        ictx.unexpected_error_streak += 1
+    else:
+        ictx.unexpected_error_kind = kind
+        ictx.unexpected_error_streak = 1
+    limit = max(
+        1,
+        int(
+            ictx.config.get("ingestion", {}).get(
+                "max_consecutive_unexpected_errors",
+                INGESTION_MAX_CONSECUTIVE_UNEXPECTED_ERRORS_DEFAULT,
+            )
+        ),
+    )
+    if ictx.unexpected_error_streak < limit:
+        return True
+    abort_msg = (
+        f"Abbruch: {ictx.unexpected_error_streak} Dateien hintereinander mit demselben "
+        f"unerwarteten Fehler ({kind}). Letzter: {exc}"
+    )
+    logger.error(abort_msg)
+    ictx.stats["abort_reason"] = abort_msg
+    return False
 
 
 def _abort_index_compatibility(
@@ -1171,7 +1259,7 @@ def _process_single_file(file_path, config, ds_overrides, datasource_id, ctx, st
     chunk_size = config["ingestion"]["chunk_size"]
     chunk_overlap = config["ingestion"]["chunk_overlap"]
 
-    with _tracer.start_as_current_span("load_content") as load_span:
+    with _file_phase("loading"), _tracer.start_as_current_span("load_content") as load_span:
         doc, is_ddu_error = _load_content(file_path, ctx, stats, file_log=file_log)
         load_span.set_attribute("parser", file_log.parser if file_log else "")
         load_span.set_attribute("parser_fallback", file_log.parser_fallback if file_log else False)
@@ -1181,7 +1269,8 @@ def _process_single_file(file_path, config, ds_overrides, datasource_id, ctx, st
     if is_ddu_error:
         return [], [], [], "", []
 
-    vlm_doc = _handle_vlm_content(file_path, ctx, stats)
+    with _file_phase("loading"):
+        vlm_doc = _handle_vlm_content(file_path, ctx, stats)
 
     is_no_content = doc is not None and doc["metadata"].get("no_content")
 
@@ -1213,7 +1302,7 @@ def _process_single_file(file_path, config, ds_overrides, datasource_id, ctx, st
                 file_log.error_phase = "loading"
         return [], [], [], "", []
 
-    with _tracer.start_as_current_span("chunk_and_collect") as chunk_span:
+    with _file_phase("chunking"), _tracer.start_as_current_span("chunk_and_collect") as chunk_span:
         result = _chunk_and_collect(
             docs_to_chunk,
             ds_overrides,
@@ -3514,6 +3603,19 @@ def _process_file_with_publication(ictx: _IngestionContext, file_path: str, publ
                 except OSError as exc:
                     _record_error(ictx, file_log, file_path, exc, "loading")
                     file_texts, file_metas, file_ids, full_text, file_spans = [], [], [], "", []
+                except _JOB_STOPPING_ERRORS:
+                    raise
+                except Exception as exc:
+                    if not _record_unexpected_file_error(ictx, file_log, file_path, exc):
+                        _cleanup_file_hash(ictx, file_path)
+                        _emit_file_log(ictx, file_log, t0)
+                        _persist_hashes_checkpoint(ictx, force=True)
+                        span.set_attribute("final_status", "aborted_unexpected_errors")
+                        return False
+                    file_texts, file_metas, file_ids, full_text, file_spans = [], [], [], "", []
+                else:
+                    ictx.unexpected_error_kind = ""
+                    ictx.unexpected_error_streak = 0
                 document_ids = list(file_ids)
                 if (
                     file_texts or ictx.stats["errors"] == errors_before

@@ -79,6 +79,7 @@ from kiara.shared.constants import (
     INGESTION_D_STATE_TIMEOUT_SECS_DEFAULT,
     INGESTION_D_STATE_WARNING_SECS_DEFAULT,
     INGESTION_DEFAULT_BATCH_SIZE,
+    INGESTION_MAX_CONSECUTIVE_UNEXPECTED_ERRORS_DEFAULT,
     INGESTION_STALL_POLL_INTERVAL_SECS_DEFAULT,
     MAIL_ARCHIVE_MAX_BODY_BYTES_DEFAULT,
     MCP_PORT_DEFAULT,
@@ -313,6 +314,9 @@ DEFAULT_CONFIG = {
         "chunk_size": DEFAULT_CHUNK_SIZE,
         "chunk_overlap": DEFAULT_CHUNK_OVERLAP,
         "batch_size": INGESTION_DEFAULT_BATCH_SIZE,
+        # Gleiche unerwartete Ausnahme bei so vielen Dateien hintereinander
+        # bricht den Job ab (Lawinenschutz).
+        "max_consecutive_unexpected_errors": INGESTION_MAX_CONSECUTIVE_UNEXPECTED_ERRORS_DEFAULT,
         "admin_cache_refresh_seconds": 3,
         "ds_ids_sync_attempts": 3,
         "vlm_prompt": "",

@@ -6,6 +6,7 @@ Ermoeglicht gezielte Fehlerbehandlung statt breiter 'except Exception'-Catches.
 Hierarchie:
     KiaraError
     +-- ConfigurationError    # Fehlerhafte oder fehlende Konfiguration
+        +-- ChunkingConfigError
     +-- IngestionError        # Fehler beim Laden, Chunken oder Speichern von Dokumenten
         +-- ChunkingContentError
     +-- RetrievalError        # Fehler bei Vektor-Suche oder Embedding-Berechnung
@@ -35,6 +36,14 @@ class ConfigurationError(KiaraError):
 
     Wird geworfen wenn Config-Werte fehlen, ungueltig sind
     oder nicht geladen werden koennen.
+    """
+
+
+class ChunkingConfigError(ConfigurationError, ValueError):
+    """Chunk-Budget oder Chunk-Overlap ist ungueltig konfiguriert.
+
+    Betrifft jede Datei gleich und stoppt deshalb den ganzen Ingest-Job,
+    statt als Dateifehler verbucht zu werden.
     """
 
 

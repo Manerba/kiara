@@ -318,8 +318,12 @@ def test_failed_preparation_cannot_leave_old_source_published(whole_pipeline, mo
             raise RuntimeError("preparation failed")
 
         monkeypatch.setattr(case.store, "get_ids_by_sources", fail_read)
-    with pytest.raises(RuntimeError, match="failed"):
-        case.run_whole(case.ds)
+    if failure == "loading":
+        # Unerwartete Ladefehler bleiben dateilokal.
+        assert case.run_whole(case.ds)["errors"] == 1
+    else:
+        with pytest.raises(RuntimeError, match="failed"):
+            case.run_whole(case.ds)
     assert case.path not in case.hashes.load(case.ds, "test-model")
     with pytest.raises(RetrievalError, match="nicht abgeschlossen"):
         case.reader(before)
