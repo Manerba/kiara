@@ -17,7 +17,8 @@ import psycopg2
 import pytest
 from kiara_db import connection as db
 
-DSN = "postgresql://kiara:kiara@localhost:5432/kiara_test"
+from db_helpers import TEST_DB_NAME
+from db_helpers import _TEST_DSN as DSN
 
 
 @pytest.fixture(autouse=True)
@@ -235,7 +236,7 @@ def test_test_database_initialization_remains_protected():
     shared.init_db_backend({"database": {"postgresql": {"dsn": "postgresql://never-use"}}})
     db.init_db("postgresql://never-use")
     with db.db_query() as conn:
-        assert conn.execute("SELECT current_database() AS name").fetchone()["name"] == "kiara_test"
+        assert conn.execute("SELECT current_database() AS name").fetchone()["name"] == TEST_DB_NAME
 
 
 @pytest.mark.skipif(not hasattr(os, "fork"), reason="POSIX fork boundary")

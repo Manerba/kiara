@@ -12,6 +12,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
+from db_helpers import TEST_DB_NAME
 from qdrant_client.models import Distance, VectorParams
 from test_index_compatibility_s4 import _persist_contract, _server_discovery
 
@@ -27,7 +28,7 @@ def _sha(text):
 def transition_case(test_db, monkeypatch, request):
     from kiara.retrieval import index_schema_transition as transition
 
-    assert test_db.execute("SELECT current_database() AS name").fetchone()["name"] == "kiara_test"
+    assert test_db.execute("SELECT current_database() AS name").fetchone()["name"] == TEST_DB_NAME
     kind = getattr(request, "param", contracts.IndexVectorKind.DENSE)
     historical_provider = kind == "historical_provider"
     if historical_provider:

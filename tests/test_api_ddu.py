@@ -46,146 +46,21 @@ _REMOTE_BACKEND_2 = {
 
 # ── DB-Schema ────────────────────────────────────────────────────────────────
 
-_FULL_DS_SCHEMA = """
-    DROP TABLE IF EXISTS cache_jobs CASCADE;
-    DROP TABLE IF EXISTS cache_datasources CASCADE;
-    DROP TABLE IF EXISTS ingestion_jobs CASCADE;
-    DROP TABLE IF EXISTS datasource_embeddings CASCADE;
-    DROP TABLE IF EXISTS datasource_users CASCADE;
-    DROP TABLE IF EXISTS datasource_groups CASCADE;
-    DROP TABLE IF EXISTS datasources CASCADE;
-
-    CREATE TABLE datasources (
-        id SERIAL PRIMARY KEY,
-        name TEXT NOT NULL,
-        type TEXT NOT NULL DEFAULT 'local',
-        path TEXT DEFAULT '',
-        is_active BOOLEAN DEFAULT true,
-        created_at TEXT DEFAULT (NOW()),
-        updated_at TEXT DEFAULT (NOW()),
-        webdav_url TEXT DEFAULT '',
-        webdav_username TEXT DEFAULT '',
-        webdav_password TEXT DEFAULT '',
-        webdav_base_path TEXT DEFAULT '/',
-        smb_server TEXT DEFAULT '',
-        smb_share TEXT DEFAULT '',
-        smb_username TEXT DEFAULT '',
-        smb_password TEXT DEFAULT '',
-        smb_domain TEXT DEFAULT '',
-        smb_mount_point TEXT DEFAULT '',
-        imap_server TEXT DEFAULT '',
-        imap_port INTEGER DEFAULT 993,
-        imap_ssl INTEGER DEFAULT 1,
-        imap_username TEXT DEFAULT '',
-        imap_password TEXT DEFAULT '',
-        imap_folders TEXT DEFAULT 'INBOX',
-        imap_since_days INTEGER DEFAULT 90,
-        imap_download_attachments INTEGER DEFAULT 1,
-        imap_max_attachment_mb INTEGER DEFAULT 25,
-        sql_dsn TEXT DEFAULT '',
-        sql_driver TEXT DEFAULT 'auto',
-        sql_query TEXT DEFAULT '',
-        sql_text_columns TEXT DEFAULT '',
-        sql_id_column TEXT DEFAULT 'id',
-        sql_timestamp_column TEXT DEFAULT '',
-        sql_text_template TEXT DEFAULT '',
-        connector_config TEXT DEFAULT '{}',
-        ds_chunk_strategy TEXT DEFAULT 'auto',
-        ds_chunk_size INTEGER DEFAULT NULL,
-        ds_chunk_overlap INTEGER DEFAULT NULL,
-        ds_file_types TEXT DEFAULT NULL,
-        ds_exclude_patterns TEXT DEFAULT NULL,
-        ds_ddu_enabled BOOLEAN DEFAULT false,
-        ds_ddu_ocr_images INTEGER DEFAULT 1,
-        ds_vlm_enabled BOOLEAN DEFAULT false,
-        ds_index_attachments INTEGER DEFAULT 1,
-        ds_accept_all_text INTEGER DEFAULT 0,
-        sync_interval TEXT DEFAULT 'global',
-        ingestion_status TEXT DEFAULT 'idle',
-        last_ingested_at TEXT DEFAULT NULL,
-        last_error TEXT DEFAULT '',
-        chunk_count INTEGER DEFAULT 0,
-        file_count INTEGER DEFAULT 0,
-        processed_files INTEGER DEFAULT 0,
-        restriction_level TEXT DEFAULT 'anonymize' NOT NULL,
-        ds_contextual_retrieval INTEGER DEFAULT 0,
-        ds_enrichment_prompt_id INTEGER DEFAULT NULL,
-        ds_enrichment_backend_id INTEGER DEFAULT NULL,
-        ds_colbert_enabled BOOLEAN DEFAULT false,
-        progress_total INTEGER DEFAULT 0,
-        next_sync_at TEXT DEFAULT NULL
-    );
-
-    CREATE TABLE datasource_groups (
-        id SERIAL PRIMARY KEY,
-        datasource_id INTEGER NOT NULL,
-        group_id INTEGER NOT NULL
-    );
-
-    CREATE TABLE datasource_embeddings (
-        id SERIAL PRIMARY KEY,
-        datasource_id INTEGER NOT NULL,
-        embedding_model TEXT NOT NULL,
-        chunk_count INTEGER DEFAULT 0,
-        file_count INTEGER DEFAULT 0,
-        last_ingested_at TEXT DEFAULT NULL,
-        UNIQUE(datasource_id, embedding_model)
-    );
-
-    CREATE TABLE datasource_users (
-        id SERIAL PRIMARY KEY,
-        datasource_id INTEGER NOT NULL,
-        user_id INTEGER NOT NULL
-    );
-
-    CREATE TABLE ingestion_jobs (
-        id SERIAL PRIMARY KEY,
-        datasource_id INTEGER NOT NULL,
-        status TEXT NOT NULL DEFAULT 'pending',
-        job_type TEXT NOT NULL DEFAULT 'incremental',
-        triggered_by TEXT NOT NULL DEFAULT 'manual',
-        embedding_model TEXT DEFAULT '',
-        requested_action TEXT DEFAULT NULL,
-        progress_processed INTEGER DEFAULT 0,
-        progress_total INTEGER DEFAULT 0,
-        queued_at TEXT DEFAULT (NOW()),
-        started_at TEXT DEFAULT NULL,
-        finished_at TEXT DEFAULT NULL,
-        stats_json TEXT DEFAULT '{}',
-        error_message TEXT DEFAULT '',
-        resumed_from_job INTEGER DEFAULT NULL,
-        FOREIGN KEY (datasource_id) REFERENCES datasources(id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE cache_datasources (
-        datasource_id INTEGER PRIMARY KEY,
-        payload_json  TEXT NOT NULL DEFAULT '{}',
-        updated_at    TEXT DEFAULT (NOW())
-    );
-
-    CREATE TABLE cache_jobs (
-        job_id        INTEGER PRIMARY KEY,
-        datasource_id INTEGER DEFAULT 0,
-        status        TEXT DEFAULT '',
-        payload_json  TEXT NOT NULL DEFAULT '{}',
-        updated_at    TEXT DEFAULT (NOW())
-    );
-    CREATE INDEX IF NOT EXISTS idx_cache_jobs_status ON cache_jobs(status);
-"""
 
 
 # ── Fixture ──────────────────────────────────────────────────────────────────
 
 
 def _ensure_schema():
-    """Stellt sicher, dass alle benoetigten Tabellen und Spalten existieren.
+    """Echtes KIara-Schema (schema.sql + Migrationen), Testdaten geleert.
 
-    Erstellt das vollstaendige Schema immer neu, um Schema-Konflikte zu vermeiden.
+    Frueher legte der Test eine eigene Kopie der Datasource-Tabellen per
+    DROP ... CASCADE an; ihr fehlten neuere Spalten (z. B. CAD-Zielschalter),
+    und das CASCADE beschaedigte Fremdschluessel anderer Tests.
     """
-    conn = get_connection()
-    conn.executescript(_FULL_DS_SCHEMA)
-    conn.commit()
-    conn.close()
+    from db_helpers import reset_test_data
+
+    reset_test_data()
 
 
 @pytest.fixture

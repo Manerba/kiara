@@ -1050,9 +1050,13 @@ class TestMarkerInRunIngestion:
         mock_hash_store = MagicMock()
         mock_diff.return_value = ([], [], {}, [], mock_hash_store, {})
 
-        run_ingestion(config=None, embedding_model="m")
+        # Der aeussere CAD-Router (route_cad_ingestion) laedt die Config bei
+        # config=None bereits selbst ueber kiara.config.load_config und reicht
+        # die markierte Kopie durch; derselbe Mock deckt beide Ladestellen ab.
+        with patch("kiara.config.load_config", mock_load):
+            run_ingestion(config=None, embedding_model="m")
 
-        # load_config wurde aufgerufen
+        # load_config wurde genau einmal aufgerufen
         mock_load.assert_called_once()
         # Die Config die an _load_and_diff_files ging, hat den Marker
         actual_config = mock_diff.call_args[0][0]

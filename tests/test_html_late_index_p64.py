@@ -14,6 +14,7 @@ from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
+from db_helpers import TEST_DB_NAME
 from test_index_compatibility_s4 import _config, _persist_contract, _resolved
 
 from kiara.retrieval import embedding
@@ -101,7 +102,9 @@ def test_query_uses_selected_profile_endpoint_role_and_exact_question(
         )
 
     monkeypatch.setattr(
-        embedding, "_resolve_backend", lambda *_: {"provider": "ollama", "url": "http://kiron"}
+        embedding,
+        "_resolve_backend",
+        lambda model: {"provider": "ollama", "url": "http://kiron", "model": model},
     )
     monkeypatch.setattr(embedding, "get_embedding_dimension", lambda *_: 3)
     monkeypatch.setattr(embedding, "_get_ollama_http_client", lambda *_: SimpleNamespace(post=post))
@@ -142,7 +145,7 @@ def test_query_cache_identity_uses_selected_primary_profile(monkeypatch, observe
 @pytest.fixture
 def local_contracts(test_db, monkeypatch):
     """Keep actual PG state/fences, replacing only remote discovery and count."""
-    assert test_db.execute("SELECT current_database() AS name").fetchone()["name"] == "kiara_test"
+    assert test_db.execute("SELECT current_database() AS name").fetchone()["name"] == TEST_DB_NAME
     monkeypatch.setattr(contract, "_collection_state", lambda *_: (False, 0))
     monkeypatch.setattr(
         contract,

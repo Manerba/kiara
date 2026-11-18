@@ -4468,7 +4468,7 @@ class TestCspPhase2TabJobs:
         Kollisionen)."""
         assert 'data-filter="all"' in tab_jobs_src
         assert 'data-filter="running"' in tab_jobs_src
-        assert 'data-job-id="${v}"' in tab_jobs_src
+        assert re.search(r'data-job-id="\$\{\w+\}"', tab_jobs_src)
 
     def test_handlers_unchanged(self, tab_jobs_src):
         """Die Handler-Funktionen (_filterJobs, _cancelJob, ...) bleiben

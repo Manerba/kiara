@@ -14,6 +14,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
+from db_helpers import TEST_DB_NAME
 from test_index_compatibility_s4 import _config, _persist_contract, _resolved
 
 from kiara.retrieval import embedding
@@ -44,7 +45,7 @@ def _inventory_client():
 def test_inventory_preserves_stored_kind_when_current_mode_differs(
     test_db, stored_kind, configured_late
 ):
-    assert test_db.execute("SELECT current_database() AS name").fetchone()["name"] == "kiara_test"
+    assert test_db.execute("SELECT current_database() AS name").fetchone()["name"] == TEST_DB_NAME
     config = _settings(configured_late)
     target = contract.make_index_target(
         config, collection_name="kb_model", vector_kind=stored_kind, requested_model="model"
@@ -71,7 +72,7 @@ def test_inventory_preserves_stored_kind_when_current_mode_differs(
 
 
 def test_unbound_historical_collection_remains_dense_candidate_under_late_config(test_db):
-    assert test_db.execute("SELECT current_database() AS name").fetchone()["name"] == "kiara_test"
+    assert test_db.execute("SELECT current_database() AS name").fetchone()["name"] == TEST_DB_NAME
     assert test_db.execute("SELECT COUNT(*) AS n FROM index_contracts").fetchone()["n"] == 0
     config = _settings(True)
 

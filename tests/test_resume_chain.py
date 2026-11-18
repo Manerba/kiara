@@ -280,6 +280,18 @@ def pg_enrich_db():
     cleanup.close()
 
 
+@pytest.fixture(autouse=True)
+def _dense_primary_config(tmp_path, monkeypatch):
+    """Die Jobs dieser Datei tragen einen Dense-Vertrag (wie im Betrieb mit
+    enrichment.late_chunking: false). Der Worker waehlt das Primaerziel aus
+    load_config(); mit den Code-Vorgaben (Late Chunking an) waere es ein
+    anderes Ziel und der Vertragswaechter blockierte das Auto-Resume zu Recht.
+    """
+    path = tmp_path / "kiara.yaml"
+    path.write_text("enrichment:\n  late_chunking: false\n", encoding="utf-8")
+    monkeypatch.setenv("KIARA_CONFIG", str(path))
+
+
 def _insert_running_job_with_contract(conn, datasource_id: int) -> int:
     """Erzeugt einen laufenden Job mit vollstaendigem aktuellem S4-Snapshot."""
     from kiara.retrieval.index_compatibility import dense_index_target
@@ -310,11 +322,33 @@ def _insert_running_job_with_contract(conn, datasource_id: int) -> int:
     ).fetchone()["id"]
 
 
+_OPEN_CONNS = []
+
+
 def _pg_conn():
-    """Erstellt eine PostgreSQL-Verbindung fuer Tests."""
+    """Erstellt eine PostgreSQL-Verbindung fuer Tests (nach dem Test geschlossen)."""
     from kiara.shared.db import get_connection
 
-    return get_connection()
+    conn = get_connection()
+    _OPEN_CONNS.append(conn)
+    return conn
+
+
+@pytest.fixture(autouse=True)
+def _close_test_connections():
+    """Schliesst Verbindungen auch nach fehlgeschlagenen Assertions.
+
+    Sonst bleibt eine Verbindung "idle in transaction" offen, haelt Sperren
+    auf ingestion_jobs und blockiert alle folgenden Tests der Suite.
+    """
+    yield
+    while _OPEN_CONNS:
+        conn = _OPEN_CONNS.pop()
+        try:
+            conn.rollback()
+            conn.close()
+        except Exception:
+            pass
 
 
 # ---------------------------------------------------------------------------

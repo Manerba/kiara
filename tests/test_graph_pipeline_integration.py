@@ -1,6 +1,7 @@
 """Tests fuer Graph-Entity-Extraction waehrend der Ingestion-Pipeline."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from pathlib import Path
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -66,6 +67,41 @@ def base_config(tmp_path, graph_store):
     }
 
 
+def _publishing_store(mock_vs):
+    """VectorStore-Attrappe mit heutiger Cleanup- und Publikationsschnittstelle.
+
+    Ein Volllauf bereinigt die Quellen vorab und prueft danach, dass keine
+    Dense-Vektoren uebrig sind; der Dateiabschluss wird nur ueber
+    ``finalize_document_versions(on_complete=...)`` mit der Gesamtversion
+    jeder geschriebenen Quelle bestaetigt.
+    """
+    store = mock_vs.return_value
+    written = {}
+
+    def record(texts, metas, ids, *args, **kwargs):
+        written.update(zip(ids, metas, strict=True))
+        return list(ids)
+
+    def finalize(ids, *, publish_search, on_complete):
+        versions = {}
+        for cid in ids:
+            meta = written[cid]
+            versions.setdefault(meta["source"], {})[meta.get("parser", "standard")] = "v-test"
+        on_complete(versions)
+
+    store.get_collection_name.return_value = "kb_test"
+    store.get_ids_by_sources.return_value = []
+    store.add.side_effect = record
+    store.add_with_embeddings.side_effect = record
+    store.finalize_document_versions.side_effect = finalize
+    return store
+
+
+def _source(config):
+    """Die tatsaechlich gescannte Datei; Chunk-IDs und Publikation haengen daran."""
+    return str(Path(config["datasource"]["path"]) / "test.txt")
+
+
 def _mock_extract_result():
     """Beispiel-Ergebnis einer Entity-Extraction."""
     return {
@@ -99,19 +135,18 @@ def _mock_extract_result():
 @patch("kiara.ingestion.runtime.chunk_document")
 def test_ingestion_calls_entity_extractor(mock_chunk, mock_load, mock_vs, base_config, graph_store):
     """Wenn graph.enabled=True und extract_on_ingestion=True, wird EntityExtractor aufgerufen."""
+    src = _source(base_config)
     mock_load.return_value = {
         "text": "Mueller GmbH liefert Aluminium-Gehaeuse.",
-        "metadata": {"source": "/tmp/test.txt", "chunk_index": 0},
+        "metadata": {"source": src, "chunk_index": 0},
     }
     mock_chunk.return_value = [
         {
             "text": "Mueller GmbH liefert Aluminium-Gehaeuse.",
-            "metadata": {"source": "/tmp/test.txt", "chunk_index": 0},
+            "metadata": {"source": src, "chunk_index": 0},
         },
     ]
-    mock_vs_instance = mock_vs.return_value
-    mock_vs_instance.add = MagicMock()
-    mock_vs_instance.delete_by_sources = MagicMock()
+    _publishing_store(mock_vs)
 
     with patch(
         "kiara.graph.extractor.EntityExtractor._call_llm", new_callable=AsyncMock
@@ -131,18 +166,17 @@ def test_ingestion_skips_extraction_when_disabled(
     mock_chunk, mock_load, mock_vs, base_config, graph_store
 ):
     """Wenn graph.enabled=False, wird EntityExtractor NICHT aufgerufen."""
+    src = _source(base_config)
     base_config["graph"]["enabled"] = False
 
     mock_load.return_value = {
         "text": "Test text.",
-        "metadata": {"source": "/tmp/test.txt", "chunk_index": 0},
+        "metadata": {"source": src, "chunk_index": 0},
     }
     mock_chunk.return_value = [
-        {"text": "Test text.", "metadata": {"source": "/tmp/test.txt", "chunk_index": 0}},
+        {"text": "Test text.", "metadata": {"source": src, "chunk_index": 0}},
     ]
-    mock_vs_instance = mock_vs.return_value
-    mock_vs_instance.add = MagicMock()
-    mock_vs_instance.delete_by_sources = MagicMock()
+    _publishing_store(mock_vs)
 
     with patch(
         "kiara.graph.extractor.EntityExtractor._call_llm", new_callable=AsyncMock
@@ -160,19 +194,18 @@ def test_ingestion_stores_extracted_entities(
     mock_chunk, mock_load, mock_vs, base_config, graph_store
 ):
     """Extrahierte Entities und Relations landen im GraphStore."""
+    src = _source(base_config)
     mock_load.return_value = {
         "text": "Mueller GmbH liefert an Schmidt AG.",
-        "metadata": {"source": "/tmp/test.txt", "chunk_index": 0},
+        "metadata": {"source": src, "chunk_index": 0},
     }
     mock_chunk.return_value = [
         {
             "text": "Mueller GmbH liefert an Schmidt AG.",
-            "metadata": {"source": "/tmp/test.txt", "chunk_index": 0},
+            "metadata": {"source": src, "chunk_index": 0},
         },
     ]
-    mock_vs_instance = mock_vs.return_value
-    mock_vs_instance.add = MagicMock()
-    mock_vs_instance.delete_by_sources = MagicMock()
+    _publishing_store(mock_vs)
 
     extract_result = _mock_extract_result()
     import json
@@ -205,16 +238,15 @@ def test_ingestion_handles_extraction_error(
     mock_chunk, mock_load, mock_vs, base_config, graph_store
 ):
     """Wenn EntityExtractor eine Exception wirft, laeuft die Ingestion trotzdem weiter."""
+    src = _source(base_config)
     mock_load.return_value = {
         "text": "Test text.",
-        "metadata": {"source": "/tmp/test.txt", "chunk_index": 0},
+        "metadata": {"source": src, "chunk_index": 0},
     }
     mock_chunk.return_value = [
-        {"text": "Test text.", "metadata": {"source": "/tmp/test.txt", "chunk_index": 0}},
+        {"text": "Test text.", "metadata": {"source": src, "chunk_index": 0}},
     ]
-    mock_vs_instance = mock_vs.return_value
-    mock_vs_instance.add = MagicMock()
-    mock_vs_instance.delete_by_sources = MagicMock()
+    _publishing_store(mock_vs)
 
     with patch(
         "kiara.graph.extractor.EntityExtractor._call_llm", new_callable=AsyncMock

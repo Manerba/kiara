@@ -6,7 +6,7 @@ Alle Tests laufen OHNE installiertes Docling (komplett gemockt).
 """
 
 import json
-from unittest.mock import call, patch
+from unittest.mock import ANY, call, patch
 
 import pytest
 
@@ -35,6 +35,37 @@ def _mock_ddu_health_check():
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
+
+
+def _publishing_store(mock_vs):
+    """Konfiguriert die VectorStore-Attrappe fuer die heutige Dokumentpublikation.
+
+    Ein Volllauf bereinigt die Quellen vorab und prueft danach, dass keine
+    Dense-Vektoren uebrig sind; der Dateiabschluss wird nur ueber
+    ``finalize_document_versions(on_complete=...)`` mit der Gesamtversion
+    jeder geschriebenen Quelle bestaetigt.
+    """
+    store = mock_vs.return_value
+    written = {}
+
+    def record(texts, metas, ids, *args, **kwargs):
+        written.update(zip(ids, metas, strict=True))
+        return list(ids)
+
+    def finalize(ids, *, publish_search, on_complete):
+        versions = {}
+        for cid in ids:
+            meta = written[cid]
+            versions.setdefault(meta["source"], {})[meta.get("parser", "standard")] = "v-test"
+        on_complete(versions)
+
+    store.get_collection_name.return_value = "kb_test"
+    store.get_ids_by_sources.return_value = []
+    store.add.side_effect = record
+    store.add_with_embeddings.side_effect = record
+    store.finalize_document_versions.side_effect = finalize
+    store.record_written = record
+    return store
 
 _REMOTE_BACKEND = {
     "url": "http://ddu:5001",
@@ -92,6 +123,7 @@ def _make_file(directory, name, content="Test content"):
 def test_ds_overrides_ddu_true_passes_to_load_file(mock_load_file, mock_vs, mock_ddu_be, tmp_path):
     """ds_overrides={'ddu_enabled': True} → load_file bekommt ddu_enabled=True."""
     config = _base_config(tmp_path)
+    _publishing_store(mock_vs)
     ds_path = tmp_path / "docs"
     _make_file(ds_path, "test.pdf")
 
@@ -114,6 +146,7 @@ def test_ds_overrides_ddu_true_passes_to_load_file(mock_load_file, mock_vs, mock
 def test_ds_overrides_none_passes_ddu_false(mock_load_file, mock_vs, tmp_path):
     """ds_overrides=None → load_file bekommt ddu_enabled=False."""
     config = _base_config(tmp_path)
+    _publishing_store(mock_vs)
     ds_path = tmp_path / "docs"
     _make_file(ds_path, "test.txt")
 
@@ -125,7 +158,10 @@ def test_ds_overrides_none_passes_ddu_false(mock_load_file, mock_vs, tmp_path):
     run_ingestion(config, embedding_model="nomic-embed-text", ds_overrides=None)
 
     call_args = mock_load_file.call_args
-    assert call_args == call(str(ds_path / "test.txt"), ddu_enabled=False, ddu_backends=None)
+    # mail_archive ist die (hier unveraenderte) Mail-Archiv-Config der Pipeline.
+    assert call_args == call(
+        str(ds_path / "test.txt"), ddu_enabled=False, ddu_backends=None, mail_archive=ANY
+    )
 
 
 @patch("kiara.ingestion.pipeline.VectorStore")
@@ -133,6 +169,7 @@ def test_ds_overrides_none_passes_ddu_false(mock_load_file, mock_vs, tmp_path):
 def test_ds_overrides_empty_passes_ddu_false(mock_load_file, mock_vs, tmp_path):
     """ds_overrides={} (ohne ddu_enabled) → load_file bekommt ddu_enabled=False."""
     config = _base_config(tmp_path)
+    _publishing_store(mock_vs)
     ds_path = tmp_path / "docs"
     _make_file(ds_path, "test.txt")
 
@@ -144,7 +181,10 @@ def test_ds_overrides_empty_passes_ddu_false(mock_load_file, mock_vs, tmp_path):
     run_ingestion(config, embedding_model="nomic-embed-text", ds_overrides={})
 
     call_args = mock_load_file.call_args
-    assert call_args == call(str(ds_path / "test.txt"), ddu_enabled=False, ddu_backends=None)
+    # mail_archive ist die (hier unveraenderte) Mail-Archiv-Config der Pipeline.
+    assert call_args == call(
+        str(ds_path / "test.txt"), ddu_enabled=False, ddu_backends=None, mail_archive=ANY
+    )
 
 
 @patch("kiara.config.get_ddu_backends", return_value=[])
@@ -155,6 +195,7 @@ def test_ds_overrides_ddu_true_no_backends_disables_ddu(
 ):
     """ddu_enabled=True + get_ddu_backends returns [] → Warning + ddu_enabled=False."""
     config = _base_config(tmp_path)
+    _publishing_store(mock_vs)
     ds_path = tmp_path / "docs"
     _make_file(ds_path, "test.txt")
 
@@ -178,6 +219,7 @@ def test_ds_overrides_ddu_true_no_backends_disables_ddu(
 def test_ddu_enabled_adds_image_types(mock_load_file, mock_vs, mock_ddu_be, tmp_path):
     """ddu_enabled=True → .png/.jpg/.tiff werden in file_types aufgenommen."""
     config = _base_config(tmp_path)
+    _publishing_store(mock_vs)
     ds_path = tmp_path / "docs"
     # Erstelle eine Bilddatei um zu pruefen ob sie gescannt wird
     _make_file(ds_path, "scan.png")
@@ -199,6 +241,7 @@ def test_ddu_enabled_adds_image_types(mock_load_file, mock_vs, mock_ddu_be, tmp_
 def test_ddu_disabled_no_image_types(mock_load_file, mock_vs, tmp_path):
     """ddu_enabled=False → .png/.jpg/.tiff werden NICHT aufgenommen."""
     config = _base_config(tmp_path)
+    _publishing_store(mock_vs)
     ds_path = tmp_path / "docs"
     _make_file(ds_path, "scan.png")  # Bilddatei ohne DDU
 
@@ -214,6 +257,7 @@ def test_ddu_disabled_no_image_types(mock_load_file, mock_vs, tmp_path):
 def test_ddu_enabled_no_duplicate_types(mock_load_file, mock_vs, mock_ddu_be, tmp_path):
     """ddu_enabled=True + bestehende file_types → Union (keine Duplikate)."""
     config = _base_config(tmp_path)
+    _publishing_store(mock_vs)
     # .png ist bereits in file_types
     config["datasource"]["file_types"] = [".pdf", ".txt", ".png"]
     ds_path = tmp_path / "docs"
@@ -224,10 +268,18 @@ def test_ddu_enabled_no_duplicate_types(mock_load_file, mock_vs, mock_ddu_be, tm
         "metadata": {"source": str(ds_path / "test.txt"), "file_type": ".txt"},
     }
 
-    run_ingestion(config, embedding_model="nomic-embed-text", ds_overrides={"ddu_enabled": True})
+    from kiara.ingestion import pipeline
+
+    # run_ingestion arbeitet auf einer Kopie der Config; massgeblich ist die
+    # Config, mit der gescannt wird.
+    with patch.object(pipeline, "scan_files", wraps=pipeline.scan_files) as scan:
+        run_ingestion(
+            config, embedding_model="nomic-embed-text", ds_overrides={"ddu_enabled": True}
+        )
 
     # file_types sollte .png nur einmal enthalten
-    ft = config["datasource"]["file_types"]
+    scan.assert_called_once()
+    ft = scan.call_args.args[0]["datasource"]["file_types"]
     assert ft.count(".png") == 1
     # Alle Bildtypen muessen enthalten sein
     for ext in [".png", ".tiff", ".tif", ".jpg", ".jpeg"]:
@@ -351,6 +403,7 @@ def test_run_all_no_ddu_column_no_crash(mock_mounted, mock_mount, mock_run, tmp_
 def test_ddu_timeout_increments_stats(mock_load_file, mock_vs, mock_ddu_be, tmp_path):
     """ddu_error=timeout → stats['ddu_timeout']==1, errors>=1, total_chunks==0."""
     config = _base_config(tmp_path)
+    _publishing_store(mock_vs)
     ds_path = tmp_path / "docs"
     _make_file(ds_path, "test.pdf")
 
@@ -379,6 +432,7 @@ def test_ddu_timeout_increments_stats(mock_load_file, mock_vs, mock_ddu_be, tmp_
 def test_ddu_remote_success_tracked(mock_load_file, mock_vs, mock_ddu_be, tmp_path):
     """parser=docling-remote → ddu_files=1, ddu_remote_files=1."""
     config = _base_config(tmp_path)
+    _publishing_store(mock_vs)
     ds_path = tmp_path / "docs"
     _make_file(ds_path, "test.pdf")
 
@@ -405,6 +459,7 @@ def test_ddu_remote_success_tracked(mock_load_file, mock_vs, mock_ddu_be, tmp_pa
 def test_ddu_legacy_parser_tracked(mock_load_file, mock_vs, mock_ddu_be, tmp_path):
     """Legacy parser=docling wird weiter als DDU-Datei gezaehlt."""
     config = _base_config(tmp_path)
+    _publishing_store(mock_vs)
     ds_path = tmp_path / "docs"
     _make_file(ds_path, "test.pdf")
 
@@ -431,6 +486,7 @@ def test_ddu_legacy_parser_tracked(mock_load_file, mock_vs, mock_ddu_be, tmp_pat
 def test_ddu_connection_error_skips_file(mock_load_file, mock_vs, mock_ddu_be, tmp_path):
     """ddu_error=connection → Datei wird uebersprungen (errors>=1, total_chunks==0)."""
     config = _base_config(tmp_path)
+    _publishing_store(mock_vs)
     ds_path = tmp_path / "docs"
     _make_file(ds_path, "test.pdf")
 
@@ -458,6 +514,7 @@ def test_ddu_connection_error_skips_file(mock_load_file, mock_vs, mock_ddu_be, t
 def test_ddu_remote_connection_error_tracked(mock_load_file, mock_vs, mock_ddu_be, tmp_path):
     """ddu_error=connection → ddu_remote_errors=1, Datei uebersprungen."""
     config = _base_config(tmp_path)
+    _publishing_store(mock_vs)
     ds_path = tmp_path / "docs"
     _make_file(ds_path, "test.pdf")
 
@@ -484,6 +541,7 @@ def test_ddu_remote_connection_error_tracked(mock_load_file, mock_vs, mock_ddu_b
 def test_ddu_remote_http_error_tracked(mock_load_file, mock_vs, mock_ddu_be, tmp_path):
     """ddu_error=http_error → ddu_remote_errors=1, Datei uebersprungen."""
     config = _base_config(tmp_path)
+    _publishing_store(mock_vs)
     ds_path = tmp_path / "docs"
     _make_file(ds_path, "test.pdf")
 
@@ -510,6 +568,7 @@ def test_ddu_remote_http_error_tracked(mock_load_file, mock_vs, mock_ddu_be, tmp
 def test_ddu_http_error_skips_file(mock_load_file, mock_vs, mock_ddu_be, tmp_path):
     """ddu_error=http_error → Datei wird uebersprungen (errors>=1, total_chunks==0)."""
     config = _base_config(tmp_path)
+    _publishing_store(mock_vs)
     ds_path = tmp_path / "docs"
     _make_file(ds_path, "test.pdf")
 
@@ -643,6 +702,7 @@ def test_ddu_preflight_passes_continues(
 ):
     """DDU aktiviert + Backend erreichbar → Ingestion laeuft normal."""
     config = _base_config(tmp_path)
+    _publishing_store(mock_vs)
     ds_path = tmp_path / "docs"
     _make_file(ds_path, "test.pdf")
 
@@ -668,6 +728,7 @@ def test_ddu_preflight_passes_continues(
 def test_no_ddu_skips_preflight(mock_load_file, mock_vs, tmp_path):
     """DDU nicht aktiviert → kein Pre-flight Check, Ingestion laeuft direkt."""
     config = _base_config(tmp_path)
+    _publishing_store(mock_vs)
     ds_path = tmp_path / "docs"
     _make_file(ds_path, "test.txt")
 
@@ -693,6 +754,8 @@ def test_circuit_breaker_consecutive_ddu_errors(mock_load_file, mock_vs, mock_dd
     from kiara.shared.constants import INGESTION_MAX_CONSECUTIVE_ERRORS
 
     config = _base_config(tmp_path)
+
+    _publishing_store(mock_vs)
     ds_path = tmp_path / "docs"
 
     # Mehr Dateien als der Schwellwert erstellen
@@ -712,12 +775,15 @@ def test_circuit_breaker_consecutive_ddu_errors(mock_load_file, mock_vs, mock_dd
     stats = run_ingestion(
         config, embedding_model="nomic-embed-text", ds_overrides={"ddu_enabled": True}
     )
-    # DDU-Fehler werden als errors + ddu_remote_errors gezaehlt.
-    # Seit dem DDU-Fail-Safe-Refactoring (kein lautloser Fallback)
-    # durchlaufen DDU-Fehler nicht den Circuit-Breaker sondern werden
-    # direkt uebersprungen — daher kein abort_reason.
-    assert stats["errors"] == INGESTION_MAX_CONSECUTIVE_ERRORS + 2
-    assert stats.get("ddu_remote_errors", 0) == INGESTION_MAX_CONSECUTIVE_ERRORS + 2
+    # DDU-Fehler werden als errors + ddu_remote_errors gezaehlt und als
+    # Infrastrukturfehler (kein lautloser Fallback) vom Circuit-Breaker
+    # erfasst. Ohne control_callback (CLI) bricht der Lauf an der Schwelle ab;
+    # die restlichen Dateien werden nicht mehr geladen.
+    assert stats["errors"] == INGESTION_MAX_CONSECUTIVE_ERRORS
+    assert stats.get("ddu_remote_errors", 0) == INGESTION_MAX_CONSECUTIVE_ERRORS
+    assert "aufeinanderfolgende" in stats["abort_reason"]
+    assert mock_load_file.call_count == INGESTION_MAX_CONSECUTIVE_ERRORS
+    assert stats["processed_files"] == 0
 
 
 @patch("kiara.ingestion.pipeline.VectorStore")
@@ -728,6 +794,8 @@ def test_circuit_breaker_consecutive_embedding_errors(mock_load_file, mock_vs, t
     from kiara.shared.constants import INGESTION_MAX_CONSECUTIVE_ERRORS
 
     config = _base_config(tmp_path)
+
+    _publishing_store(mock_vs)
     ds_path = tmp_path / "docs"
 
     for i in range(INGESTION_MAX_CONSECUTIVE_ERRORS + 2):
@@ -755,6 +823,8 @@ def test_circuit_breaker_resets_on_success(mock_load_file, mock_vs, tmp_path):
     from kiara.shared.constants import INGESTION_MAX_CONSECUTIVE_ERRORS
 
     config = _base_config(tmp_path)
+
+    _publishing_store(mock_vs)
     ds_path = tmp_path / "docs"
 
     n = INGESTION_MAX_CONSECUTIVE_ERRORS - 1
@@ -777,21 +847,28 @@ def test_circuit_breaker_resets_on_success(mock_load_file, mock_vs, tmp_path):
 
     add_count = 0
 
+    from kiara.backend_selector import BackendUnavailableError
+
+    store = mock_vs.return_value
+
     def _add_side_effect(texts, metas, ids):
         nonlocal add_count
         add_count += 1
-        # Jeder n-te Aufruf gelingt (der mittlere), alle anderen scheitern
+        # Nur der mittlere Aufruf gelingt, alle anderen scheitern kategorial
+        # (Backend-Ausfall), damit sie den Circuit-Breaker-Zaehler erhoehen.
         if add_count == n + 1:
-            return  # Erfolg
-        raise Exception("Embedding-Fehler")
+            return store.record_written(texts, metas, ids)  # Erfolg
+        raise BackendUnavailableError("Embedding-Backend nicht erreichbar")
 
-    mock_vs.return_value.add.side_effect = _add_side_effect
+    store.add.side_effect = _add_side_effect
 
-    # Darf NICHT mit RuntimeError abbrechen, weil der Zaehler nach dem
-    # einen Erfolg zurueckgesetzt wird
+    # 2n Infra-Fehler insgesamt (>= Schwelle), aber nie n+1 am Stueck: der
+    # Zaehler wird nach dem einen Erfolg zurueckgesetzt -> kein Abbruch.
     stats = run_ingestion(config, embedding_model="nomic-embed-text", ds_overrides=None)
 
-    assert stats.get("errors", 0) >= 2 * n - 2  # Mindestens einige Fehler, aber kein Abbruch
+    assert "abort_reason" not in stats
+    assert stats["errors"] == 2 * n
+    assert stats["processed_files"] == 1
 
 
 @patch("kiara.config.get_ddu_backends", return_value=[_REMOTE_BACKEND])
@@ -800,6 +877,7 @@ def test_circuit_breaker_resets_on_success(mock_load_file, mock_vs, tmp_path):
 def test_circuit_breaker_single_error_no_abort(mock_load_file, mock_vs, mock_ddu_be, tmp_path):
     """Ein einzelner DDU-Fehler bricht die Pipeline NICHT ab."""
     config = _base_config(tmp_path)
+    _publishing_store(mock_vs)
     ds_path = tmp_path / "docs"
     _make_file(ds_path, "test.pdf")
 
@@ -830,6 +908,8 @@ def test_circuit_breaker_ignores_content_errors(mock_load_file, mock_vs, tmp_pat
     from kiara.shared.constants import INGESTION_MAX_CONSECUTIVE_ERRORS
 
     config = _base_config(tmp_path)
+
+    _publishing_store(mock_vs)
     ds_path = tmp_path / "docs"
 
     n = INGESTION_MAX_CONSECUTIVE_ERRORS + 5
@@ -876,6 +956,8 @@ def test_no_content_files_skipped_not_errored(mock_load_file, mock_vs, tmp_path)
     from kiara.shared.constants import INGESTION_MAX_CONSECUTIVE_ERRORS
 
     config = _base_config(tmp_path)
+
+    _publishing_store(mock_vs)
     ds_path = tmp_path / "docs"
 
     n = INGESTION_MAX_CONSECUTIVE_ERRORS + 5
@@ -939,6 +1021,8 @@ def test_no_content_resets_consecutive_errors(mock_load_file, mock_vs, mock_ddu_
     from kiara.shared.constants import INGESTION_MAX_CONSECUTIVE_ERRORS
 
     config = _base_config(tmp_path)
+
+    _publishing_store(mock_vs)
     ds_path = tmp_path / "docs"
 
     n = INGESTION_MAX_CONSECUTIVE_ERRORS - 1  # z.B. 9

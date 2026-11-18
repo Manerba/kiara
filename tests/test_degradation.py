@@ -578,10 +578,14 @@ class TestEnsureBackgroundChecks:
     """Tests fuer ensure_background_checks() und shutdown_degradation_manager()."""
 
     @pytest.mark.asyncio
-    async def test_ensure_background_checks_idempotent(self):
+    async def test_ensure_background_checks_idempotent(self, tmp_path, monkeypatch):
         """Mehrfacher Aufruf startet nur einen Task."""
         import kiara.web.api_health as mod
 
+        # Eigene Sperrdatei: Die echte haelt auf dem Produktivserver der
+        # laufende Dienst, dann startet ensure_background_checks zu Recht nichts.
+        monkeypatch.setattr(mod, "HEALTH_BACKGROUND_LOCK_PATH", str(tmp_path / "health.lock"))
+        monkeypatch.setattr(mod, "_background_lock_fh", None)
         old_dm = mod._degradation_manager
         old_started = mod._background_started
 

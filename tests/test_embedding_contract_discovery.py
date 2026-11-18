@@ -865,11 +865,17 @@ class TestS5OperationsBasedPayloadRegression:
         "base_url": "",
     }
 
+    @classmethod
+    def _resolve(cls, model):
+        # _resolve_backend liefert den physischen Backend-Modellnamen; ohne
+        # abweichende Backend-Angabe ist das der angefragte Modellname.
+        return {**cls._BACKEND, "model": model}
+
     def test_dense_document_and_query_payload_roles_are_explicit(self, s4_guard_passthrough):
         from kiara.retrieval.embedding import embed_query, embed_texts
 
         with (
-            patch("kiara.retrieval.embedding._resolve_backend", return_value=self._BACKEND),
+            patch("kiara.retrieval.embedding._resolve_backend", side_effect=self._resolve),
             patch("kiara.retrieval.embedding.get_embedding_dimension", return_value=2),
             patch(
                 "kiara.retrieval.embedding._ollama_embed",
@@ -895,7 +901,7 @@ class TestS5OperationsBasedPayloadRegression:
         from kiara.retrieval.embedding import embed_query, embed_texts_late
 
         with (
-            patch("kiara.retrieval.embedding._resolve_backend", return_value=self._BACKEND),
+            patch("kiara.retrieval.embedding._resolve_backend", side_effect=self._resolve),
             patch("kiara.retrieval.embedding.get_embedding_dimension", return_value=2),
             patch(
                 "kiara.retrieval.embedding._ollama_embed", return_value=[[0.1, 0.2]]
@@ -909,7 +915,7 @@ class TestS5OperationsBasedPayloadRegression:
         response.raise_for_status.return_value = None
         response.json.return_value = {"embeddings": [[0.1, 0.2]]}
         with (
-            patch("kiara.retrieval.embedding._resolve_backend", return_value=self._BACKEND),
+            patch("kiara.retrieval.embedding._resolve_backend", side_effect=self._resolve),
             patch("kiara.retrieval.embedding.get_embedding_dimension", return_value=2),
             patch("kiara.retrieval.embedding.httpx.post", return_value=response) as post,
         ):

@@ -788,10 +788,18 @@ class TestHandleChunkDedup:
         assert eb.ids == ["id1"]
         assert eb.texts == ["t1"]
 
-    @patch("kiara.retrieval.elasticsearch_service.update_ds_ids")
-    @patch("kiara.retrieval.elasticsearch_service.is_configured", return_value=True)
-    def test_full_dedup_syncs_es(self, mock_es_configured, mock_es_update):
-        """Spec #10: Dedup-Block ruft es_svc.update_ds_ids() auf."""
+    @patch("kiara.retrieval.elasticsearch_service.mark_search_data_adopted")
+    @patch("kiara.retrieval.elasticsearch_service.reconcile_memberships")
+    @patch("kiara.retrieval.elasticsearch_service.model_uses_elasticsearch", return_value=True)
+    def test_full_dedup_syncs_es(self, mock_es_model, mock_es_reconcile, mock_es_adopted):
+        """Spec #10: Dedup-Block gleicht die ES-Zuordnungen mit der PG-SoT ab.
+
+        ES-Kopien sind je Datenquelle getrennt; der Abgleich laeuft ueber
+        reconcile_memberships, die bestaetigten Kopien markieren die
+        Sichtbarkeitspflicht (mark_search_data_adopted).
+        """
+        from kiara.retrieval.elasticsearch_indices import document_address
+
         ictx = _make_ictx(
             config={
                 "vectordb": {"path": "/tmp"},
@@ -804,6 +812,13 @@ class TestHandleChunkDedup:
         ictx.store.get_documents_by_ids.return_value = {"ids": ["id1", "id2"]}
         ds_map = {"id1": [1, 2], "id2": [1]}
         ictx.chunk_ds.get_datasource_ids_for_chunks.return_value = ds_map
+        ictx.store.get_ds_ids.return_value = {}
+        existing = {
+            document_address(ictx.config, ds, cid): owners
+            for cid, owners in ds_map.items()
+            for ds in owners
+        }
+        mock_es_reconcile.return_value = existing
 
         result, _, _, _, _, _eb = _handle_chunk_dedup(
             ictx,
@@ -818,15 +833,20 @@ class TestHandleChunkDedup:
         assert result == _DedupResult.FULL
         # Qdrant wurde aktualisiert
         ictx.store.update_ds_ids.assert_called_once_with(ds_map, wait=True)
-        # ES wurde ebenfalls aktualisiert
-        mock_es_update.assert_called_once_with(
-            ictx.config, ds_map, refresh=False, skip_unchanged=True
+        # ES wurde ebenfalls abgeglichen (neue DS = adoptierende Quelle)
+        mock_es_model.assert_called_with(ictx.config, "test-model")
+        mock_es_reconcile.assert_called_once_with(
+            ictx.config, ds_map, adopting_datasource_id=1, replayable=set()
         )
+        mock_es_adopted.assert_called_once_with(ictx.config, {1, 2})
 
-    @patch("kiara.retrieval.elasticsearch_service.update_ds_ids", side_effect=Exception("ES down"))
-    @patch("kiara.retrieval.elasticsearch_service.is_configured", return_value=True)
+    @patch(
+        "kiara.retrieval.elasticsearch_service.reconcile_memberships",
+        side_effect=Exception("ES down"),
+    )
+    @patch("kiara.retrieval.elasticsearch_service.model_uses_elasticsearch", return_value=True)
     def test_dedup_es_failure_cannot_finish_or_reembed_shared_chunks(
-        self, mock_es_configured, mock_es_update
+        self, mock_es_model, mock_es_reconcile
     ):
         """Ein ES-Fehler bleibt ein Backendfehler; kein destruktiver Dedup-Fallback."""
         ictx = _make_ictx(
@@ -841,7 +861,9 @@ class TestHandleChunkDedup:
         ictx.store.get_documents_by_ids.return_value = {"ids": ["id1"]}
         ictx.chunk_ds.get_datasource_ids_for_chunks.return_value = {"id1": [1]}
 
-        with pytest.raises(BackendUnavailableError, match="DS-Zuordnungsabgleich"):
+        ictx.store.get_ds_ids.return_value = {}
+
+        with pytest.raises(BackendUnavailableError, match="DS-Zuordnungsabgleich.*ES down"):
             result, _, _, _, _, _eb = _handle_chunk_dedup(
                 ictx,
                 "/f.txt",
@@ -852,6 +874,8 @@ class TestHandleChunkDedup:
                 None,
                 time.monotonic(),
             )
+        mock_es_reconcile.assert_called_once()
+        assert "dedup_chunks" not in ictx.stats
 
 
 # ===================================================================
@@ -872,17 +896,22 @@ class TestHandleEmbeddingPhase:
     ):
         stats = {}
 
+        config = {"retrieval": {"hybrid_search": "elasticsearch"}}
         with pytest.raises(RuntimeError, match="es down"):
             _write_to_elasticsearch(
-                {"retrieval": {"hybrid_search": "elasticsearch"}},
+                config,
                 ["text"],
                 [{"source": "/f.txt"}],
                 ["id1"],
                 stats,
+                datasource_id=7,
             )
 
         assert stats["es_errors"] == 1
-        mock_bulk.assert_called_once()
+        # ES-Indizes sind je Datenquelle getrennt: Ziel-DS wird durchgereicht.
+        mock_bulk.assert_called_once_with(
+            config, ["text"], [{"source": "/f.txt"}], ["id1"], datasource_id=7
+        )
 
     @patch(
         "kiara.retrieval.elasticsearch_service.bulk_index_chunks",
@@ -904,6 +933,7 @@ class TestHandleEmbeddingPhase:
                 [{"source": "/f.txt"}, {"source": "/f.txt"}],
                 ["id1", "id2"],
                 stats,
+                datasource_id=7,
             )
 
         assert "es_indexed" not in stats
@@ -1316,15 +1346,16 @@ class TestHandleEmbeddingPhase:
         )
         ictx.hash_store.upsert_many.assert_called_once()
 
-    @patch("kiara.retrieval.elasticsearch_service.update_ds_ids")
-    @patch("kiara.retrieval.elasticsearch_service.is_configured", return_value=True)
+    @patch("kiara.retrieval.elasticsearch_service.mark_search_data_adopted")
+    @patch("kiara.retrieval.elasticsearch_service.reconcile_memberships", return_value={})
+    @patch("kiara.retrieval.elasticsearch_service.model_uses_elasticsearch", return_value=True)
     @patch("kiara.ingestion.runtime._extract_graph_entities")
     @patch("kiara.ingestion.runtime._write_to_elasticsearch")
     @patch("kiara.ingestion.runtime._write_embeddings")
     def test_embed_syncs_es(
-        self, mock_write, mock_es_write, mock_graph, mock_es_configured, mock_es_update
+        self, mock_write, mock_es_write, mock_graph, mock_es_model, mock_es_reconcile, _adopted
     ):
-        """Spec #11: Embed-Block ruft es_svc.update_ds_ids() auf."""
+        """Spec #11: Embed-Block schreibt ES und gleicht die ES-Zuordnungen ab."""
         ictx = _make_ictx(
             config={
                 "vectordb": {"path": "/tmp"},
@@ -1336,6 +1367,7 @@ class TestHandleEmbeddingPhase:
         )
         ds_map = {"id1": [42]}
         ictx.chunk_ds.get_datasource_ids_for_chunks.return_value = ds_map
+        ictx.store.get_ds_ids.return_value = {}
 
         action, _ = _handle_embedding_phase(
             ictx,
@@ -1350,18 +1382,34 @@ class TestHandleEmbeddingPhase:
         assert action == _FileAction.SUCCESS
         # Qdrant
         ictx.store.update_ds_ids.assert_called_once_with(ds_map, wait=True)
-        # ES
-        mock_es_update.assert_called_once_with(
-            ictx.config, ds_map, refresh=False, skip_unchanged=True
+        # ES: neue Dokumente in den DS-Index, danach Zuordnungsabgleich
+        mock_es_write.assert_called_once_with(
+            ictx.config,
+            ["text"],
+            [{"m": 1, "ds_ids": [42]}],
+            ["id1"],
+            ictx.stats,
+            datasource_id=42,
+        )
+        mock_es_reconcile.assert_called_once_with(
+            ictx.config, ds_map, adopting_datasource_id=42, replayable=set()
         )
 
-    @patch("kiara.retrieval.elasticsearch_service.update_ds_ids", side_effect=Exception("ES down"))
-    @patch("kiara.retrieval.elasticsearch_service.is_configured", return_value=True)
+    @patch(
+        "kiara.retrieval.elasticsearch_service.reconcile_memberships",
+        side_effect=Exception("ES down"),
+    )
+    @patch("kiara.retrieval.elasticsearch_service.model_uses_elasticsearch", return_value=True)
     @patch("kiara.ingestion.runtime._extract_graph_entities")
     @patch("kiara.ingestion.runtime._write_to_elasticsearch")
     @patch("kiara.ingestion.runtime._write_embeddings")
     def test_embed_es_failure_cannot_persist_success_hash(
-        self, mock_write, mock_es_write, mock_graph, mock_es_configured, mock_es_update
+        self,
+        mock_write,
+        mock_es_write,
+        mock_graph,
+        mock_es_model,
+        mock_es_reconcile,
     ):
         """ES-Fehler muessen Datei-Erfolg und Hash-Checkpoint verhindern."""
         ictx = _make_ictx(
@@ -1374,6 +1422,7 @@ class TestHandleEmbeddingPhase:
             datasource_id=42,
         )
         ictx.chunk_ds.get_datasource_ids_for_chunks.return_value = {"id1": [42]}
+        ictx.store.get_ds_ids.return_value = {}
 
         action, _ = _handle_embedding_phase(
             ictx,
@@ -1385,7 +1434,9 @@ class TestHandleEmbeddingPhase:
             0,
             time.monotonic(),
         )
+        mock_es_reconcile.assert_called_once()
         assert action != _FileAction.SUCCESS
+        assert ictx.stats["errors"] == 1
         assert ictx.stats["total_chunks"] == 0
         assert "/f.txt" not in ictx.pending_hashes
 

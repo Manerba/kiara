@@ -355,6 +355,11 @@ class TestHybridRetrieverParallelRetrieve:
             r._bm25_max_corpus = 1_000_000
             r._store = MagicMock()
             r._store.get_collection_name.return_value = "test_coll"
+            r._config = {"retrieval": {}}
+            r._store._embed_model = "test-model"
+            # Die Tests pruefen den BM25-Cache unter Nebenlaeufigkeit; die
+            # PostgreSQL-bestaetigte Ergebnisfreigabe ist hier nicht Thema.
+            r.filter_available_results = lambda results, filter_datasource_ids=None: results
             r._store.get_stats.return_value = {"total_chunks": 10}
             docs = [f"dokument nummer {i} mit hallo welt test" for i in range(10)]
             metas = [{"source": f"doc{i}.txt"} for i in range(10)]
@@ -364,8 +369,8 @@ class TestHybridRetrieverParallelRetrieve:
                 "metadatas": metas,
             }
             r._store.query.return_value = [
-                {"text": docs[0], "metadata": metas[0], "score": 0.9},
-                {"text": docs[1], "metadata": metas[1], "score": 0.8},
+                {"text": docs[0], "metadata": metas[0], "score": 0.9, "_doc_id": "id0"},
+                {"text": docs[1], "metadata": metas[1], "score": 0.8, "_doc_id": "id1"},
             ]
             return r
 
@@ -495,6 +500,11 @@ class TestHybridRetrieverParallelRetrieve:
             r._bm25_max_corpus = 1_000_000
             r._store = MagicMock()
             r._store.get_collection_name.return_value = "small_coll"
+            r._config = {"retrieval": {}}
+            r._store._embed_model = "test-model"
+            # Die Tests pruefen den BM25-Cache unter Nebenlaeufigkeit; die
+            # PostgreSQL-bestaetigte Ergebnisfreigabe ist hier nicht Thema.
+            r.filter_available_results = lambda results, filter_datasource_ids=None: results
             r._store.get_stats.return_value = {"total_chunks": 3}
             r._store.get_all_documents.return_value = {
                 "ids": ["id1", "id2", "id3"],
@@ -502,7 +512,12 @@ class TestHybridRetrieverParallelRetrieve:
                 "metadatas": [{"source": "a.txt"}, {"source": "b.txt"}, {"source": "c.txt"}],
             }
             r._store.query.return_value = [
-                {"text": "hallo welt", "metadata": {"source": "a.txt"}, "score": 0.9},
+                {
+                    "text": "hallo welt",
+                    "metadata": {"source": "a.txt"},
+                    "score": 0.9,
+                    "_doc_id": "id1",
+                },
             ]
 
         r.build_bm25_index()

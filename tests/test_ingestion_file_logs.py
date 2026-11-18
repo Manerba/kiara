@@ -174,6 +174,36 @@ def _make_db(tmp_path):
     return ds_id
 
 
+def _publishing_store():
+    """VectorStore-Attrappe mit heutiger Cleanup- und Publikationsschnittstelle.
+
+    Ein Volllauf bereinigt die Quellen vorab und prueft danach, dass keine
+    Dense-Vektoren uebrig sind; der Dateiabschluss wird nur ueber
+    ``finalize_document_versions(on_complete=...)`` mit der Gesamtversion
+    jeder geschriebenen Quelle bestaetigt.
+    """
+    store = MagicMock()
+    written = {}
+
+    def record(texts, metas, ids, *args, **kwargs):
+        written.update(zip(ids, metas, strict=True))
+        return list(ids)
+
+    def finalize(ids, *, publish_search, on_complete):
+        versions = {}
+        for cid in ids:
+            meta = written[cid]
+            versions.setdefault(meta["source"], {})[meta.get("parser", "standard")] = "v-test"
+        on_complete(versions)
+
+    store.get_collection_name.return_value = "kb_test"
+    store.get_ids_by_sources.return_value = []
+    store.add.side_effect = record
+    store.add_with_embeddings.side_effect = record
+    store.finalize_document_versions.side_effect = finalize
+    return store
+
+
 def _patch_db(ds_id, monkeypatch):
     """Patcht db_query/db_transaction auf PostgreSQL."""
     import kiara.shared.db as shared_db
@@ -384,9 +414,8 @@ class TestFileLogCallback:
         def callback(entry):
             collected.append(entry)
 
-        mock_store = MagicMock()
+        mock_store = _publishing_store()
         mock_store.delete_by_sources.return_value = None
-        mock_store.add.return_value = None
 
         with (
             patch("kiara.ingestion.pipeline.VectorStore", return_value=mock_store),
@@ -425,9 +454,8 @@ class TestFileLogCallback:
             "graph": {"enabled": False},
         }
 
-        mock_store = MagicMock()
+        mock_store = _publishing_store()
         mock_store.delete_by_sources.return_value = None
-        mock_store.add.return_value = None
 
         with (
             patch("kiara.ingestion.pipeline.VectorStore", return_value=mock_store),
@@ -1225,7 +1253,7 @@ class TestEmbeddingErrorFileLog:
         }
 
         collected = []
-        mock_store = MagicMock()
+        mock_store = _publishing_store()
         mock_store.delete_by_sources.return_value = None
         mock_store.add.side_effect = ConnectionError("Ollama down")
 
@@ -1274,9 +1302,8 @@ class TestSkippedFileLog:
         }
 
         collected = []
-        mock_store = MagicMock()
+        mock_store = _publishing_store()
         mock_store.delete_by_sources.return_value = None
-        mock_store.add.return_value = None
 
         with (
             patch("kiara.ingestion.pipeline.VectorStore", return_value=mock_store),
@@ -1540,7 +1567,7 @@ class TestCancelFileLogWritten:
         }
 
         collected = []
-        mock_store = MagicMock()
+        mock_store = _publishing_store()
         mock_store.delete_by_sources.return_value = None
         # Erster add() wirft CancelledError
         mock_store.add.side_effect = _CancelledError()
@@ -1589,9 +1616,8 @@ class TestDurationPlausibility:
         }
 
         collected = []
-        mock_store = MagicMock()
+        mock_store = _publishing_store()
         mock_store.delete_by_sources.return_value = None
-        mock_store.add.return_value = None
 
         with (
             patch("kiara.ingestion.pipeline.VectorStore", return_value=mock_store),

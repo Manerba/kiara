@@ -38,8 +38,13 @@ class TestChatMode:
             ChatMode("invalid")
 
     def test_all_members(self):
-        members = list(ChatMode)
-        assert len(members) == 4
+        assert [m.value for m in ChatMode] == [
+            "standard",
+            "rewriter",
+            "unchained",
+            "agent",
+            "research",
+        ]
 
 
 class TestExistingEnums:

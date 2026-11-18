@@ -126,7 +126,7 @@ class TestFetchModelInfo:
     @pytest.mark.asyncio
     async def test_extracts_context_length_from_modelinfo(self):
         """context_length wird korrekt aus verschachtelter modelinfo extrahiert."""
-        from kiara.web.api_ki_backends import _fetch_model_info
+        from kiara.admin.services.ki_backend_service import _fetch_model_info
 
         mock_result = {"num_ctx": 40960, "embedding_dim": 4096}
 
@@ -138,7 +138,7 @@ class TestFetchModelInfo:
     @pytest.mark.asyncio
     async def test_extracts_from_model_info_key(self):
         """Funktioniert auch mit 'model_info' statt 'modelinfo' (alternativer Key)."""
-        from kiara.web.api_ki_backends import _fetch_model_info
+        from kiara.admin.services.ki_backend_service import _fetch_model_info
 
         mock_result = {"num_ctx": 16384}
 
@@ -150,7 +150,7 @@ class TestFetchModelInfo:
     @pytest.mark.asyncio
     async def test_returns_empty_dict_on_connection_error(self):
         """Gibt leeres dict zurueck wenn Ollama nicht erreichbar ist."""
-        from kiara.web.api_ki_backends import _fetch_model_info
+        from kiara.admin.services.ki_backend_service import _fetch_model_info
 
         with patch("kiara.retrieval.embedding.fetch_ollama_model_info", return_value={}):
             result = await _fetch_model_info("http://unreachable:11434", "qwen3:8b")
@@ -160,7 +160,7 @@ class TestFetchModelInfo:
     @pytest.mark.asyncio
     async def test_returns_empty_dict_on_import_error(self):
         """Gibt leeres dict zurueck wenn ollama-Modul nicht installiert ist."""
-        from kiara.web.api_ki_backends import _fetch_model_info
+        from kiara.admin.services.ki_backend_service import _fetch_model_info
 
         with patch("kiara.retrieval.embedding.fetch_ollama_model_info", return_value={}):
             result = await _fetch_model_info("http://gpu-server.local:11434", "qwen3:8b")
@@ -170,7 +170,7 @@ class TestFetchModelInfo:
     @pytest.mark.asyncio
     async def test_returns_empty_dict_without_context_length(self):
         """Gibt leeres dict zurueck wenn modelinfo keinen context_length Key hat."""
-        from kiara.web.api_ki_backends import _fetch_model_info
+        from kiara.admin.services.ki_backend_service import _fetch_model_info
 
         mock_result = {"embedding_dim": 4096}
 
@@ -182,7 +182,7 @@ class TestFetchModelInfo:
     @pytest.mark.asyncio
     async def test_returns_empty_dict_with_empty_modelinfo(self):
         """Gibt leeres dict zurueck wenn modelinfo leer oder nicht vorhanden."""
-        from kiara.web.api_ki_backends import _fetch_model_info
+        from kiara.admin.services.ki_backend_service import _fetch_model_info
 
         with patch("kiara.retrieval.embedding.fetch_ollama_model_info", return_value={}):
             result = await _fetch_model_info("http://gpu-server.local:11434", "qwen3:8b")
@@ -192,7 +192,7 @@ class TestFetchModelInfo:
     @pytest.mark.asyncio
     async def test_converts_float_to_int(self):
         """Float-Werte werden korrekt zu int konvertiert (in fetch_ollama_model_info)."""
-        from kiara.web.api_ki_backends import _fetch_model_info
+        from kiara.admin.services.ki_backend_service import _fetch_model_info
 
         mock_result = {"num_ctx": 8192}
 
@@ -205,7 +205,7 @@ class TestFetchModelInfo:
     @pytest.mark.asyncio
     async def test_ignores_non_numeric_context_length(self):
         """Ignoriert context_length wenn Wert kein int/float ist (leeres dict)."""
-        from kiara.web.api_ki_backends import _fetch_model_info
+        from kiara.admin.services.ki_backend_service import _fetch_model_info
 
         with patch("kiara.retrieval.embedding.fetch_ollama_model_info", return_value={}):
             result = await _fetch_model_info("http://gpu-server.local:11434", "llama3:8b")
@@ -224,7 +224,7 @@ class TestCreateBackendNumCtx:
     def test_create_ollama_backend_fetches_num_ctx(self, admin_client, mock_admin, mock_db):
         """Beim Create eines Ollama-Backends wird num_ctx automatisch ermittelt."""
         with patch(
-            "kiara.web.api_ki_backends._fetch_model_info",
+            "kiara.admin.services.ki_backend_service._fetch_model_info",
             new_callable=AsyncMock,
             return_value={"num_ctx": 40960},
         ):
@@ -289,7 +289,7 @@ class TestCreateBackendNumCtx:
     ):
         """Wenn num_ctx UND embedding_dim bereits in extra_config, wird _fetch_model_info NICHT aufgerufen."""
         with patch(
-            "kiara.web.api_ki_backends._fetch_model_info", new_callable=AsyncMock
+            "kiara.admin.services.ki_backend_service._fetch_model_info", new_callable=AsyncMock
         ) as mock_fetch:
             resp = admin_client.post(
                 "/api/admin/ki/backends/",
@@ -323,7 +323,7 @@ class TestCreateBackendNumCtx:
         """Cloud-Backends loesen keinen _fetch_model_info Aufruf aus."""
         with (
             patch(
-                "kiara.web.api_ki_backends._fetch_model_info", new_callable=AsyncMock
+                "kiara.admin.services.ki_backend_service._fetch_model_info", new_callable=AsyncMock
             ) as mock_fetch,
             patch("kiara.shared.crypto.encrypt", return_value="encrypted_key"),
         ):
@@ -368,7 +368,7 @@ class TestBackendTestNumCtx:
 
         with (
             patch(
-                "kiara.web.api_ki_backends._fetch_model_info",
+                "kiara.admin.services.ki_backend_service._fetch_model_info",
                 new_callable=AsyncMock,
                 return_value={"num_ctx": 40960},
             ),

@@ -7,6 +7,7 @@ import tarfile
 import time
 
 import pytest
+from db_helpers import _TEST_DSN
 
 from kiara.backup import (
     BackupError,
@@ -46,7 +47,7 @@ def _make_config(tmp_path):
         "vectordb": {"backend": "qdrant", "path": vectordb_data_path},
         "backup": {"dir": backup_dir, "max_backups": 5},
         "workflows": {"template_dir": template_dir},
-        "database": {"postgresql": {"dsn": "postgresql://kiara:kiara@localhost:5432/kiara_test"}},
+        "database": {"postgresql": {"dsn": _TEST_DSN}},
     }, {
         "vectordb_data_path": vectordb_data_path,
         "backup_dir": backup_dir,
@@ -130,7 +131,7 @@ class TestBackup:
             "vectordb": {"path": str(restore_dir / "vectordb_data")},
             "workflows": {"template_dir": str(restore_dir / "templates")},
             "database": {
-                "postgresql": {"dsn": "postgresql://kiara:kiara@localhost:5432/kiara_test"}
+                "postgresql": {"dsn": _TEST_DSN}
             },
         }
 
@@ -158,7 +159,7 @@ class TestBackup:
             "vectordb": {"path": str(restore_dir / "vectordb_data")},
             "workflows": {"template_dir": str(restore_dir / "templates")},
             "database": {
-                "postgresql": {"dsn": "postgresql://kiara:kiara@localhost:5432/kiara_test"}
+                "postgresql": {"dsn": _TEST_DSN}
             },
         }
 
@@ -188,7 +189,7 @@ class TestBackup:
             "vectordb": {"backend": "qdrant", "path": str(tmp_path / "restore_vdb")},
             "workflows": {"template_dir": str(tmp_path / "restore_templates")},
             "database": {
-                "postgresql": {"dsn": "postgresql://kiara:kiara@localhost:5432/kiara_test"}
+                "postgresql": {"dsn": _TEST_DSN}
             },
         }
         result = restore_backup(output, restore_config, force=False)
@@ -304,7 +305,7 @@ class TestBackup:
                 "vectordb": {"backend": "qdrant", "path": str(tmp_path / "restore_vdb")},
                 "workflows": {"template_dir": str(tmp_path / "restore_templates")},
                 "database": {
-                    "postgresql": {"dsn": "postgresql://kiara:kiara@localhost:5432/kiara_test"}
+                    "postgresql": {"dsn": _TEST_DSN}
                 },
             },
             force=True,
