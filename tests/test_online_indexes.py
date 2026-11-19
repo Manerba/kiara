@@ -11,14 +11,14 @@ from scripts.deploy_online_indexes import ensure_file_hash_path_index
 
 @pytest.fixture
 def index_db():
-    from db_helpers import _TEST_DSN
+    from db_helpers import TEST_DB_NAME, _TEST_DSN
 
     conn = psycopg2.connect(_TEST_DSN, options="-c statement_timeout=5000")
     conn.autocommit = True
     schema = "checkpoint_test_" + uuid.uuid4().hex
     with conn.cursor() as cur:
         cur.execute("SELECT current_database()")
-        assert cur.fetchone()[0] == "kiara_test"
+        assert cur.fetchone()[0] == TEST_DB_NAME
         cur.execute(sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(schema)))
         cur.execute(
             sql.SQL(

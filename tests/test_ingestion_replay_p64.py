@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
+from kiara_ingestion_core.models import ProcessingContext
 
 from kiara.ingestion import pipeline
 from kiara.ingestion._file_utils import HashStore, compute_file_hash
@@ -205,7 +206,7 @@ def scoped_pipeline_run(diff_run, tmp_path, monkeypatch):
     _select_migration(config, path)
     config["vectordb"] = {"path": str(tmp_path / "vectors")}
     config["ingestion"]["batch_size"] = 8
-    monkeypatch.setattr(pipeline, "_apply_ds_overrides", Mock())
+    monkeypatch.setattr(pipeline, "_apply_ds_overrides", Mock(return_value=ProcessingContext()))
     monkeypatch.setattr(pipeline, "_check_ddu_preflight", Mock())
     monkeypatch.setattr(pipeline, "VectorStore", Mock())
     monkeypatch.setattr(pipeline, "ChunkDatasources", Mock())

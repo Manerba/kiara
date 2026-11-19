@@ -98,7 +98,7 @@ def completion_run(monkeypatch, tmp_path):
     monkeypatch.setattr(runtime, "_process_single_file", Mock(side_effect=load))
     monkeypatch.setattr(runtime, "_write_embeddings", Mock(side_effect=write_dense))
     monkeypatch.setattr(runtime, "_persist_graph_and_associations", write_graph)
-    monkeypatch.setattr(runtime, "_write_to_elasticsearch", lambda *a: events.append(("es",)))
+    monkeypatch.setattr(runtime, "_write_to_elasticsearch", lambda *a, **kw: events.append(("es",)))
     monkeypatch.setattr(runtime, "_sync_ds_ids", lambda *a, **kw: None)
     monkeypatch.setattr(runtime, "_colbert_enabled_for_run", lambda *a: True)
     monkeypatch.setattr(runtime, "_sync_colbert_chunks", Mock(side_effect=write_colbert))

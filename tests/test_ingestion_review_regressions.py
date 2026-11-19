@@ -1,66 +1,78 @@
-"""P50 review regressions: real PG/scan/hash/worker with controlled backends."""
+"""P50 review regressions: real PG/scan/hash/worker with controlled backends.
+
+Elasticsearch is index-aware: each PG owner holds its own physical copy in
+``kiara_ds_<id>``; a shared chunk therefore has one copy per owner.
+"""
 
 import copy
 import threading
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import nullcontext
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
 from kiara_ingestion_core.index_state import ChunkDatasources, HashStore
-from test_ingestion_membership_visibility import MemoryES, MemoryStore, context
+from test_document_version_completion import document_run  # noqa: F401
+from test_elasticsearch_datasource_lifecycle import (  # noqa: F401 -- fixtures
+    Backend,
+    targets,
+    whole_pipeline,
+    whole_topology,
+)
+from test_ingestion_membership_visibility import topology_context
 
 from kiara.ingestion import pipeline, runtime
 from kiara.retrieval import elasticsearch_service as es
+from kiara.retrieval.elasticsearch_indices import datasource_index_name
 from kiara.retrieval.index_compatibility import IndexCompatibilityError, dense_index_target
 from kiara.shared.db import db_query, db_transaction
 
+ES_CONFIG = {"retrieval": {"hybrid_search": "elasticsearch"}}
 
-class VersionedES(MemoryES):
+
+def index(ds):
+    return datasource_index_name(ES_CONFIG, ds)
+
+
+class VersionedES(Backend):
     """Realtime reads and conditional mutations use actual evolving versions."""
 
     def __init__(self):
         super().__init__()
-        self.versions = {}
-        self.before_bulk = None
         self.after_bulk = None
         self.conflicts = 0
-        self.actions = []
 
-    def publish(self, cid, memberships):
-        self.docs[cid] = {"metadata": {"ds_ids": list(memberships)}}
-        self.versions[cid] = self.versions.get(cid, 0) + 1
+    def _owner(self, name):
+        return int(name.rpartition("_ds_")[2])
 
-    def mget(self, *, ids, **kwargs):
-        response = super().mget(ids=ids, **kwargs)
-        for doc in response["docs"]:
-            doc["_seq_no"] = self.versions.get(doc["_id"], 0)
-        return response
+    def publish(self, cid, memberships, *, owners=None):
+        """Foreign writer: payload ``memberships`` in the copies of ``owners``.
+
+        Without explicit owners the writer publishes the complete PG state:
+        one copy per member, copies of former members are removed.
+        """
+        owners = list(memberships if owners is None else owners)
+        for name, docs in self.docs.items():
+            if cid in docs and self._owner(name) not in owners:
+                docs.pop(cid)
+                self.versions[(name, cid)] = self.versions.get((name, cid), 0) + 1
+        for ds in owners:
+            name = index(ds)
+            self.create(index=name)
+            doc = self.docs[name].setdefault(cid, {"metadata": {}})
+            doc["metadata"]["ds_ids"] = list(memberships)
+            self.versions[(name, cid)] = self.versions.get((name, cid), 0) + 1
+
+    def copies(self, cid, *, view=None):
+        view = self.docs if view is None else view
+        return {self._owner(name): docs[cid] for name, docs in view.items() if cid in docs}
 
     def bulk(self, client, actions, **kwargs):
-        actions = list(actions)
-        self.actions.extend(copy.deepcopy(actions))
-        if self.before_bulk:
-            self.before_bulk()
-        success, errors = 0, []
-        for action in actions:
-            cid = action["_id"]
-            if "if_seq_no" in action and (
-                action["if_seq_no"] != self.versions.get(cid, 0) or action["if_primary_term"] != 1
-            ):
-                self.conflicts += 1
-                errors.append({action["_op_type"]: {"status": 409}})
-                continue
-            if action.get("_op_type") == "update":
-                self.docs[cid]["metadata"].update(copy.deepcopy(action["doc"]["metadata"]))
-                self.updates += 1
-            elif action.get("_op_type") == "delete":
-                self.docs.pop(cid, None)
-            else:
-                self.docs[cid] = copy.deepcopy(action["_source"])
-            self.versions[cid] = self.versions.get(cid, 0) + 1
-            success += 1
+        success, errors = super().bulk(client, actions, **kwargs)
+        self.conflicts += sum(
+            1 for error in errors for item in error.values() if item.get("status") == 409
+        )
         if self.after_bulk:
             self.after_bulk()
         return success, errors
@@ -70,8 +82,8 @@ class VersionedES(MemoryES):
 def backend(monkeypatch):
     backend = VersionedES()
     monkeypatch.setattr(es, "_get_client", lambda config: backend)
-    monkeypatch.setattr(es, "create_index", lambda config: True)
     monkeypatch.setattr("elasticsearch.helpers.bulk", backend.bulk)
+    monkeypatch.setattr("kiara.config.get_embedding_model", lambda config: "p50")
     return backend
 
 
@@ -86,7 +98,7 @@ def rollback_context(test_db, backend):
     sot = ChunkDatasources()
     for ds_id in (1, 2, 3):
         sot.add_associations(["shared"], ds_id, "p50")
-    ictx = context(backend, {}, {"shared": [1, 2, 3]})
+    ictx = topology_context(backend, {}, {"shared": [1, 2, 3]})
     ictx.chunk_ds = sot
     return ictx
 
@@ -104,9 +116,11 @@ def test_shared_rollback_preserves_document_when_payload_lags_pg(
         "metadata": {"source": "/original.txt", "ds_ids": es_memberships, "chunk_index": 7},
         "extra": {"language": "de"},
     }
-    backend.docs["shared"] = copy.deepcopy(original)
+    for ds in (1, 2, 3):
+        backend.docs[index(ds)]["shared"] = copy.deepcopy(original)
     backend.publish("orphan", [1])
-    backend.docs["orphan"]["text"] = "This document really is an orphan."
+    backend.docs[index(1)]["orphan"]["text"] = "This document really is an orphan."
+    backend.visible = copy.deepcopy(backend.docs)  # Earlier publication was refreshed.
     with es.ingestion_visibility(ictx.config):
         result = runtime._rollback_embedding_persistence(
             ictx,
@@ -116,20 +130,28 @@ def test_shared_rollback_preserves_document_when_payload_lags_pg(
             rollback_db_associations=True,
             context="lagging_shared_payload",
         )
-    assert "shared" in backend.docs, "PG-shared document must never be physically deleted"
+    # The copies of the PG-confirmed foreign owners are never physically deleted;
+    # only the rolling-back datasource loses its own copy and its orphan.
     assert not any(
-        action["_id"] == "shared" and action["_op_type"] == "delete" for action in backend.actions
+        action["_op_type"] == "delete" and action["_index"] != index(1)
+        for action in backend.actions
     )
     assert result is True
     expected = copy.deepcopy(original)
     expected["metadata"]["ds_ids"] = [2, 3]
-    assert backend.docs == backend.visible == {"shared": expected}
+    assert backend.copies("shared") == backend.copies("shared", view=backend.visible) == {
+        2: expected,
+        3: expected,
+    }
+    assert backend.docs == backend.visible
+    assert backend.docs[index(1)] == {}
     assert ictx.store.mapping == {"shared": [2, 3]}
     assert ictx.chunk_ds.get_datasource_ids_for_chunks(["shared", "orphan"], "p50") == {
         "shared": [2, 3]
     }
     assert any(
-        action["_id"] == "orphan" and action["_op_type"] == "delete" for action in backend.actions
+        (action["_index"], action["_id"], action["_op_type"]) == (index(1), "orphan", "delete")
+        for action in backend.actions
     )
 
 
@@ -137,14 +159,18 @@ def test_shared_rollback_preserves_document_when_payload_lags_pg(
 def test_shared_rollback_failure_preserves_lagging_document(rollback_context, backend, failure):
     ictx = rollback_context
     ictx.store.mapping["shared"] = [1]
-    backend.publish("shared", [1])
-    backend.docs["shared"]["text"] = "Keep the existing text even if reconciliation fails."
-    backend.docs["shared"]["metadata"]["source"] = "/shared.txt"
+    backend.publish("shared", [1], owners=[1, 2, 3])
+    for ds in (1, 2, 3):
+        backend.docs[index(ds)]["shared"]["text"] = (
+            "Keep the existing text even if reconciliation fails."
+        )
+        backend.docs[index(ds)]["shared"]["metadata"]["source"] = "/shared.txt"
+    backend.visible = copy.deepcopy(backend.docs)  # Earlier publication was refreshed.
 
     def conflict():
         # A competing ES update changes its version without losing its content.
-        backend.docs["shared"]["external_revision"] = 1
-        backend.versions["shared"] += 1
+        backend.docs[index(2)]["shared"]["external_revision"] = 1
+        backend.versions[(index(2), "shared")] += 1
 
     def outage():
         raise es.ElasticsearchPartialFailureError("injected membership write outage")
@@ -165,10 +191,12 @@ def test_shared_rollback_failure_preserves_lagging_document(rollback_context, ba
             context="lagging_payload_failure",
         )
     assert result is False
-    assert (
-        backend.visible["shared"]["text"] == "Keep the existing text even if reconciliation fails."
-    )
-    assert backend.visible["shared"]["metadata"]["source"] == "/shared.txt"
+    for view in (backend.docs, backend.visible):
+        copies = backend.copies("shared", view=view)
+        assert set(copies) == {1, 2, 3}
+        for doc in copies.values():
+            assert doc["text"] == "Keep the existing text even if reconciliation fails."
+            assert doc["metadata"]["source"] == "/shared.txt"
     assert not any(action["_op_type"] == "delete" for action in backend.actions)
     assert ictx.chunk_ds.get_datasource_ids_for_chunks(["shared"], "p50") == {"shared": [1, 2, 3]}
     assert ictx.stats["rollback_errors"] == 1
@@ -185,7 +213,7 @@ def test_rollback_retains_es_if_orphan_gains_pg_owner_after_vector_delete(
     ictx.store.mapping = {"orphan": [1]}
     ictx.chunk_ds.add_associations(["orphan"], 1, "p50")
     backend.publish("orphan", [1])
-    backend.docs["orphan"]["text"] = "Keep the remaining document and PG retry anchors."
+    backend.docs[index(1)]["orphan"]["text"] = "Keep the remaining document and PG retry anchors."
     original = copy.deepcopy(backend.docs)
     delete = ictx.store.delete_by_ids
 
@@ -204,8 +232,9 @@ def test_rollback_retains_es_if_orphan_gains_pg_owner_after_vector_delete(
             rollback_db_associations=True,
             context="orphan_becomes_shared",
         )
-    assert backend.docs == backend.visible == original
-    assert not any(action["_op_type"] == "delete" for action in backend.actions)
+    assert backend.docs == original
+    assert not backend.actions, "No ES mutation and therefore no completion barrier"
+    assert backend.refreshes == []
     assert result is False  # The missing vector prevents a consistency claim.
     assert ictx.store.mapping == {}
     assert ictx.chunk_ds.get_datasource_ids_for_chunks(["orphan"], "p50") == {"orphan": [1, 2]}
@@ -218,6 +247,10 @@ def test_rollback_reconciles_concurrent_membership(
     rollback_context, backend, monkeypatch, change, boundary
 ):
     ictx = rollback_context
+    for ds in (1, 2, 3):
+        # Each datasource index also holds unrelated documents of its own. An
+        # index emptied concurrently fails the completion barrier (fail-closed).
+        backend.docs[index(ds)][f"other-{ds}"] = {"metadata": {"ds_ids": [ds]}}
     ready, published = threading.Event(), threading.Event()
     fired = False
 
@@ -286,7 +319,14 @@ def test_rollback_reconciles_concurrent_membership(
     assert result is True
     assert ictx.chunk_ds.get_datasource_ids_for_chunks(["shared"], "p50") == {"shared": expected}
     assert ictx.store.mapping == {"shared": expected}
-    assert backend.visible["shared"]["metadata"]["ds_ids"] == expected
+    copies = backend.copies("shared")
+    assert set(copies) == set(expected)
+    assert all(doc["metadata"]["ds_ids"] == expected for doc in copies.values())
+    assert all(backend.docs[index(ds)][f"other-{ds}"] for ds in (1, 2, 3))
+    # The rollback's own completion barrier covers every index it changed.
+    refreshed = {name for batch in backend.refreshes for name in batch}
+    assert index(1) in refreshed
+    assert all(backend.visible[name] == backend.docs[name] for name in refreshed)
 
 
 def test_rollback_cas_conflict_preserves_retry_anchor(rollback_context, backend):
@@ -310,7 +350,9 @@ def test_rollback_cas_conflict_preserves_retry_anchor(rollback_context, backend)
     assert result is False
     assert backend.conflicts == 1
     assert ictx.chunk_ds.get_datasource_ids_for_chunks(["shared"], "p50")["shared"] == [1, 2, 3, 4]
-    assert backend.docs["shared"]["metadata"]["ds_ids"] == [1, 2, 3, 4]
+    copies = backend.copies("shared")
+    assert set(copies) == {1, 2, 3, 4}
+    assert all(doc["metadata"]["ds_ids"] == [1, 2, 3, 4] for doc in copies.values())
 
 
 def test_rollback_persistent_payload_drift_is_bounded(rollback_context, backend):
@@ -329,111 +371,103 @@ def test_rollback_persistent_payload_drift_is_bounded(rollback_context, backend)
     assert ictx.stats["rollback_errors"] == 1
     assert len(ictx.store.writes) == 2
     assert ictx.chunk_ds.get_datasource_ids_for_chunks(["shared"], "p50") == {"shared": [1, 2, 3]}
+    assert set(backend.copies("shared")) == {1, 2, 3}
+
+
+# --- Full pipeline: real PG, Qdrant, scan and hashes; index-aware ES via the SDK ---
+
+MESSAGES = {
+    "missing_index": "Index fehlt",
+    "empty_replacement": "unerwartet leer",
+    "refresh_error": "refresh unavailable",
+}
+
+
+@pytest.fixture
+def es_pipeline(whole_topology, monkeypatch):
+    """Two source files, observed ES barriers (refresh) and inventories (stats)."""
+    case = whole_topology
+    second = Path(case.path).parent / "second.txt"
+    second.write_text("D" * 100 + "E" * 100)
+    case.paths = sorted([case.path, str(second)])
+    case.index = f"kiara_ds_{case.ds}"
+    client = es._get_client(case.store._config)
+    case.refresh = Mock(wraps=client.indices.refresh)
+    case.inventory = Mock(wraps=client.indices.stats)
+    monkeypatch.setattr(client.indices, "refresh", case.refresh)
+    monkeypatch.setattr(client.indices, "stats", case.inventory)
+    case.load = Mock(wraps=runtime._process_single_file)
+    monkeypatch.setattr(runtime, "_process_single_file", case.load)
+    return case
+
+
+def inject_visibility_failure(case, condition):
+    backend = case.es_backend
+    if condition in ("missing_index", "empty_replacement"):
+        backend.docs.pop(case.index)
+        backend.visible.pop(case.index)
+        if condition == "empty_replacement":
+            backend.create(index=case.index)
+    elif condition == "refresh_error":
+        case.refresh.side_effect = es.ElasticsearchPartialFailureError("refresh unavailable")
 
 
 @pytest.mark.parametrize("hash_mode", ["mtime", "content"])
-@pytest.mark.parametrize("failure", ["refresh", "missing_index", "empty_replacement"])
+@pytest.mark.parametrize("failure", ["refresh_error", "missing_index", "empty_replacement"])
 def test_unchanged_pipeline_retry_completes_failed_visibility(
-    test_db,
-    backend,
-    tmp_path,
-    monkeypatch,
-    hash_mode,
-    failure,
-    s4_guard_passthrough,
+    es_pipeline, monkeypatch, hash_mode, failure
 ):
-    source = tmp_path / "source"
-    source.mkdir()
-    files = [source / "one.txt", source / "two.txt"]
-    for file in files:
-        file.write_text(f"A representative document: {file.name}")
-    test_db.execute("INSERT INTO datasources(id,name,type) VALUES (1,'P50-retry','local')")
-    test_db.commit()
-    config = {
-        "datasource": {"path": str(source), "file_types": [".txt"]},
-        "vectordb": {"path": str(tmp_path / "vectors")},
-        "ingestion": {"batch_size": 10, "chunk_size": 500, "chunk_overlap": 50},
-        "retrieval": {"hybrid_search": "elasticsearch"},
-        "graph": {"enabled": False},
-    }
-    store = MemoryStore({})
-    store._index_contract_guard = lambda **kwargs: nullcontext()
+    case = es_pipeline
+    backend = case.es_backend
 
-    def add(texts, metadatas, ids, **kwargs):
-        store.mapping.update(
-            {cid: list(meta["ds_ids"]) for cid, meta in zip(ids, metadatas, strict=True)}
-        )
+    def lose_visibility_after_hash_commit(*args, **kwargs):
+        # Real pipeline checkpoint and PG hashes are already durable.
+        assert set(HashStore().load(case.ds, "test-model")) == set(case.paths)
+        assert len(backend.docs[case.index]) == 5
+        inject_visibility_failure(case, failure)
+        return True
 
-    store.add = Mock(side_effect=add)
-    monkeypatch.setattr(pipeline, "VectorStore", lambda *a, **k: store)
-    load = Mock(
-        side_effect=lambda path, *a, **kw: (
-            ["document text"],
-            [{"source": path}],
-            [path],
-            "document text",
-            [(0, 13)],
-        )
+    monkeypatch.setattr(
+        pipeline, "_run_colbert_model_switch_cleanup", lose_visibility_after_hash_commit
     )
-    monkeypatch.setattr(runtime, "_process_single_file", load)
-    failed_refresh = Mock(side_effect=es.ElasticsearchPartialFailureError("refresh unavailable"))
-    if failure == "refresh":
-        backend.indices.refresh = failed_refresh
-    else:
-
-        def lose_index_after_hash_commit(*args, **kwargs):
-            # Real pipeline checkpoint and PG hashes are already durable.
-            assert len(HashStore().load(1, "p50")) == 2
-            assert len(backend.docs) == 2
-            backend.docs.clear()
-            backend.visible.clear()
-            backend.indices.exists = Mock(return_value=failure == "empty_replacement")
-            return True
-
-        monkeypatch.setattr(
-            pipeline, "_run_colbert_model_switch_cleanup", lose_index_after_hash_commit
-        )
-    message = {
-        "refresh": "refresh unavailable",
-        "missing_index": "Index .* fehlt",
-        "empty_replacement": "ohne nachgewiesene Suchdaten",
-    }[failure]
 
     def run():
-        return pipeline.run_ingestion(
-            config, incremental=True, datasource_id=1, embedding_model="p50", hash_mode=hash_mode
-        )
+        return case.run_whole(case.ds, hash_mode=hash_mode)
 
-    with pytest.raises(es.ElasticsearchPartialFailureError, match=message):
+    with pytest.raises(es.ElasticsearchPartialFailureError, match=MESSAGES[failure]):
         run()
-    hashes = HashStore().load(1, "p50")
-    assert set(hashes) == {str(file) for file in files}
-    assert load.call_count == 2
-    if failure == "refresh":
-        assert backend.docs and not backend.visible
-        assert failed_refresh.call_count == 1  # A single barrier for two files.
+    hashes = HashStore().load(case.ds, "test-model")
+    assert set(hashes) == set(case.paths)
+    assert case.load.call_count == 2
+    embeddings = case.embeddings
+    if failure == "refresh_error":
+        assert backend.docs[case.index] and not backend.visible[case.index]
+        assert case.refresh.call_count == 1  # A single barrier for two files.
     else:
-        assert backend.docs == backend.visible == {}
-        monkeypatch.setattr(pipeline, "_run_colbert_model_switch_cleanup", lambda *a, **k: True)
+        assert not backend.docs.get(case.index) and not backend.visible.get(case.index)
+    monkeypatch.setattr(pipeline, "_run_colbert_model_switch_cleanup", lambda *a, **k: True)
 
     # Even another failed retry must perform the barrier and remain an error.
-    with pytest.raises(es.ElasticsearchPartialFailureError, match=message):
+    with pytest.raises(es.ElasticsearchPartialFailureError, match=MESSAGES[failure]):
         run()
-    assert HashStore().load(1, "p50") == hashes
-    assert load.call_count == store.add.call_count == 2
-    if failure != "refresh":
-        assert backend.docs == backend.visible == {}
-        assert backend.refreshes == (0 if failure == "missing_index" else 2)
+    assert HashStore().load(case.ds, "test-model") == hashes
+    assert case.load.call_count == 2
+    assert case.embeddings == embeddings
+    if failure != "refresh_error":
+        # Neither recreated nor refilled; a missing index is never refreshed.
+        assert not backend.docs.get(case.index) and not backend.visible.get(case.index)
+        assert case.refresh.call_count == (0 if failure == "missing_index" else 2)
         return
-    assert failed_refresh.call_count == 2
-    backend.indices.refresh = backend.refresh
+    assert case.refresh.call_count == 2
+    case.refresh.side_effect = None
     stats = run()
     assert stats["processed_files"] == 0
     assert stats["skipped_files"] == 2
     assert stats["errors"] == 0
-    assert HashStore().load(1, "p50") == hashes
-    assert backend.refreshes == 1
+    assert HashStore().load(case.ds, "test-model") == hashes
+    assert case.refresh.call_count == 4  # Preflight plus completion barrier.
     assert backend.visible == backend.docs
+    assert case.embeddings == embeddings
 
 
 @pytest.mark.parametrize("failure_mode", ["exception", "stats"])
@@ -459,10 +493,10 @@ def test_worker_persists_primary_and_secondary_visibility_diagnostics(
 
     @pipeline._refresh_search_on_exit
     def ingest(config):
-        es.bulk_index_chunks(config, ["earlier file"], [{"ds_ids": [1]}], ["c"])
+        es.bulk_index_chunks(config, ["earlier file"], [{"ds_ids": [1]}], ["c"], datasource_id=1)
         if secondary == "missing_index":
-            backend.docs.clear()
-            backend.indices.exists = Mock(return_value=False)
+            backend.docs.pop(index(1))
+            backend.visible.pop(index(1))
         if failure_mode == "exception":
             raise primary
         return {
@@ -486,11 +520,11 @@ def test_worker_persists_primary_and_secondary_visibility_diagnostics(
             "ds_row": {"id": 1, "type": "local"},
         },
     )
-    monkeypatch.setattr(worker, "_mark_job_running", lambda *a: True)
-    monkeypatch.setattr(worker, "_build_callbacks", lambda *a: {"on_progress": None})
-    monkeypatch.setattr(worker, "_run_warmup", lambda *a: {})
-    monkeypatch.setattr(worker, "_run_scan_phase", lambda *a: {})
-    monkeypatch.setattr(worker, "_load_resume_skip_files", lambda *a: set())
+    monkeypatch.setattr(worker, "_mark_job_running", lambda *a, **k: True)
+    monkeypatch.setattr(worker, "_build_callbacks", lambda *a, **k: {"on_progress": None})
+    monkeypatch.setattr(worker, "_run_warmup", lambda *a, **k: {})
+    monkeypatch.setattr(worker, "_run_scan_phase", lambda *a, **k: {})
+    monkeypatch.setattr(worker, "_load_resume_skip_files", lambda *a, **k: set())
     monkeypatch.setattr(worker, "_run_ingestion", run)
     monkeypatch.setattr("kiara.web.cache_refresh.IngestionCacheRefresh", Mock())
     monkeypatch.setattr("kiara.web.ingestion_worker.safe_refresh", Mock())
@@ -526,47 +560,57 @@ def test_pipeline_preflight_rejection_does_not_refresh_old_writes(backend, monke
     with pytest.raises(IndexCompatibilityError) as caught:
         pipeline.run_ingestion(config, incremental=True, datasource_id=1, embedding_model="p50")
     assert caught.value is primary
-    assert backend.refreshes == 0
-    assert not backend.visible
+    assert backend.refreshes == []
+    assert not any(backend.visible.values())
 
 
 def test_acknowledged_writes_require_index_at_barrier(backend):
     config = {"retrieval": {"hybrid_search": "elasticsearch"}}
-    with pytest.raises(es.ElasticsearchPartialFailureError, match="Index .* fehlt"):
+    with pytest.raises(es.ElasticsearchPartialFailureError, match="Index fehlt"):
         with es.ingestion_visibility(config, refresh_on_success=False) as state:
-            assert es.bulk_index_chunks(config, ["preserve me"], [{"ds_ids": [1]}], ["c"]) == 1
+            assert (
+                es.bulk_index_chunks(
+                    config, ["preserve me"], [{"ds_ids": [1]}], ["c"], datasource_id=1
+                )
+                == 1
+            )
             assert state["dirty"]
-            assert backend.docs["c"]["text"] == "preserve me"
-            backend.docs.clear()
-            backend.indices.exists = Mock(return_value=False)
-    assert backend.refreshes == 0
+            assert backend.docs[index(1)]["c"]["text"] == "preserve me"
+            backend.docs.pop(index(1))
+            backend.visible.pop(index(1))
+    assert backend.refreshes == []
     assert backend.docs == backend.visible == {}
 
 
 @pytest.mark.parametrize("hybrid", ["elasticsearch", "none"])
 def test_empty_first_pipeline_run_does_not_require_index(
-    test_db, backend, monkeypatch, tmp_path, hybrid, s4_guard_passthrough
+    es_pipeline, monkeypatch, tmp_path, hybrid
 ):
-    test_db.execute("INSERT INTO datasources(id,name,type) VALUES (1,'P50-empty','local')")
-    test_db.commit()
-    backend.indices.exists = Mock(return_value=False)
-    config = {
-        "datasource": {"path": str(tmp_path), "file_types": [".txt"]},
-        "vectordb": {"path": str(tmp_path / "vectors")},
-        "ingestion": {"batch_size": 10},
-        "retrieval": {"hybrid_search": hybrid},
-        "graph": {"enabled": False},
-    }
-    monkeypatch.setattr(pipeline, "VectorStore", lambda *a, **k: MemoryStore({}))
-    stats = pipeline.run_ingestion(config, incremental=True, datasource_id=1, embedding_model="p50")
+    case = es_pipeline
+    config = case.store._config
+    empty = tmp_path / "empty-source"
+    empty.mkdir()
+    config["datasource"]["path"] = str(empty)
+    config["retrieval"]["hybrid_search"] = hybrid
+    client = es._get_client(config)
+    create = Mock(wraps=client.indices.create)
+    monkeypatch.setattr(client.indices, "create", create)
+    stats = case.run_whole(case.ds)
     assert stats["errors"] == stats["processed_files"] == stats["skipped_files"] == 0
-    assert HashStore().load(1, "p50") == {}
-    assert backend.refreshes == 0
-    backend.indices.exists.assert_not_called()
+    assert HashStore().load(case.ds, "test-model") == {}
+    # The read-only preflight inventory accepts the missing index of an empty source.
+    assert case.es_backend.docs == {}
+    assert case.refresh.call_count == case.inventory.call_count == 0
+    create.assert_not_called()
 
 
 def test_disabled_es_skips_required_visibility(monkeypatch):
     client = Mock(side_effect=AssertionError("Disabled ES must not contact a backend"))
     monkeypatch.setattr(es, "_get_client", client)
-    es.refresh_index({}, require_index=True, require_documents=True)
+    es.refresh_index(
+        {},
+        targets=targets({}, 1, expected=1),
+        require_index=True,
+        require_documents=True,
+    )
     client.assert_not_called()

@@ -14,6 +14,13 @@ import time
 from typing import Any
 from uuid import uuid4
 
+from kiara.services.mcp_anonymization import (
+    McpAnonymizationUnavailable,
+    McpOutputAnonymizer,
+    is_source_ref,
+    resolve_source_ref,
+    source_ref,
+)
 from kiara.shared.constants import EXCERPT_LENGTH, MAX_AUDIT_TEXT
 from kiara.shared.text_utils import sanitize_utf8
 
@@ -88,6 +95,30 @@ def _filename_from_source(source: str) -> str:
     return normalized.rsplit("/", 1)[-1] if normalized else ""
 
 
+def _without_excerpts(value: Any) -> Any:
+    """Diagnostik ohne Textauszuege (die Treffer selbst tragen den Text)."""
+    if isinstance(value, dict):
+        return {k: _without_excerpts(v) for k, v in value.items() if k != "excerpt"}
+    if isinstance(value, list):
+        return [_without_excerpts(v) for v in value]
+    return value
+
+
+_PLACEHOLDER_OPEN = "\u2039"
+_PLACEHOLDER_CLOSE = "\u203a"
+
+
+def _cut(text: str, limit: int) -> str:
+    """Kuerzen, ohne einen Platzhalter ‹ANON:…› zu zerschneiden."""
+    if len(text) <= limit:
+        return text
+    cut = text[:limit]
+    opened = cut.rfind(_PLACEHOLDER_OPEN)
+    if opened > cut.rfind(_PLACEHOLDER_CLOSE):
+        cut = cut[:opened]
+    return cut
+
+
 def _score_value(result: dict) -> tuple[Any, str]:
     if result.get("rerank_score") is not None:
         return result.get("rerank_score"), "rerank_score"
@@ -109,6 +140,7 @@ class RetrievalOnlyService:
         datasource_repo=None,
         audit_repo=None,
         embedding_model: str | None = None,
+        restriction_levels: dict[int, str] | None = None,
     ) -> None:
         if config is None:
             from kiara.config import load_config
@@ -121,6 +153,7 @@ class RetrievalOnlyService:
         self._datasource_repo = datasource_repo
         self._audit_repo = audit_repo
         self._embedding_model = embedding_model
+        self._restriction_levels = restriction_levels
 
     # ------------------------------------------------------------------
     # Config, Auth, Limits
@@ -267,7 +300,10 @@ class RetrievalOnlyService:
         min_value: int,
         max_value: int,
     ) -> int:
-        value = params.get(key, default)
+        value = params.get(key)
+        if value is None:
+            # MCP-Tools uebergeben fehlende optionale Argumente als None
+            value = default
         if value is None or isinstance(value, bool):
             raise RetrievalOnlyError("invalid_request", f"{key} ist erforderlich.", 400)
         try:
@@ -394,6 +430,103 @@ class RetrievalOnlyService:
         return selected_ids
 
     # ------------------------------------------------------------------
+    # MCP-Ausgabe: Quellenregeln und Anonymisierung (Hausaenderung)
+    # ------------------------------------------------------------------
+
+    def _output_anonymizer(self) -> McpOutputAnonymizer:
+        try:
+            return McpOutputAnonymizer(self._config, self._restriction_levels)
+        except Exception as exc:
+            raise RetrievalOnlyError(
+                "permission_unavailable",
+                "Datasource-Regeln konnten nicht ermittelt werden.",
+                503,
+            ) from exc
+
+    def _anonymize_before_cut(self, chunks: list[dict], anon: McpOutputAnonymizer) -> list[dict]:
+        """Volltext und Metadaten anonymisieren, BEVOR gekuerzt wird.
+
+        Sonst bleiben am Schnittende Bruchstuecke stehen (z. B. eine halbe
+        Telefonnummer), die weder Regex noch Stammdatensuche erkennen.
+        blocked-Treffer fallen hier schon heraus; source_ref wird aus dem
+        Originalpfad berechnet, damit get_document_context ihn aufloesen kann.
+        """
+        prepared = []
+        try:
+            for chunk in chunks:
+                meta = chunk.get("metadata") if isinstance(chunk.get("metadata"), dict) else {}
+                level = anon.level_for(_normalize_ds_ids(meta.get("ds_ids")))
+                if level == "blocked":
+                    continue
+                if anon.enabled and level != "public":
+                    chunk = dict(chunk)
+                    chunk["_source_ref"] = source_ref(sanitize_utf8(str(meta.get("source") or "")))
+                    chunk["text"] = anon.text(sanitize_utf8(str(chunk.get("text") or "")))
+                    chunk["metadata"] = anon.tree(dict(meta))
+                prepared.append(chunk)
+        except McpAnonymizationUnavailable as exc:
+            raise RetrievalOnlyError("anonymization_unavailable", str(exc), 503) from exc
+        return prepared
+
+    def _apply_output_policy(
+        self, items: list[dict], anon: McpOutputAnonymizer
+    ) -> tuple[list[dict], int]:
+        """blocked-Treffer entfernen, nicht-public-Treffer anonymisieren.
+
+        Returns:
+            (Treffer, Anzahl im Klartext belassener public-Treffer)
+        """
+        result = []
+        raw_items = 0
+        try:
+            for item in items:
+                level = anon.level_for(item.get("datasource_ids") or [])
+                if level == "blocked":
+                    continue
+                if anon.enabled and level != "public":
+                    item = anon.tree(item)
+                else:
+                    raw_items += 1
+                result.append(item)
+        except McpAnonymizationUnavailable as exc:
+            raise RetrievalOnlyError("anonymization_unavailable", str(exc), 503) from exc
+        return result, raw_items
+
+    def _anonymize_scope(self, response: dict, anon: McpOutputAnonymizer, keys: tuple) -> None:
+        """Echo-Felder und Diagnostik anonymisieren (Excerpts aus der Diagnostik entfernen)."""
+        try:
+            for key in keys:
+                if isinstance(response.get(key), str):
+                    response[key] = anon.text(response[key])
+            diagnostics = response.get("diagnostics")
+            if isinstance(diagnostics, dict) and diagnostics.get("retrieval_diagnostics"):
+                diagnostics["retrieval_diagnostics"] = anon.tree(
+                    _without_excerpts(diagnostics["retrieval_diagnostics"])
+                )
+        except McpAnonymizationUnavailable as exc:
+            raise RetrievalOnlyError("anonymization_unavailable", str(exc), 503) from exc
+
+    def _finish_anonymized(
+        self,
+        response: dict,
+        anon: McpOutputAnonymizer,
+        user: dict,
+        tool: str,
+        query: str,
+        correlation_id: str,
+        raw_items: int,
+    ) -> None:
+        response["anonymization"] = anon.summary(raw_items=raw_items)
+        try:
+            anon.audit(user, tool, query, correlation_id)
+        except Exception as exc:
+            raise RetrievalOnlyError(
+                "anonymization_audit_failed",
+                "Anonymisierungs-Audit konnte nicht geschrieben werden.",
+                503,
+            ) from exc
+
+    # ------------------------------------------------------------------
     # Retrieval backend
     # ------------------------------------------------------------------
 
@@ -436,12 +569,9 @@ class RetrievalOnlyService:
         return ranked
 
     def _sanitize_diagnostic_hit(self, hit: dict, max_chars: int) -> dict:
-        clean = dict(hit)
-        excerpt = clean.get("excerpt")
-        if isinstance(excerpt, str):
-            excerpt_chars = min(EXCERPT_LENGTH, max_chars)
-            clean["excerpt"] = sanitize_utf8(excerpt[:excerpt_chars])
-            clean["excerpt_truncated"] = len(excerpt) > excerpt_chars
+        # Hausaenderung: Diagnose-Kopien ohne Text und Metadaten. Die Treffer
+        # selbst tragen den Text; sonst ginge jeder Ausschnitt dreifach an den Client.
+        clean = {k: v for k, v in hit.items() if k not in ("excerpt", "text", "metadata")}
         return _jsonable(clean)
 
     def _sanitize_retrieval_diagnostics(
@@ -538,6 +668,7 @@ class RetrievalOnlyService:
             "rank": rank,
             "final_context_rank": result.get("final_context_rank", rank),
             "source": source,
+            "source_ref": result.get("_source_ref") or source_ref(source),
             "path": source,
             "filename": _filename_from_source(source),
             "datasource_ids": ds_ids,
@@ -567,13 +698,13 @@ class RetrievalOnlyService:
             "rrf_contributions": dict(result.get("rrf_contributions") or {}),
             "retriever_paths": list(result.get("retriever_paths") or []),
             "metadata": _jsonable(metadata),
-            "excerpt": text[:excerpt_chars],
+            "excerpt": _cut(text, excerpt_chars),
             "text_chars": len(text),
             "text_included": include_text,
         }
         item["excerpt_truncated"] = len(text) > excerpt_chars
         if include_text:
-            item["text"] = text[:max_chars]
+            item["text"] = _cut(text, max_chars)
             item["text_truncated"] = len(text) > max_chars
         return _jsonable(item)
 
@@ -681,6 +812,14 @@ class RetrievalOnlyService:
         include_text = self._include_text(params)
         selected_ids = self._selected_datasource_ids(params)
         filter_ds_ids = self._allowed_datasource_filter(user, selected_ids)
+        anon = self._output_anonymizer()
+        if selected_ids and anon.level_for(selected_ids) == "blocked":
+            raise RetrievalOnlyError(
+                "datasource_forbidden",
+                "Datenquelle ist fuer MCP gesperrt (restriction_level blocked).",
+                403,
+            )
+        filter_ds_ids = anon.without_blocked(filter_ds_ids)
         file_type = self._optional_str(params, "file_type", max_chars=_FILE_TYPE_MAX_CHARS)
         directory = self._optional_str(params, "directory", max_chars=_FILTER_STRING_MAX_CHARS)
         source_contains = self._optional_str(
@@ -742,8 +881,9 @@ class RetrievalOnlyService:
                 include_text=include_text,
                 max_chars=max_chars,
             )
-            for rank, result in enumerate(final_results, 1)
+            for rank, result in enumerate(self._anonymize_before_cut(final_results, anon), 1)
         ]
+        results, raw_items = self._apply_output_policy(results, anon)
 
         response = {
             "ok": True,
@@ -775,6 +915,11 @@ class RetrievalOnlyService:
                 is True,
             },
         }
+        if anon.needs_anonymization(filter_ds_ids):
+            self._anonymize_scope(response, anon, ("query",))
+        self._finish_anonymized(
+            response, anon, user, "search_documents", query, correlation_id, raw_items
+        )
         self._audit(user, "search_documents", query, response, results, correlation_id)
         return response
 
@@ -796,6 +941,9 @@ class RetrievalOnlyService:
         if allowed is not None:
             allowed_set = set(allowed)
             rows = [row for row in rows if row.get("id") in allowed_set]
+        anon = self._output_anonymizer()
+        blocked = anon.blocked_ids()
+        rows = [row for row in rows if row.get("id") not in blocked]
         datasources = [
             {
                 "id": int(row["id"]),
@@ -806,6 +954,12 @@ class RetrievalOnlyService:
             }
             for row in rows
         ]
+        if anon.needs_anonymization([d["id"] for d in datasources]):
+            try:
+                for item in datasources:
+                    item["name"] = anon.text(item["name"])
+            except McpAnonymizationUnavailable as exc:
+                raise RetrievalOnlyError("anonymization_unavailable", str(exc), 503) from exc
         response = {
             "ok": True,
             "route": "retrieval-only",
@@ -819,10 +973,109 @@ class RetrievalOnlyService:
                 result_count=len(datasources),
             ),
         }
+        self._finish_anonymized(
+            response, anon, user, "list_datasources", "list_datasources", correlation_id, 0
+        )
         self._audit(
             user, "list_datasources", "list_datasources", response, datasources, correlation_id
         )
         return response
+
+    def cad_query(self, user: dict | None, params: dict) -> dict:
+        """Exact CAD queries use the same source ACL and MCP output policy."""
+        from kiara.cad.repository import query, validate
+
+        self._require_enabled()
+        user = self._require_user(user)
+        try:
+            params = validate(params)
+        except ValueError as exc:
+            raise RetrievalOnlyError("invalid_request", str(exc), 400) from exc
+        selected = self._selected_datasource_ids(params)
+        allowed = self._allowed_datasource_filter(user, selected)
+        if allowed is None:
+            allowed = sorted(self._active_datasource_ids())
+        anon = self._output_anonymizer()
+        if selected and anon.level_for(selected) == "blocked":
+            raise RetrievalOnlyError(
+                "datasource_forbidden", "Datenquelle ist für MCP gesperrt", 403
+            )
+        allowed = anon.without_blocked(allowed)
+        try:
+            result = query(
+                params, allowed_datasource_ids=allowed
+            )
+        except LookupError as exc:
+            raise RetrievalOnlyError("cad_not_found", str(exc), 404) from exc
+        except ValueError as exc:
+            raise RetrievalOnlyError("cad_query_invalid", str(exc), 409) from exc
+        originals = result["items"]
+        items, raw_items = self._apply_output_policy(originals, anon)
+        # Only these repository-generated top-level identifiers are immutable.
+        # Do not globally exempt arbitrary nested attribute keys from anonymization.
+        for original, item in zip(originals, items, strict=True):
+            for key in (
+                "model_id",
+                "object_id",
+                "occurrence_id",
+                "parent_id",
+                "source_hash",
+                "processing_version",
+            ):
+                if key in original:
+                    item[key] = original[key]
+        # Anonymize complete strings before any response-size reduction.
+        result["items"] = []
+        budget = self._limits()["max_chars_total"]
+        used = 0
+        for index, item in enumerate(items):
+            size = len(json.dumps(item, ensure_ascii=False))
+            if used + size > budget:
+                if not result["items"]:
+                    # Keep an oversized object's source and identity; omit whole
+                    # detail fields, never return unmarked partial attributes.
+                    item = {
+                        k: v
+                        for k, v in item.items()
+                        if k
+                        in {
+                            "model_id",
+                            "object_id",
+                            "source_ref",
+                            "source_hash",
+                            "processing_version",
+                            "datasource_ids",
+                            "structure_complete",
+                            "kind",
+                            "quantity",
+                            "occurrence_id",
+                        }
+                    }
+                    item["details_omitted"] = True
+                    result["items"].append(item)
+                    result["has_more"] = result["has_more"] or index + 1 < len(items)
+                else:
+                    result["has_more"] = True
+                break
+            result["items"].append(item)
+            used += size
+        result.update(
+            ok=True,
+            route="retrieval-only",
+            tool="cad_query",
+            next_offset=params["offset"] + len(result["items"]),
+        )
+        correlation_id = str(uuid4())
+        self._finish_anonymized(
+            result,
+            anon,
+            user,
+            "cad_query",
+            params.get("query", "CAD " + params["operation"]),
+            correlation_id,
+            raw_items,
+        )
+        return result
 
     def get_document_context(self, user: dict | None, params: dict[str, Any]) -> dict[str, Any]:
         started = time.monotonic()
@@ -836,6 +1089,26 @@ class RetrievalOnlyService:
             raise RetrievalOnlyError("invalid_request", "datasource_id ist erforderlich.", 400)
         datasource_id = selected_ids[0]
         filter_ds_ids = self._allowed_datasource_filter(user, [datasource_id])
+        anon = self._output_anonymizer()
+        if anon.level_for([datasource_id]) == "blocked":
+            raise RetrievalOnlyError(
+                "datasource_forbidden",
+                "Datenquelle ist fuer MCP gesperrt (restriction_level blocked).",
+                403,
+            )
+        if is_source_ref(source):
+            resolved = resolve_source_ref(source, datasource_id)
+            if resolved is None:
+                raise RetrievalOnlyError(
+                    "source_not_found", "source_ref ist in dieser Datenquelle unbekannt.", 404
+                )
+            source = resolved
+        elif "\u2039ANON:" in source:
+            raise RetrievalOnlyError(
+                "invalid_request",
+                "source enthaelt Platzhalter; bitte source_ref aus dem Suchtreffer verwenden.",
+                400,
+            )
         chunk_index = self._int_param(
             params,
             "chunk_index",
@@ -910,7 +1183,7 @@ class RetrievalOnlyService:
 
         remaining_chars = max_chars_total
         context_chunks = []
-        for rank, chunk in enumerate(eligible, 1):
+        for rank, chunk in enumerate(self._anonymize_before_cut(eligible, anon), 1):
             max_chars = max(1, remaining_chars) if include_text else EXCERPT_LENGTH
             item = self._format_result(
                 chunk,
@@ -925,12 +1198,14 @@ class RetrievalOnlyService:
                     context_chunks.append(item)
                     break
             context_chunks.append(item)
+        context_chunks, raw_items = self._apply_output_policy(context_chunks, anon)
 
         response = {
             "ok": True,
             "route": "retrieval-only",
             "tool": "get_document_context",
             "source": source,
+            "source_ref": source_ref(source),
             "datasource_id": datasource_id,
             "chunk_index": chunk_index,
             "window": window,
@@ -958,6 +1233,11 @@ class RetrievalOnlyService:
                 is True,
             },
         }
+        if anon.needs_anonymization([datasource_id]):
+            self._anonymize_scope(response, anon, ("source",))
+        self._finish_anonymized(
+            response, anon, user, "get_document_context", source, correlation_id, raw_items
+        )
         self._audit(
             user,
             "get_document_context",

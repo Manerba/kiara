@@ -74,7 +74,11 @@ def test_loader_rejects_modified_mail_cache_with_stale_provenance(tmp_path):
     path = scanner._save_mail(mail.as_bytes(), "INBOX", str(tmp_path / "cache"), uid="82")[0]
     with open(path, "a") as stream:
         stream.write("Zusatz ohne passende Provenienz")
-    assert load_file(path, mail_archive=archive) is None
+    # Der Loader meldet konkrete Ladefehler als load_error (statt None), damit
+    # sie im Dateiprotokoll ankommen; die Pipeline verbucht das als Dateifehler.
+    result = load_file(path, mail_archive=archive)
+    assert result["text"] == ""
+    assert "Inkonsistente Mail-Provenienz" in result["metadata"]["load_error"]
 
 
 @pytest.mark.parametrize("case", ["title_body", "title_only", "reddit"])

@@ -18,7 +18,7 @@ from kiara.ingestion.datasource_runtime import (
 
 
 def _full_row(**overrides):
-    """Vollstaendige DB-Row mit allen 15 Override-Feldern."""
+    """Vollstaendige DB-Row mit allen 17 Override-Feldern (inkl. CAD-Ziele)."""
     defaults = {
         "ds_chunk_size": None,
         "ds_chunk_overlap": None,
@@ -35,6 +35,9 @@ def _full_row(**overrides):
         "ds_enrichment_backend_id": None,
         "restriction_level": "anonymize",
         "ds_colbert_enabled": False,
+        # PKG-Ingest-Ziele (Hauscode): Spalten NOT NULL DEFAULT true.
+        "ds_cad_vector_enabled": True,
+        "ds_cad_relational_enabled": True,
     }
     defaults.update(overrides)
     return defaults
@@ -90,10 +93,21 @@ class TestBuildOverridesFieldParity:
         assert result["colbert_enabled"] is True
 
     def test_default_row_only_restriction_level(self):
-        """Default-Row → nur restriction_level im Dict."""
+        """Default-Row → nur restriction_level und die (immer gesetzten) CAD-Ziele."""
         row = _full_row()
         result = build_datasource_overrides(row)
-        assert result == {"restriction_level": "anonymize"}
+        assert result == {
+            "restriction_level": "anonymize",
+            "cad_vector_enabled": True,
+            "cad_relational_enabled": True,
+        }
+
+    def test_cad_targets_disabled_are_passed_through(self):
+        """Abgeschaltete PKG-Ziele erscheinen explizit als False."""
+        row = _full_row(ds_cad_vector_enabled=False, ds_cad_relational_enabled=False)
+        result = build_datasource_overrides(row)
+        assert result["cad_vector_enabled"] is False
+        assert result["cad_relational_enabled"] is False
 
     def test_partial_fields(self):
         """Nur Subset gesetzt → nur diese im Dict."""
@@ -156,10 +170,17 @@ class TestBuildOverridesFieldParity:
         assert "exclude_patterns" not in result
 
     def test_missing_columns_robust(self):
-        """Row ohne optionale Spalten → keine Exception."""
+        """Row ohne optionale Spalten → keine Exception.
+
+        Fehlende CAD-Ziel-Spalten entsprechen dem DB-Default (beide aktiv).
+        """
         row = {"restriction_level": "anonymize"}
         result = build_datasource_overrides(row)
-        assert result == {"restriction_level": "anonymize"}
+        assert result == {
+            "restriction_level": "anonymize",
+            "cad_vector_enabled": True,
+            "cad_relational_enabled": True,
+        }
 
     def test_restriction_level_string(self):
         """restriction_level ist str, nicht int."""
@@ -296,6 +317,8 @@ class TestBackwardsCompatibility:
             "enrichment_backend_id": 3,
             "restriction_level": "blocked",
             "colbert_enabled": True,
+            "cad_vector_enabled": True,
+            "cad_relational_enabled": True,
         }
 
     def test_matches_old_worker_behavior(self):
@@ -306,4 +329,8 @@ class TestBackwardsCompatibility:
         row = _full_row()
         result = build_datasource_overrides(row)
         assert isinstance(result, dict)
-        assert result == {"restriction_level": "anonymize"}
+        assert result == {
+            "restriction_level": "anonymize",
+            "cad_vector_enabled": True,
+            "cad_relational_enabled": True,
+        }

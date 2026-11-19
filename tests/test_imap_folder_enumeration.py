@@ -287,9 +287,9 @@ class TestWildcardScan:
 
         # Nur selektierbare Ordner, raw_name verwendet
         select_calls = [c[0][0] for c in mock_conn.select.call_args_list]
-        assert "INBOX" in select_calls
-        assert "Entw&APw-rfe" in select_calls
-        assert "Namespace" not in select_calls
+        assert '"INBOX"' in select_calls
+        assert '"Entw&APw-rfe"' in select_calls
+        assert '"Namespace"' not in select_calls
 
     def test_wildcard_scan_logout_on_list_error(self):
         """Bei conn.list() Fehler wird conn.logout() aufgerufen."""

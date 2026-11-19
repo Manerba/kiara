@@ -31,6 +31,26 @@ def migrate_core_schema(conn=None) -> None:
             "ALTER TABLE public.document_publications "
             "ADD COLUMN IF NOT EXISTS cleanup_chunks jsonb NOT NULL DEFAULT '{}'::jsonb"
         )
+        from kiara.cad.repository import migrate as migrate_cad
+
+        migrate_cad(conn)
+        conn.execute(
+            "ALTER TABLE public.document_publications "
+            "ADD COLUMN IF NOT EXISTS empty_file_hash text, "
+            "ADD COLUMN IF NOT EXISTS empty_processing_signature text"
+        )
+        if not conn.execute(
+            "SELECT 1 FROM pg_constraint WHERE conrelid = 'public.document_publications'::regclass "
+            "AND conname = 'document_publications_empty_completion_check'"
+        ).fetchone():
+            conn.execute(
+                "ALTER TABLE public.document_publications ADD CONSTRAINT "
+                "document_publications_empty_completion_check CHECK ("
+                "(empty_file_hash IS NULL AND empty_processing_signature IS NULL) OR "
+                "(empty_file_hash IS NOT NULL AND empty_processing_signature IS NOT NULL "
+                "AND completed_at IS NOT NULL AND versions = '{}'::jsonb "
+                "AND cleanup_chunks = '{}'::jsonb))"
+            )
         conn.execute(
             "ALTER TABLE IF EXISTS public.query_log "
             "ADD COLUMN IF NOT EXISTS request_settings jsonb NOT NULL DEFAULT '{}'::jsonb"

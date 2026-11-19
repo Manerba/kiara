@@ -357,7 +357,7 @@ def test_historical_folder_uses_header_and_canonical_uid_evidence(tmp_path, monk
     result = scanner.reprocess_cached_mails(str(output), cache_paths=[str(historical)])
     assert result == {"files": [str(historical)], "errors": {}, "cancelled": False}
     assert historical.read_text().endswith("Ventil V42\n\nnicht fuer Trinkwasser\n")
-    assert ("select", folder, True) in conn.calls
+    assert ("select", f'"{folder}"', True) in conn.calls
     assert ("fetch", b"42", "(UID BODY.PEEK[])") in conn.calls
     assert conn.flags == {b"42": {"\\Flagged"}}
     assert canonical.read_bytes() == canonical_before

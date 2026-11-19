@@ -474,7 +474,7 @@ class TestIPv4Fallback:
     def test_valid_private_10(self):
         """10.x.x.x Private-Range wird erkannt."""
         pat = _get_ipv4_pattern()
-        assert pat.search("Server kiara-server.local ist erreichbar")
+        assert pat.search("Server 10.20.30.40 ist erreichbar")
 
     def test_valid_private_172(self):
         """172.16-31.x.x Private-Range wird erkannt."""
@@ -517,6 +517,6 @@ class TestIPv4Fallback:
     def test_embedded_in_text(self):
         """IP eingebettet in Fliesstext wird korrekt extrahiert."""
         pat = _get_ipv4_pattern()
-        m = pat.search("Der Server unter gpu-server.local laeuft Ollama.")
+        m = pat.search("Der Server unter 10.99.1.2 laeuft Ollama.")
         assert m
-        assert m.group() == "gpu-server.local"
+        assert m.group() == "10.99.1.2"

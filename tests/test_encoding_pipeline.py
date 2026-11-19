@@ -370,7 +370,9 @@ class TestEndToEndPipeline:
         assert "metadata" in result
         meta = result["metadata"]
         assert meta["filename"] == "server.conf"
-        assert meta["file_type"] == ".conf"
+        # file_type folgt dem erkannten Inhalt (Text), die Endung bleibt erhalten.
+        assert meta["file_type"] == ".txt"
+        assert meta["source_extension"] == ".conf"
         assert "Host=kiara-server.local" in result["text"]
 
     def test_utf16_le_log_full_pipeline(self, tmp_path):

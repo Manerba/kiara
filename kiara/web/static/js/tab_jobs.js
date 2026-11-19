@@ -172,7 +172,8 @@ async function initJobsTab() {
             { field: 'duration', label: 'Dauer', sortable: false, align: 'center', renderer: (v, row) => {
                 if (!row.started_at) return '-';
                 const start = _parseJobDate(row.started_at);
-                const end = row.finished_at ? _parseJobDate(row.finished_at) : new Date();
+                const endRaw = _jobEndTime(row);
+                const end = endRaw ? _parseJobDate(endRaw) : new Date();
                 const sec = Math.round((end - start) / 1000);
                 if (!isFinite(sec)) return '-';
                 const fmtDur = (s) => {
@@ -263,6 +264,17 @@ function _parseJobDate(v) {
     let s = v.replace(' ', 'T');
     s = s.replace(/([+-]\d{2})$/, '$1:00');
     return new Date(s);
+}
+
+// Hausaenderung 30.10.2026: ``finished_at`` hat in der DB den Default now() und
+// ist deshalb schon beim Einreihen gefuellt (vor ``started_at``). Fuer laufende
+// oder wartende Jobs darf es nicht als Ende gelten (Dauer sonst "-2s").
+function _jobIsActive(row) {
+    return ['pending', 'running', 'paused'].includes(row.status);
+}
+
+function _jobEndTime(row) {
+    return _jobIsActive(row) ? null : row.finished_at;
 }
 
 function _formatJobTime(v) {
@@ -368,7 +380,7 @@ function _renderJobDetail(row) {
         html += `<td>#${row.id} (aktuell)</td>`;
         html += `<td>${_jobStatusBadge(row.status, row)}</td>`;
         html += `<td>${_formatJobTime(row.started_at)}</td>`;
-        html += `<td>${_formatJobTime(row.finished_at)}</td>`;
+        html += `<td>${_formatJobTime(_jobEndTime(row))}</td>`;
         html += `<td>${fmtD(stats.duration_seconds)}</td>`;
         html += `<td>${SharedUi.runtime.escapeHtml(row.error_message)}</td>`;
         html += `</tr>`;

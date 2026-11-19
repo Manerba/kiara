@@ -37,7 +37,7 @@ from kiara.shared.constants import (
     INGESTION_WORKER_POLL_INTERVAL,
 )
 from kiara.shared.db import db_query, db_transaction
-from kiara.shared.enums import IngestionStatus
+from kiara.shared.enums import ConnectorType, IngestionStatus
 from kiara.web.api_utils import insert_returning, safe_refresh
 from kiara.web.ingestion_forensics import request_privileged_ingestion_forensics
 from kiara.web.ingestion_stall_detection import (
@@ -152,6 +152,8 @@ _ACTIVE_JOB_STATUSES = (
     IngestionStatus.RUNNING.value,
     IngestionStatus.PAUSED.value,
 )
+# Konnektoren, deren Scan IMAPScanner-Ordnerfehler im Cache hinterlaesst.
+_MAIL_SCAN_TYPES = frozenset({ConnectorType.IMAP.value, ConnectorType.EXCHANGE_ONLINE.value})
 
 
 def _is_heartbeat_alive(stats_json, started_at: str | None) -> bool:
@@ -325,6 +327,17 @@ def is_job_paused(job_id: int) -> bool:
     return bool(
         row and row["status"] == IngestionStatus.PAUSED.value and row["requested_action"] == "pause"
     )
+
+
+def _preserve_interrupted_selection(db, job_id, stats):
+    preserve_selection(db, job_id, stats)
+    if "retry_source_file_count" in stats:
+        db.execute(
+            "UPDATE datasource_embeddings e SET file_count = %s FROM ingestion_jobs j "
+            "WHERE j.id = %s AND e.datasource_id = j.datasource_id "
+            "AND e.embedding_model = j.embedding_model",
+            (stats["retry_source_file_count"], job_id),
+        )
 
 
 class IngestionWorker:
@@ -694,6 +707,26 @@ class IngestionWorker:
             )
             return False
 
+        from kiara.cad.ingestion import job_is_sql_only
+
+        if job_is_sql_only(dict(srow)):
+            from kiara.cad.jobs import enqueue
+            from kiara.config import load_config
+
+            try:
+                enqueue(
+                    ds_id,
+                    "incremental",
+                    "auto-resume",
+                    load_config(),
+                    resumed_from=old_job_id,
+                    selection=dict(srow).get("stats_json"),
+                )
+                return True
+            except ValueError as exc:
+                logger.warning("CAD-Job %s kann nicht fortgesetzt werden: %s", old_job_id, exc)
+                return False
+
         if not emb_model:
             logger.warning(
                 "DS %s: Stale Job #%s hat kein Embedding-Modell — "
@@ -804,6 +837,18 @@ class IngestionWorker:
                 resume_stats = json.dumps(
                     {
                         "resumed_from_job": old_job_id,
+                        **(
+                            {"cad_targets": retry_row["stats_json"]["cad_targets"]}
+                            if retry_row
+                            and isinstance(retry_row["stats_json"], dict)
+                            and "cad_targets" in retry_row["stats_json"]
+                            else {}
+                        ),
+                        **{
+                            key: locked_old["stats_json"][key]
+                            for key in ("retry_file_log_ids", "retry_source_file_count")
+                            if key in (locked_old.get("stats_json") or {})
+                        },
                         **html_fields,
                         **({"html_migration": migration} if migration is not None else {}),
                     },
@@ -895,6 +940,12 @@ class IngestionWorker:
         if not candidate:
             return None
         candidate = dict(candidate)
+        from kiara.cad.ingestion import job_is_sql_only
+
+        if job_is_sql_only(candidate):
+            from kiara.cad.jobs import claim
+
+            return claim(candidate["id"])
         config = load_config()
         try:
             with guard_job_contract(
@@ -1030,6 +1081,13 @@ class IngestionWorker:
         stats = None
 
         try:
+            from kiara.cad.ingestion import job_is_sql_only
+
+            if job_is_sql_only(row):
+                from kiara.cad.jobs import execute
+
+                execute(self, row, _check_control)
+                return
             if not embedding_model:
                 raise ValueError(
                     f"Job #{job_id} hat kein Embedding-Modell. "
@@ -1085,7 +1143,9 @@ class IngestionWorker:
                 return
 
             # Phase 2: Callbacks aufbauen
-            callbacks = self._build_callbacks(job_id, ds_id)
+            callbacks = self._build_callbacks(
+                job_id, ds_id, update_source_progress="_retry_file_paths" not in config
+            )
             _on_progress = callbacks["on_progress"]
 
             # Phase 3: Backend-Warmup
@@ -1118,7 +1178,7 @@ class IngestionWorker:
                 return  # Abgebrochen oder fehlgeschlagen waehrend Scan
 
             # Phase 5: Full-Reingest-Cleanup (falls noetig)
-            if job_type == "full":
+            if job_type == "full" and ds_row.get("ds_cad_vector_enabled", True):
                 self._prepare_full_reingest(job_id, ds_id, config, embedding_model)
 
             # Phase 6: Resume-Skip ermitteln
@@ -1170,6 +1230,8 @@ class IngestionWorker:
                     flush_fn,
                     scan_info,
                 )
+
+            self._record_mail_scan_errors(scan_info, stats, callbacks)
 
             # Phase 9: Ergebnis auswerten und finalisieren
             duration = int(time.time() - start_time)
@@ -1337,6 +1399,15 @@ class IngestionWorker:
         if not ds_row:
             raise ValueError(f"Datenquelle {ds_id} nicht gefunden")
 
+        ds_row = dict(ds_row)
+        queued_stats = row.get("stats_json") or {}
+        if isinstance(queued_stats, str):
+            queued_stats = json.loads(queued_stats)
+        for key, value in queued_stats.get("cad_targets", {}).items():
+            ds_row["ds_" + key] = value
+        if queued_stats.get("cad_sql_only"):
+            ds_row["ds_file_types"] = json.dumps(queued_stats["cad_file_types"])
+            ds_row["ds_accept_all_text"] = False
         ensure_loaded()
         config = copy.deepcopy(load_config())
         # Marker: persistierte Config — ColBERT Model-Mismatch-Guard aktiv
@@ -1346,6 +1417,13 @@ class IngestionWorker:
             raise ValueError(f"Unbekannter Datenquellen-Typ: {ds_row['type']}")
 
         conn_config = load_connector_config(ds_row, connector_cls)
+        if "retry_file_log_ids" in queued_stats:
+            if row["job_type"] != "incremental" or ds_row["type"] not in {"local", "smb", "webdav"}:
+                raise ValueError("Ungueltiger Dateiwiederholungsjob")
+            with db_query() as db:
+                config["_retry_file_paths"] = _retry_file_paths(
+                    db, ds_id, row["embedding_model"], queued_stats["retry_file_log_ids"]
+                )
 
         migration = selection_from_stats(row.get("stats_json"), ds_id, row["embedding_model"])
         html_fields = request_fields(row.get("stats_json"))
@@ -1423,7 +1501,7 @@ class IngestionWorker:
         if cache is not None:
             cache.close()
 
-    def _build_callbacks(self, job_id, ds_id):
+    def _build_callbacks(self, job_id, ds_id, *, update_source_progress=True):
         """Erzeugt Progress-, File-Log-, File-Start- und Status-Callbacks.
 
         Returns:
@@ -1442,11 +1520,12 @@ class IngestionWorker:
                         "WHERE id = %s",
                         (processed, total, job_id),
                     )
-                    db.execute(
-                        "UPDATE datasources SET processed_files = %s, progress_total = %s "
-                        "WHERE id = %s",
-                        (processed, total, ds_id),
-                    )
+                    if update_source_progress:
+                        db.execute(
+                            "UPDATE datasources SET processed_files = %s, progress_total = %s "
+                            "WHERE id = %s",
+                            (processed, total, ds_id),
+                        )
             except Exception as exc:
                 logger.debug("Progress-Update fehlgeschlagen: %s", exc)
             if self._progress_cache is not None:
@@ -1809,7 +1888,8 @@ class IngestionWorker:
 
         cache_path = connector_cls.effective_path(conn_config, dict(ds_row))
         _use_parallel = (
-            job_type != "full"
+            config.get("_retry_file_paths") is None
+            and job_type != "full"
             and getattr(connector_cls, "SUPPORTS_PARALLEL_SCAN", False)
             and os.path.isdir(cache_path)
             and any(True for e in os.scandir(cache_path) if e.is_file() or e.is_dir())
@@ -1841,7 +1921,12 @@ class IngestionWorker:
         if path is None:
             raise ValueError(f"Vorbereitung fehlgeschlagen fuer Typ {ds_row['type']}")
         config["datasource"]["path"] = path
-        return {"scan_thread": None, "scan_complete": None, "scan_error": [None]}
+        return {
+            "scan_thread": None,
+            "scan_complete": None,
+            "scan_error": [None],
+            "mail_scan_dir": path if ds_row.get("type") in _MAIL_SCAN_TYPES else None,
+        }
 
     def _start_parallel_scan(
         self, job_id, config, connector_cls, conn_config, ds_row, cache_path, check_control
@@ -1912,7 +1997,37 @@ class IngestionWorker:
             "scan_thread": scan_thread,
             "scan_complete": scan_complete,
             "scan_error": scan_error,
+            "mail_scan_dir": cache_path if ds_row.get("type") in _MAIL_SCAN_TYPES else None,
         }
+
+    @staticmethod
+    def _record_mail_scan_errors(scan_info, stats, callbacks):
+        """Im Mailscan uebersprungene Ordner als Jobfehler zaehlen und protokollieren."""
+        scan_dir = scan_info.get("mail_scan_dir")
+        if not scan_dir:
+            return
+        from kiara_ingestion_core.models import FileLogEntry
+
+        from kiara.ingestion.imap_scanner import IMAPScanner, read_scan_folder_errors
+
+        folder_errors = read_scan_folder_errors(scan_dir)
+        if not folder_errors:
+            return
+        stats["errors"] = stats.get("errors", 0) + len(folder_errors)
+        stats["mail_scan_folder_errors"] = folder_errors
+        for folder, error in folder_errors.items():
+            callbacks["on_file_log"](
+                FileLogEntry(
+                    file_path=f"imap:{folder}",
+                    file_name=IMAPScanner._decode_imap_utf7(folder),
+                    file_size=0,
+                    file_ext="",
+                    status="error",
+                    error_message=error,
+                    error_phase="mail_scan",
+                )
+            )
+        callbacks["flush_file_logs"]()
 
     # --- Phase 5: Full-Reingest-Cleanup ---
 
@@ -2468,6 +2583,9 @@ class IngestionWorker:
             chunk_count: Anzahl Chunks fuer diese DS/Modell-Kombination.
             finished: ISO-Timestamp des Abschlusszeitpunkts.
         """
+        from kiara.cad.jobs import preserve_targets
+
+        preserve_targets(db, job_id, stats)
         preserve_selection(db, job_id, stats)
         _job_repo.update(
             job_id,
@@ -2478,7 +2596,10 @@ class IngestionWorker:
             stats_json=json.dumps(stats, ensure_ascii=False, default=str),
         )
         # datasource_embeddings upsert — Modell kommt bereits normalisiert aus enqueue_job()
-        if stats.get("html_migration"):
+        source_file_count = stats.get("retry_source_file_count")
+        if stats.get("html_migration") or (
+            stats.get("retry_file_log_ids") and source_file_count is None
+        ):
             from kiara.ingestion.vectordb_ops import _recount_datasource_embeddings
 
             _recount_datasource_embeddings(db, ds_id, embedding_model)
@@ -2487,7 +2608,7 @@ class IngestionWorker:
                 datasource_id=ds_id,
                 embedding_model=embedding_model,
                 chunk_count=chunk_count,
-                file_count=stats.get("total_files", 0),
+                file_count=stats.get("retry_source_file_count", stats.get("total_files", 0)),
                 conn=db,
             )
         _ds_repo.update(
@@ -2495,7 +2616,11 @@ class IngestionWorker:
             conn=db,
             ingestion_status=IngestionStatus.SUCCESS.value,
             last_error="",
-            processed_files=stats.get("processed_files", 0),
+            **(
+                {}
+                if stats.get("retry_file_log_ids")
+                else {"processed_files": stats.get("processed_files", 0)}
+            ),
         )
 
     def _log_job_completion(self, job_id, ds_id, stats, embedding_model):
@@ -2594,7 +2719,10 @@ class IngestionWorker:
             stats = {}
         stats.update({"error": error, "duration_seconds": duration})
         with db_transaction() as db:
-            preserve_selection(db, job_id, stats)
+            from kiara.cad.jobs import preserve_targets
+
+            preserve_targets(db, job_id, stats)
+            _preserve_interrupted_selection(db, job_id, stats)
             _job_repo.update(
                 job_id,
                 conn=db,
@@ -2647,7 +2775,10 @@ class IngestionWorker:
         self._close_progress_cache()
         abort_reason = stats.get("abort_reason", "")
         with db_transaction() as db:
-            preserve_selection(db, job_id, stats)
+            from kiara.cad.jobs import preserve_targets
+
+            preserve_targets(db, job_id, stats)
+            _preserve_interrupted_selection(db, job_id, stats)
             _job_repo.update(
                 job_id,
                 conn=db,
@@ -2717,6 +2848,28 @@ def retry_html_job(job_id: int) -> int:
     return result
 
 
+def _retry_file_paths(db, ds_id, model, log_ids):
+    if (
+        not isinstance(log_ids, list)
+        or not log_ids
+        or any(type(i) is not int for i in log_ids)
+        or len(set(log_ids)) != len(log_ids)
+    ):
+        raise ValueError("Ungueltige Auswahl von Dateilog-Eintraegen")
+    rows = db.execute(
+        "SELECT f.file_path FROM ingestion_file_logs f JOIN ingestion_jobs j ON j.id=f.job_id "
+        "WHERE f.id=ANY(%s) AND j.datasource_id=%s AND j.embedding_model=%s AND f.status='error' "
+        "ORDER BY f.id",
+        (log_ids, ds_id, model),
+    ).fetchall()
+    paths = list(dict.fromkeys(r["file_path"] for r in rows))
+    if len(paths) != len(log_ids):
+        raise ValueError(
+            "Dateiauswahl fehlt, ist doppelt oder gehoert nicht zu Datenquelle und Modell"
+        )
+    return paths
+
+
 def enqueue_job(
     ds_id: int,
     job_type: str = "incremental",
@@ -2725,6 +2878,7 @@ def enqueue_job(
     embedding_model: str,
     html_migration: dict | None = None,
     html_reingest: str | None = None,
+    retry_file_log_ids: list[int] | None = None,
 ) -> int:
     """Erstellt einen neuen Job in der Queue.
 
@@ -2736,6 +2890,7 @@ def enqueue_job(
         ValueError: Wenn embedding_model leer ist oder ein Job bereits existiert.
     """
     from kiara.backend_selector import normalize_model_name
+    from kiara.cad.ingestion import sql_only_source, targets
     from kiara.config import load_config
     from kiara.retrieval.index_compatibility import (
         IndexOperation,
@@ -2744,8 +2899,29 @@ def enqueue_job(
         raw_qdrant_client,
     )
 
+    config = load_config()
+    with db_query() as read_db:
+        cad_ds = read_db.execute("SELECT * FROM datasources WHERE id=%s", (ds_id,)).fetchone()
+    if (
+        cad_ds
+        and sql_only_source(dict(cad_ds), config)
+        and html_migration is None
+        and html_reingest is None
+        and retry_file_log_ids is None
+    ):
+        from kiara.cad.jobs import enqueue
+
+        return enqueue(ds_id, job_type, triggered_by, config)
     embedding_model = normalize_model_name(embedding_model)
-    initial_stats = {}
+    initial_stats = {"cad_targets": targets(dict(cad_ds))} if cad_ds else {}
+    if retry_file_log_ids is not None:
+        if job_type != "incremental" or html_reingest is not None or html_migration is not None:
+            raise ValueError("Dateiwiederholung braucht einen eigenen inkrementellen Job")
+        if not cad_ds or cad_ds["type"] not in {"local", "smb", "webdav"}:
+            raise ValueError("Dateiwiederholung braucht eine Dateidatenquelle")
+        with db_query() as db:
+            _retry_file_paths(db, ds_id, embedding_model, retry_file_log_ids)
+        initial_stats["retry_file_log_ids"] = retry_file_log_ids
     if html_reingest is not None:
         from kiara.ingestion.html_reingest import build_request, validate_target
 
@@ -2791,13 +2967,18 @@ def enqueue_job(
             (INGESTION_DATASOURCE_LOCK_NAMESPACE, ds_id),
         )
         ds_row = db.execute(
-            "SELECT id, is_active FROM datasources WHERE id = %s FOR UPDATE",
+            "SELECT * FROM datasources WHERE id = %s FOR UPDATE",
             (ds_id,),
         ).fetchone()
         if not ds_row:
             raise ValueError(f"DS {ds_id}: Datenquelle nicht gefunden")
         if not ds_row["is_active"]:
             raise ValueError(f"DS {ds_id}: Datenquelle ist deaktiviert")
+        from kiara.connectors.registry import source_unavailable_reason
+
+        unavailable = source_unavailable_reason(dict(ds_row))
+        if unavailable:
+            raise ValueError(f"DS {ds_id}: {unavailable}")
 
         status_placeholders = ", ".join(["%s"] * len(_ACTIVE_JOB_STATUSES))
         existing = db.execute(
@@ -2808,6 +2989,16 @@ def enqueue_job(
         ).fetchone()
         if existing:
             raise ValueError(f"DS {ds_id} hat bereits einen aktiven Job (#{existing['id']})")
+        if retry_file_log_ids is not None:
+            # Der Teiljob scannt die Quelle nicht. Den letzten Bestand dieses
+            # Modells vor den dateiweisen Änderungen am Index festhalten.
+            previous = db.execute(
+                "SELECT file_count FROM datasource_embeddings "
+                "WHERE datasource_id = %s AND embedding_model = %s",
+                (ds_id, embedding_model),
+            ).fetchone()
+            if previous and previous["file_count"] is not None:
+                initial_stats["retry_source_file_count"] = previous["file_count"]
         job_id = insert_returning(
             db,
             "INSERT INTO ingestion_jobs (datasource_id, job_type, triggered_by, "

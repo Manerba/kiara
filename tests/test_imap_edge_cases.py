@@ -93,9 +93,9 @@ class TestScanMultipleFolders:
             assert mock_conn.select.call_count == 6
             # Alle drei Ordner wurden selektiert
             folders_called = [c.args[0] for c in mock_conn.select.call_args_list]
-            assert "INBOX" in folders_called
-            assert "Sent" in folders_called
-            assert "Archive" in folders_called
+            assert '"INBOX"' in folders_called
+            assert '"Sent"' in folders_called
+            assert '"Archive"' in folders_called
 
 
 class TestScanFolderSelectFails:

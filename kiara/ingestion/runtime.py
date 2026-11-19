@@ -13,7 +13,9 @@ import logging
 import os
 import threading
 import time
+import traceback
 from collections.abc import Callable
+from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -21,9 +23,14 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 from kiara_ingestion_core.models import FileLogEntry, ProcessingContext
+from psycopg2 import Error as _DatabaseError
 
 from kiara.backend_selector import BackendUnavailableError
-from kiara.exceptions import ChunkingContentError, VectorDBConnectionError
+from kiara.exceptions import (
+    ChunkingContentError,
+    ConfigurationError,
+    VectorDBConnectionError,
+)
 from kiara.ingestion._file_utils import (
     ChunkDatasources,
     HashStore,
@@ -47,6 +54,7 @@ from kiara.shared.constants import (
     HASH_CHECKPOINT_INTERVAL,
     INDEX_CONTRACT_RECOVERY_POLL_SECS_DEFAULT,
     INGESTION_MAX_CONSECUTIVE_ERRORS,
+    INGESTION_MAX_CONSECUTIVE_UNEXPECTED_ERRORS_DEFAULT,
 )
 from kiara.shared.date_utils import elapsed_ms
 from kiara.shared.secret_redact import redact_secrets_in_text
@@ -91,6 +99,19 @@ _CATEGORICAL_ERRORS: tuple[type[Exception], ...] = (
     BackendUnavailableError,
     VectorDBConnectionError,
     *_NETWORK_ERRORS,
+)
+
+# Fehler beim Laden/Chunken, die den ganzen Job zu Recht stoppen. Jede andere
+# Ausnahme betrifft nur die aktuelle Datei und wird als Dateifehler verbucht
+# (Gitea #8). Netzwerkfehler sind OSError und laufen weiterhin ueber den
+# bestehenden OSError-Zweig.
+_JOB_STOPPING_ERRORS: tuple[type[Exception], ...] = (
+    *_CATEGORICAL_ERRORS,
+    IndexCompatibilityError,
+    ConfigurationError,
+    _DatabaseError,
+    _CancelledError,
+    MemoryError,
 )
 
 
@@ -158,9 +179,12 @@ class _IngestionContext:
     stats: dict
     pending_hashes: dict[str, tuple[str, int]]
     file_completion_callback: Callable[[str], None]
+    empty_file_completion_callback: Callable[[str], None] | None = None
     file_preparation_callback: Callable[[str, list[dict], list[str]], bool] | None = None
     file_loading_context: Callable | None = None
     consecutive_errors: int = 0
+    unexpected_error_kind: str = ""
+    unexpected_error_streak: int = 0
     skipped: int = 0
     total: int = 0
     progress_callback: Callable | None = None
@@ -222,6 +246,71 @@ def _record_error(
         file_log.status = "error"
         file_log.error_message = str(exc)[:200]
         file_log.error_phase = phase
+
+
+@contextmanager
+def _file_phase(phase: str):
+    """Merkt an unerwarteten Ausnahmen, in welcher Dateiphase sie entstanden."""
+    try:
+        yield
+    except Exception as exc:
+        if getattr(exc, "ingestion_phase", None) is None:
+            try:
+                exc.ingestion_phase = phase
+            except AttributeError:
+                pass
+        raise
+
+
+def _record_unexpected_file_error(ictx, file_log, file_path, exc) -> bool:
+    """Verbucht eine unerwartete Ausnahme beim Laden/Chunken als Dateifehler.
+
+    Muss im except-Block aufgerufen werden (Traceback im Log). Ohne Hash
+    wird die Datei beim naechsten Lauf erneut versucht.
+
+    Returns:
+        True → naechste Datei verarbeiten.
+        False → Lawinenschutz: dieselbe Ausnahme bei zu vielen Dateien
+        hintereinander, ``abort_reason`` ist gesetzt.
+    """
+    phase = getattr(exc, "ingestion_phase", None) or "loading"
+    frames = traceback.extract_tb(exc.__traceback__)
+    where = f"{Path(frames[-1].filename).name}:{frames[-1].lineno}" if frames else "?"
+    kind = f"{type(exc).__name__} in {where}"
+    logger.error(
+        "Unerwarteter Fehler bei '%s' (Phase %s, %s): %s — Datei wird uebersprungen",
+        file_path,
+        phase,
+        kind,
+        exc,
+        exc_info=True,
+    )
+    _record_error(ictx, file_log, file_path, f"{type(exc).__name__}: {exc} ({where})", phase)
+    ictx.stats["unexpected_file_errors"] = ictx.stats.get("unexpected_file_errors", 0) + 1
+
+    if kind == ictx.unexpected_error_kind:
+        ictx.unexpected_error_streak += 1
+    else:
+        ictx.unexpected_error_kind = kind
+        ictx.unexpected_error_streak = 1
+    limit = max(
+        1,
+        int(
+            ictx.config.get("ingestion", {}).get(
+                "max_consecutive_unexpected_errors",
+                INGESTION_MAX_CONSECUTIVE_UNEXPECTED_ERRORS_DEFAULT,
+            )
+        ),
+    )
+    if ictx.unexpected_error_streak < limit:
+        return True
+    abort_msg = (
+        f"Abbruch: {ictx.unexpected_error_streak} Dateien hintereinander mit demselben "
+        f"unerwarteten Fehler ({kind}). Letzter: {exc}"
+    )
+    logger.error(abort_msg)
+    ictx.stats["abort_reason"] = abort_msg
+    return False
 
 
 def _abort_index_compatibility(
@@ -311,6 +400,20 @@ def _mark_file_processed(ictx, file_path, document_ids):
 def _cleanup_file_hash(ictx, file_path):
     """Hash-Cleanup bei Fehler (Pattern C)."""
     ictx.hash_store.remove_files(ictx.datasource_id, ictx.embedding_model, [file_path])
+
+
+def _restore_published_after_failed_load(publication, file_path) -> None:
+    """Hausaenderung 18.11.2026: Ein gescheiterter Ladeversuch laesst den Index unberuehrt.
+
+    Bis zum Ende der Ladephase wurde weder in Qdrant noch in den Suchindex
+    geschrieben. Der zuvor freigegebene Stand bleibt damit suchbar; sein
+    alter Hash sorgt beim naechsten Lauf fuer einen erneuten Versuch.
+    """
+    try:
+        if publication.restore_after_failed_load():
+            logger.info("Vorheriger Indexstand bleibt erhalten: %s", file_path)
+    except Exception:
+        logger.exception("Vorheriger Indexstand fuer %s nicht wiederherstellbar", file_path)
 
 
 def _normalize_written_vector_ids(result, fallback_ids: list[str]) -> list[str]:
@@ -914,8 +1017,7 @@ def _check_ddu_preflight(ctx: ProcessingContext, warmup_stats: dict | None) -> N
 def _load_content(file_path, ctx, stats, file_log=None):
     """Laedt eine Datei via DDU oder Standard-Loader.
 
-    Behandelt DDU-Fehler (Timeout, Connection, HTTP) als Infra-Fehler
-    und trackt erfolgreiche DDU-Verarbeitung in stats.
+    Trennt DDU-Dateifehler von Backend-Ausfaellen und trackt die Verarbeitung.
 
     Args:
         file_path: Pfad zur zu verarbeitenden Datei.
@@ -926,20 +1028,15 @@ def _load_content(file_path, ctx, stats, file_log=None):
     Returns:
         Tuple (doc, is_ddu_error).
         doc ist None wenn die Datei nicht geladen werden konnte.
-        is_ddu_error ist True wenn ein DDU-Infra-Fehler aufgetreten ist
+        is_ddu_error ist True wenn ein DDU-Fehler aufgetreten ist
         (stats und file_log sind dann bereits aktualisiert).
     """
-    # DDU-OCR fuer reine Bilddateien unterdruecken wenn ddu_ocr_images=False
-    ext = Path(file_path).suffix.lower()
-    file_ddu_enabled = ctx.ddu_enabled
-    if file_ddu_enabled and not ctx.ddu_ocr_images and ext in IMAGE_FORMATS:
-        file_ddu_enabled = False
-
     doc = load_file(
         file_path,
-        ddu_enabled=file_ddu_enabled,
+        ddu_enabled=ctx.ddu_enabled,
         ddu_backends=ctx.ddu_backends,
         mail_archive=ctx.mail_archive,
+        ddu_ocr_images=ctx.ddu_ocr_images,
     )
 
     # File-Log: Parser-Info erfassen
@@ -957,25 +1054,58 @@ def _load_content(file_path, ctx, stats, file_log=None):
         # DDU-Fehler: Datei als Fehler zaehlen und ueberspringen.
         # Kein lautloser Fallback auf Standard-Loader — wenn DDU aktiviert
         # ist aber das Backend nicht erreichbar, wird die Datei uebersprungen.
-        if ddu_error in ("timeout", "connection", "http_error"):
+        if ddu_error:
+            from kiara.ingestion.ddu_client import is_infrastructure_error
+
+            is_infra = is_infrastructure_error(ddu_error)
             error_label = {
                 "timeout": "DDU timeout",
                 "connection": "DDU Backend nicht erreichbar",
                 "http_error": "DDU HTTP-Fehler",
-            }[ddu_error]
+                "document_error": "DDU Dateikonvertierung fehlgeschlagen",
+                "request_error": "DDU Anfrage abgelehnt",
+                "image_too_large": "DDU Bild zu gross",
+                "invalid_image": "DDU Bild nicht lesbar",
+            }.get(ddu_error, "DDU-Verarbeitung fehlgeschlagen")
+            detail = doc["metadata"].get("ddu_error_detail")
+            if detail:
+                error_label = f"{error_label}: {detail}"
+            if ddu_error == "document_error" and (doc.get("text") or "").strip():
+                # Hausaenderung 18.11.2026: Docling lehnt das Dokument dauerhaft ab,
+                # der Standard-Loader hat Text geliefert. Kein Fehler, aber sichtbar.
+                logger.warning(
+                    "Standard-Loader nach Docling-Fehler fuer %s: %s", file_path, error_label
+                )
+                # Fehlerdetails (HTTP-Antwort) gehoeren ins Dateilog, nicht in Chunk-Metadaten.
+                doc["metadata"].pop("ddu_error", None)
+                doc["metadata"].pop("ddu_error_detail", None)
+                stats["ddu_document_errors"] = stats.get("ddu_document_errors", 0) + 1
+                stats["ddu_fallback_files"] = stats.get("ddu_fallback_files", 0) + 1
+                if file_log:
+                    file_log.parser_fallback = True
+                    file_log.error_phase = "ddu_fallback"
+                    note = doc["metadata"].get("pdf_recovery_note", "Standard-Loader verwendet")
+                    file_log.error_message = f"{note} ({error_label})"[:2000]
+                return doc, False
+            if doc["metadata"].get("load_error"):
+                error_label = (
+                    f"DDU-Fallback: {doc['metadata']['load_error']} (zuvor: {error_label})"
+                )
             if ddu_error == "timeout":
                 stats.setdefault("ddu_timeout", 0)
                 stats["ddu_timeout"] += 1
-            else:
+            elif is_infra:
                 stats.setdefault("ddu_remote_errors", 0)
                 stats["ddu_remote_errors"] += 1
+            else:
+                stats["ddu_document_errors"] = stats.get("ddu_document_errors", 0) + 1
             stats["errors"] += 1
             if file_log:
                 file_log.status = "error"
                 file_log.error_message = error_label
                 file_log.error_phase = "loading"
-                file_log.is_infra_error = True
-            return doc, True  # DDU-Infra-Fehler
+                file_log.is_infra_error = is_infra
+            return doc, True
 
         # Erfolgreiche DDU-Verarbeitung tracken
         if parser in ("docling", "docling-remote"):
@@ -987,11 +1117,14 @@ def _load_content(file_path, ctx, stats, file_log=None):
         if doc["metadata"].get("parser_fallback"):
             stats.setdefault("ddu_fallback_files", 0)
             stats["ddu_fallback_files"] += 1
+            if file_log and (note := doc["metadata"].get("pdf_recovery_note")):
+                file_log.error_phase = "ddu_fallback"
+                file_log.error_message = note[:2000]
 
     return doc, False
 
 
-def _handle_vlm_content(file_path, ctx, stats):
+def _handle_vlm_content(file_path, ctx, stats, *, detected_extension=None):
     """Fuehrt VLM-Bildbeschreibung durch, falls aktiviert.
 
     Args:
@@ -1006,9 +1139,13 @@ def _handle_vlm_content(file_path, ctx, stats):
         return None
 
     vlm_doc = describe_image(
-        file_path, vlm_model=ctx.vlm_model, ollama_url=ctx.vlm_url, prompt=ctx.vlm_prompt
+        file_path,
+        vlm_model=ctx.vlm_model,
+        ollama_url=ctx.vlm_url,
+        prompt=ctx.vlm_prompt,
+        detected_extension=detected_extension,
     )
-    ext = Path(file_path).suffix.lower()
+    ext = detected_extension or Path(file_path).suffix.lower()
     if vlm_doc is None and ext in IMAGE_FORMATS:
         stats.setdefault("vlm_errors", 0)
         stats["vlm_errors"] += 1
@@ -1028,6 +1165,11 @@ def _determine_chunks(doc, ds_overrides, chunk_size, chunk_overlap):
     Returns:
         Liste von Chunk-Dicts mit 'text' und 'metadata'.
     """
+    if "cad_sections" in doc:
+        from kiara.cad.adapter import chunks
+
+        return chunks(doc, chunk_size)
+
     if doc["metadata"].get("parser") == "vlm":
         doc["metadata"]["chunk_strategy"] = "vlm_single"
         doc["metadata"]["chunk_index"] = 0
@@ -1170,8 +1312,10 @@ def _process_single_file(file_path, config, ds_overrides, datasource_id, ctx, st
     """
     chunk_size = config["ingestion"]["chunk_size"]
     chunk_overlap = config["ingestion"]["chunk_overlap"]
+    if file_log:
+        file_log.empty_content_confirmed = False
 
-    with _tracer.start_as_current_span("load_content") as load_span:
+    with _file_phase("loading"), _tracer.start_as_current_span("load_content") as load_span:
         doc, is_ddu_error = _load_content(file_path, ctx, stats, file_log=file_log)
         load_span.set_attribute("parser", file_log.parser if file_log else "")
         load_span.set_attribute("parser_fallback", file_log.parser_fallback if file_log else False)
@@ -1181,7 +1325,60 @@ def _process_single_file(file_path, config, ds_overrides, datasource_id, ctx, st
     if is_ddu_error:
         return [], [], [], "", []
 
-    vlm_doc = _handle_vlm_content(file_path, ctx, stats)
+    if doc and doc["metadata"].get("skip_reason"):
+        skip_counter = (
+            "unsupported_formats_skipped"
+            if doc["metadata"].get("skip_category") == "unsupported_format"
+            else "ddu_images_skipped"
+        )
+        stats[skip_counter] = stats.get(skip_counter, 0) + 1
+        if file_log:
+            file_log.status = "skipped"
+            file_log.error_message = doc["metadata"]["skip_reason"]
+            file_log.error_phase = ""
+        # Eine Groessenregel ist kein Extraktionsnachweis: kein permanenter
+        # Leer-Abschluss. Nach geaenderten Grenzen wird die Datei neu geprueft.
+        return [], [], [], "", []
+
+    if doc and doc["metadata"].get("load_error"):
+        stats["errors"] += 1
+        stats.setdefault("error_details", []).append(
+            {
+                "file": Path(file_path).name,
+                "error": doc["metadata"]["load_error"],
+                "phase": "loading",
+            }
+        )
+        if file_log:
+            file_log.status = "error"
+            file_log.error_message = doc["metadata"]["load_error"]
+            file_log.error_phase = "loading"
+        return [], [], [], "", []
+
+    vlm_errors_before = stats.get("vlm_errors", 0)
+    with _file_phase("loading"):
+        vlm_doc = _handle_vlm_content(
+            file_path,
+            ctx,
+            stats,
+            detected_extension=doc["metadata"].get("detected_format") if doc else None,
+        )
+    if stats.get("vlm_errors", 0) > vlm_errors_before:
+        # Eine angeforderte Bildbeschreibung ist Teil der Verarbeitung.
+        # Ein Ausfall darf weder einen leeren noch einen Teilabschluss erzeugen.
+        stats["errors"] += 1
+        stats.setdefault("error_details", []).append(
+            {
+                "file": Path(file_path).name,
+                "error": "VLM-Bildbeschreibung fehlgeschlagen",
+                "phase": "loading",
+            }
+        )
+        if file_log:
+            file_log.status = "error"
+            file_log.error_message = "VLM-Bildbeschreibung fehlgeschlagen"
+            file_log.error_phase = "loading"
+        return [], [], [], "", []
 
     is_no_content = doc is not None and doc["metadata"].get("no_content")
 
@@ -1195,6 +1392,7 @@ def _process_single_file(file_path, config, ds_overrides, datasource_id, ctx, st
         if is_no_content:
             if file_log:
                 file_log.status = "skipped"
+                file_log.empty_content_confirmed = True
                 file_log.error_message = "Kein extrahierbarer Inhalt"
                 file_log.error_phase = ""
         elif doc is None:
@@ -1213,7 +1411,7 @@ def _process_single_file(file_path, config, ds_overrides, datasource_id, ctx, st
                 file_log.error_phase = "loading"
         return [], [], [], "", []
 
-    with _tracer.start_as_current_span("chunk_and_collect") as chunk_span:
+    with _file_phase("chunking"), _tracer.start_as_current_span("chunk_and_collect") as chunk_span:
         result = _chunk_and_collect(
             docs_to_chunk,
             ds_overrides,
@@ -1727,10 +1925,14 @@ def _handle_loading_result(
 
     else:
         # Kein Fehler, aber kein Inhalt (z.B. leere Datei, VLM-only ohne Text)
-        # Hash NICHT persistieren — Datei soll beim naechsten Run erneut
-        # geprueft werden, falls sie inzwischen Content bekommen hat.
+        # Erst der explizite Leernachweis samt atomarem Abschluss erlaubt den
+        # naechsten Hash-Skip. Ein Log-Status oder leere Chunkliste reicht nicht.
+        if file_log and file_log.empty_content_confirmed and ictx.empty_file_completion_callback:
+            ictx.empty_file_completion_callback(file_path)
+            ictx.stats["empty_files"] = ictx.stats.get("empty_files", 0) + 1
         ictx.consecutive_errors = 0
         ictx.skipped += 1
+        ictx.stats["skipped_files"] = ictx.stats.get("skipped_files", 0) + 1
         if ictx.progress_callback:
             ictx.progress_callback(ictx.skipped + ictx.stats["processed_files"], ictx.total)
         if file_log and file_log.status == "success":
@@ -3454,19 +3656,18 @@ def _process_file_with_publication(ictx: _IngestionContext, file_path: str, publ
         except OSError:
             span.set_attribute("file_size", 0)
 
-        file_log = None
-        if ictx.file_log_callback:
-            p = Path(file_path)
-            try:
-                fsize = p.stat().st_size
-            except OSError:
-                fsize = 0
-            file_log = FileLogEntry(
-                file_path=file_path,
-                file_name=p.name,
-                file_size=fsize,
-                file_ext=p.suffix.lower(),
-            )
+        # Auch CLI-Laeufe ohne Log-Callback brauchen das explizite Dateiergebnis.
+        p = Path(file_path)
+        try:
+            fsize = p.stat().st_size
+        except OSError:
+            fsize = 0
+        file_log = FileLogEntry(
+            file_path=file_path,
+            file_name=p.name,
+            file_size=fsize,
+            file_ext=p.suffix.lower(),
+        )
 
         file_retries = 0
         skip_loading = False
@@ -3514,6 +3715,20 @@ def _process_file_with_publication(ictx: _IngestionContext, file_path: str, publ
                 except OSError as exc:
                     _record_error(ictx, file_log, file_path, exc, "loading")
                     file_texts, file_metas, file_ids, full_text, file_spans = [], [], [], "", []
+                except _JOB_STOPPING_ERRORS:
+                    raise
+                except Exception as exc:
+                    if not _record_unexpected_file_error(ictx, file_log, file_path, exc):
+                        _cleanup_file_hash(ictx, file_path)
+                        _restore_published_after_failed_load(publication, file_path)
+                        _emit_file_log(ictx, file_log, t0)
+                        _persist_hashes_checkpoint(ictx, force=True)
+                        span.set_attribute("final_status", "aborted_unexpected_errors")
+                        return False
+                    file_texts, file_metas, file_ids, full_text, file_spans = [], [], [], "", []
+                else:
+                    ictx.unexpected_error_kind = ""
+                    ictx.unexpected_error_streak = 0
                 document_ids = list(file_ids)
                 if (
                     file_texts or ictx.stats["errors"] == errors_before
@@ -3533,6 +3748,13 @@ def _process_file_with_publication(ictx: _IngestionContext, file_path: str, publ
             skip_loading = False
 
             if not file_texts:
+                if (
+                    file_log.empty_content_confirmed
+                    and ictx.stats["errors"] == errors_before
+                    and ictx.empty_file_completion_callback
+                ):
+                    publication.begin()
+                load_failed = ictx.stats["errors"] > errors_before
                 action, file_retries = _handle_loading_result(
                     ictx,
                     file_path,
@@ -3544,6 +3766,8 @@ def _process_file_with_publication(ictx: _IngestionContext, file_path: str, publ
                 if action == _FileAction.RETRY:
                     span.set_attribute("final_status", "retry_loading")
                     continue
+                if load_failed:
+                    _restore_published_after_failed_load(publication, file_path)
                 if action == _FileAction.ABORT:
                     span.set_attribute("final_status", "aborted_loading")
                     return False
@@ -3704,7 +3928,11 @@ def _process_file_with_publication(ictx: _IngestionContext, file_path: str, publ
             )
 
             # --- ENRICHMENT-PHASE ---
-            if _should_enrich(ictx.config, ictx.ds_overrides) and not enrichment_applied:
+            if (
+                _should_enrich(ictx.config, ictx.ds_overrides)
+                and not enrichment_applied
+                and Path(file_path).suffix.lower() != ".pkg"
+            ):
                 file_texts, file_metas, enrichment_applied = _run_enrichment(
                     ictx, file_path, file_texts, file_metas, full_text
                 )

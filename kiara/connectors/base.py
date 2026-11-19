@@ -285,6 +285,7 @@ class ConnectorBase(ABC):
     name: str  # Eindeutiger Typ-Name, z.B. "imap", "smb", "local"
     label: str  # Anzeige-Label fuer die UI, z.B. "E-Mail (IMAP)"
     badge_class: str  # CSS-Klasse fuer das Badge, z.B. "info", "warning"
+    badge_label: str | None = None  # Kurzbeschriftung des Typ-Chips in der Tabelle (sonst label)
 
     # Hash-Strategie fuer die Ingestion-Pipeline.
     # "mtime" = schneller stat()-basierter Hash (Default).
@@ -417,6 +418,17 @@ class ConnectorBase(ABC):
             {"success": True/False, "message": str, ...}
         """
         ...
+
+    @staticmethod
+    def source_unavailable_reason(config: dict, row: dict) -> str | None:
+        """Grund, warum die Quelle derzeit nicht indexiert werden kann, sonst None.
+
+        Fuer Quellen, deren Daten verschwinden koennen, ohne dass die Datenquelle
+        geloescht wird (z.B. PST-Datei aus der Ablage entfernt). Muss billig sein
+        (wird bei jedem Abruf der Datenquellen-Liste und beim Einreihen eines
+        Jobs aufgerufen) und darf keine Netzwerkverbindung aufbauen.
+        """
+        return None
 
     @classmethod
     def safe_test_connection(cls, config: dict, row: dict) -> dict:

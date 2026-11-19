@@ -166,7 +166,16 @@ class FakeRetriever:
         ]
 
 
-def _service(fake_retriever=None, *, config=None, public_ids=None, audit_repo=None):
+class _AllPublic(dict):
+    """Alle Datenquellen public: MCP-Ausgabe bleibt wie vor der Anonymisierung."""
+
+    def get(self, key, default=None):
+        return "public"
+
+
+def _service(
+    fake_retriever=None, *, config=None, public_ids=None, audit_repo=None, restriction_levels=None
+):
     fake_retriever = fake_retriever or FakeRetriever()
     return RetrievalOnlyService(
         config or _config(),
@@ -176,6 +185,7 @@ def _service(fake_retriever=None, *, config=None, public_ids=None, audit_repo=No
         datasource_repo=FakeDatasourceRepo(),
         audit_repo=audit_repo or FakeAuditRepo(),
         embedding_model="test-embed",
+        restriction_levels=_AllPublic() if restriction_levels is None else restriction_levels,
     )
 
 
@@ -513,3 +523,14 @@ def test_retrieval_rest_endpoint_preserves_structured_retrieval_errors():
     assert body["ok"] is False
     assert body["route"] == "retrieval-only"
     assert body["error"]["code"] == "limit_exceeded"
+
+
+def test_optional_int_params_passed_as_none_use_defaults():
+    # MCP-Tools uebergeben fehlende optionale Argumente als None
+    result = _service().search_documents(
+        {"id": 1, "is_admin": True},
+        {"query": "Canary", "k": None, "max_chars_per_result": None, "include_text": None},
+    )
+
+    assert result["ok"] is True
+    assert result["limits"]["max_chars_per_result"] == 4000

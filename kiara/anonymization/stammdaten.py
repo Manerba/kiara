@@ -5,8 +5,11 @@ und baut den Aho-Corasick-Automaten daraus auf.
 """
 
 import csv
+import hashlib
 import json
 import logging
+import threading
+import time
 from pathlib import Path
 
 from kiara.anonymization._text_utils import open_with_fallback
@@ -87,14 +90,84 @@ def build_automaton_from_sources(config: dict) -> AnonymizationAutomaton:
     return automaton
 
 
+ERP_DEFAULT_MAX_AGE_HOURS = 48
+LDAP_CACHE_TTL_SECONDS = 600
+
+_automaton_cache: dict = {"key": None, "automaton": None}
+_automaton_lock = threading.Lock()
+
+
+def _erp_path(erp_config: dict) -> Path:
+    return Path(erp_config.get("csv_dir", erp_config.get("path", DEFAULT_PATHS["stammdaten"])))
+
+
+def erp_source_signature(erp_config: dict) -> tuple:
+    """Prueft die ERP-Exportdateien und liefert ihre Signatur (Name, Groesse, mtime).
+
+    Fail-closed (Hausaenderung): Ist die ERP-Quelle aktiv, muss mindestens eine
+    CSV/JSON-Datei vorliegen, und die neueste darf nicht aelter sein als
+    ``max_age_hours`` (Vorgabe 48, 0 = keine Altersgrenze). Sonst RuntimeError,
+    damit keine Ausgabe mit lueckenhaften Stammdaten entsteht.
+    """
+    path = _erp_path(erp_config)
+    if not path.is_dir():
+        raise RuntimeError(f"Stammdaten-Pfad fehlt: {path}")
+    files = sorted([*path.glob("*.csv"), *path.glob("*.json")])
+    if not files:
+        raise RuntimeError(f"Keine Stammdaten-Datei (*.csv, *.json) in {path}")
+    signature = tuple((f.name, f.stat().st_size, f.stat().st_mtime_ns) for f in files)
+    max_age_hours = erp_config.get("max_age_hours", ERP_DEFAULT_MAX_AGE_HOURS)
+    if max_age_hours:
+        age_hours = (time.time() - max(m for _n, _s, m in signature) / 1e9) / 3600
+        if age_hours > float(max_age_hours):
+            raise RuntimeError(
+                f"Stammdaten in {path} sind veraltet ({age_hours:.0f} h, erlaubt {max_age_hours} h)"
+            )
+    return signature
+
+
 def _load_erp_stammdaten(erp_config: dict) -> list[dict]:
-    """Laedt Stammdaten aus CSV/JSON-Exportdateien."""
+    """Laedt Stammdaten aus CSV/JSON-Exportdateien (fail-closed, siehe erp_source_signature)."""
     source_type = erp_config.get("type", "csv")
 
     if source_type in ("csv", "json", "mixed"):
-        return _load_from_csv(erp_config)
+        erp_source_signature(erp_config)
+        entries = _load_from_csv(erp_config)
+        if not entries:
+            raise RuntimeError(
+                f"Stammdaten-Dateien in {_erp_path(erp_config)} ohne gueltige Zeilen"
+            )
+        return entries
 
     return []
+
+
+def cached_automaton(config: dict) -> AnonymizationAutomaton:
+    """Automat aus build_automaton_from_sources, je Prozess zwischengespeichert.
+
+    Bei 100.000+ Stammdaten kostet der Aufbau mehr als eine Sekunde und einige
+    hundert MB je Anfrage. Neu gebaut wird, wenn sich die Anonymisierungs-
+    Konfiguration oder die ERP-Dateien aendern und spaetestens nach
+    LDAP_CACHE_TTL_SECONDS (LDAP-Aenderungen). Die Pruefungen der ERP-Quelle
+    (Dateien vorhanden, nicht veraltet) laufen bei jedem Aufruf.
+    """
+    anon_cfg = config.get("anonymization", {})
+    erp_config = anon_cfg.get("erp_source", anon_cfg.get("erp", {}))
+    ldap_source = anon_cfg.get("ldap_source", anon_cfg.get("ldap", {}))
+    erp_signature = erp_source_signature(erp_config) if erp_config.get("enabled") else None
+    ldap_bucket = (
+        int(time.monotonic() // LDAP_CACHE_TTL_SECONDS) if ldap_source.get("enabled") else None
+    )
+    config_hash = hashlib.sha256(
+        json.dumps(anon_cfg, sort_keys=True, default=str).encode()
+    ).hexdigest()
+    key = (config_hash, erp_signature, ldap_bucket)
+    with _automaton_lock:
+        if _automaton_cache["key"] == key:
+            return _automaton_cache["automaton"]
+        automaton = build_automaton_from_sources(config)
+        _automaton_cache.update(key=key, automaton=automaton)
+        return automaton
 
 
 def _load_from_csv(erp_config: dict) -> list[dict]:
@@ -105,7 +178,7 @@ def _load_from_csv(erp_config: dict) -> list[dict]:
         K-12345;ORG;Schmidt GmbH;Schmidt|Fa. Schmidt
     """
     entries = []
-    path = Path(erp_config.get("csv_dir", erp_config.get("path", DEFAULT_PATHS["stammdaten"])))
+    path = _erp_path(erp_config)
 
     if not path.exists():
         logger.warning("Stammdaten-Pfad existiert nicht: %s", path)
@@ -131,6 +204,7 @@ def _load_from_csv(erp_config: dict) -> list[dict]:
                     )
         except Exception as exc:
             logger.error("CSV-Datei konnte nicht geladen werden: %s — %s", file, exc)
+            raise RuntimeError(f"Stammdaten-Datei {file.name} nicht lesbar: {exc}") from exc
 
     # JSON-Dateien ebenfalls unterstuetzen
     for file in sorted(path.glob("*.json")):
@@ -175,26 +249,26 @@ def _load_from_csv(erp_config: dict) -> list[dict]:
                     )
         except Exception as exc:
             logger.error("JSON-Datei konnte nicht geladen werden: %s — %s", file, exc)
+            raise RuntimeError(f"Stammdaten-Datei {file.name} nicht lesbar: {exc}") from exc
 
     return entries
 
 
 def _load_ldap_entries(config: dict) -> list[dict]:
-    """Laedt Mitarbeiterdaten aus LDAP/Active Directory.
+    """Laedt alle Personen aus LDAP/Active Directory (Benutzer und Kontakte).
 
-    Nutzt get_group_members() aus ldap_utils.py mit der
-    LDAP-Config aus der ldap_config DB-Tabelle.
+    Nutzt die Zugangsdaten aus der ldap_config-Tabelle, beschraenkt sich aber
+    nicht auf die Gruppe der Benutzerverwaltung: Anonymisiert werden muessen
+    alle Personen, die in Dokumenten vorkommen koennen, auch ehemalige
+    Mitarbeiter (deaktivierte Konten) und Kontakte (Hausaenderung 30.10.2026).
 
     Fail-closed: Bei aktiver LDAP-Source und fehlender Config / nicht
     erreichbarem Server wird eine Exception geworfen. Der Aufrufer
     (build_automaton) faengt diese und bricht die Automaton-Erstellung
     ab — keine stille Anonymisierungs-Luecke.
-
-    Gibt nur dann eine leere Liste zurueck, wenn ``group_dn`` nicht
-    konfiguriert ist (Admin hat die Gruppe bewusst nicht hinterlegt).
     """
     from kiara.repositories.config import ConfigRepository
-    from kiara.shared.ldap import get_group_members
+    from kiara.shared.ldap import get_directory_people
     from kiara.web.config_utils import build_ldap_config
 
     config_repo = ConfigRepository()
@@ -207,14 +281,7 @@ def _load_ldap_entries(config: dict) -> list[dict]:
             "Anonymisierungs-Source deaktivieren."
         )
 
-    ldap_cfg = build_ldap_config(ldap_row)
-
-    if not ldap_cfg.get("group_dn"):
-        # Kein group_dn konfiguriert: Admin hat bewusst keine Gruppe
-        # hinterlegt — nichts zum Laden, ohne Fehler zurueckkehren.
-        return []
-
-    members = get_group_members(ldap_cfg)
+    members = get_directory_people(build_ldap_config(ldap_row))
 
     entries = []
     for member in members:

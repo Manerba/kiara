@@ -17,6 +17,7 @@ const _DS_RATE_WINDOW_MS = 30_000;
 const _DS_RATE_MIN_MS = 6_000;
 const _dsRateHistory = new Map();
 const _HTML_REINGEST_CONNECTORS = new Set(['local', 'smb', 'webdav', 'imap', 'exchange_online']);
+const _ATTACHMENT_TOGGLE_CONNECTORS = new Set(['imap', 'pst']);
 const _HTML_REINGEST_MODELS = new Set(['nomic-embed-text', 'hellord/e5-mistral-7b-instruct:q4_0']);
 
 // Nur akzeptierte Datenantworten zaehlen als Beobachtung, niemals Render-Aufrufe.
@@ -287,8 +288,10 @@ async function checkDduAvailable() {
         const resp = await SharedUi.fetch.safeFetch('/api/admin/ddu-available', {headers: {'X-Requested-With': 'XMLHttpRequest'}});
         const data = await resp.json();
         window._dduAvailable = data.available;
+        window._dduMessage = data.available ? '' : (data.message || '');
     } catch(e) {
         window._dduAvailable = false;
+        window._dduMessage = 'Verfuegbarkeitspruefung fehlgeschlagen (' + e.message + ')';
     }
 }
 
@@ -390,9 +393,11 @@ async function initDatenquellenTab() {
         apiEndpoint: '/api/admin/datasources',
         showHeader: true,
         expandable: true,
-        gridTemplate: '30px 150px 70px 1fr 100px 80px 80px 130px 70px 160px',
+        gridTemplate: '30px 50px 150px 70px 1fr 100px 80px 80px 130px 70px 160px',
         defaultSort: { field: 'name', direction: 'asc' },
         columns: [
+            { field: 'id', label: 'ID', sortable: true, align: 'center',
+              renderer: (v) => `<span class="u-tab-nums">${Number(v)}</span>` },
             { field: 'name', label: 'Name', sortable: true, align: 'left' },
             { field: 'type', label: 'Typ', sortable: true, align: 'center', renderer: 'badge' },
             { field: 'source_display', label: 'Quelle', sortable: false, align: 'left', truncate: 40 },
@@ -515,9 +520,11 @@ async function initDatenquellenTab() {
     dsTable.renderers['badge'] = (value) => {
         const types = _connectorTypes || {};
         const ct = types[value];
-        const label = ct?.label || value;
+        const label = ct?.badge_label || ct?.label || value;
         const cls = ct?.badge_class || 'default';
-        return `<span class="badge badge-${cls}">${SharedUi.runtime.escapeHtml(label)}</span>`;
+        // Hauspatch typ-chip-farben: je Datenquellen-Typ eigene Farbe (style.css .badge-ds-<typ>)
+        const typCls = String(value || '').replace(/[^a-z0-9_-]/gi, '');
+        return `<span class="badge badge-${cls} badge-ds-${typCls}">${SharedUi.runtime.escapeHtml(label)}</span>`;
     };
 
     dsTable.renderers['ingestionStatus'] = (value, col, row) => {
@@ -576,6 +583,11 @@ async function initDatenquellenTab() {
                 html += `<button class="action-btn-sm" title="Pausieren" data-action="pause-ds-ingestion" data-ds-id="${row.id}">&#x23F8;</button>`;
             }
             html += `<button class="action-btn-sm danger" title="Abbrechen" data-action="cancel-ds-ingestion" data-ds-id="${row.id}" data-ds-name="${SharedUi.runtime.escapeAttr(row.name)}">&#x25A0;</button>`;
+        } else if (row.source_unavailable) {
+            // Quelle fehlt (z.B. PST aus der Ablage geloescht): Datenquelle bleibt, Ingest gesperrt
+            const reason = SharedUi.runtime.escapeAttr(row.source_unavailable);
+            html += `<button class="action-btn-sm" title="Indexieren nicht möglich: ${reason}" disabled>&#x1F504;</button>`;
+            html += `<button class="action-btn-sm" title="Voll-Indexieren nicht möglich: ${reason}" disabled>&#x1F501;</button>`;
         } else {
             html += `<button class="action-btn-sm" title="Indexieren" data-action="trigger-ds-ingest" data-ds-id="${row.id}" data-ds-name="${SharedUi.runtime.escapeAttr(row.name)}">&#x1F504;</button>`;
             html += `<button class="action-btn-sm" title="Voll-Indexieren" data-action="trigger-ds-reingest" data-ds-id="${row.id}" data-ds-name="${SharedUi.runtime.escapeAttr(row.name)}">&#x1F501;</button>`;
@@ -692,6 +704,10 @@ function _buildConnectorFields(schema, config) {
         } else if (spec.options) {
             // Select/Dropdown
             html += `<select class="config-input" id="${SharedUi.runtime.escapeAttr(id)}">`;
+            if (value !== '' && !spec.options.some(opt => String(opt.value) === String(value))) {
+                // z.B. PST-Datei inzwischen aus der Ablage entfernt
+                html += `<option value="${SharedUi.runtime.escapeAttr(value)}" selected>${SharedUi.runtime.escapeHtml(String(value))} (nicht vorhanden)</option>`;
+            }
             spec.options.forEach(opt => {
                 const sel = String(value) === String(opt.value) ? ' selected' : '';
                 html += `<option value="${SharedUi.runtime.escapeAttr(opt.value)}"${sel}>${SharedUi.runtime.escapeHtml(opt.label)}</option>`;
@@ -772,7 +788,7 @@ function _dsAdvancedSettingsHtml(cfg) {
 
     let html = '';
     html += `<details class="u-details-section u-mt-16">
-        <summary class="u-details-summary">Embedding-Einstellungen</summary>
+        <summary class="u-details-summary">Ingest-Einstellungen</summary>
         <div class="u-mt-12">
             <div class="modal-field">
                 <label>Chunk-Strategie</label>
@@ -842,6 +858,19 @@ function _dsAdvancedSettingsHtml(cfg) {
             <div class="modal-field"><label>Dateitypen</label>
                 <input type="text" id="dsFileTypes" value="${SharedUi.runtime.escapeAttr(fileTypesStr)}" placeholder="Leer = Global (z.B. .pdf, .docx, .txt)">
             </div>
+            <fieldset class="modal-field">
+                <legend>PKG-Dateien: Ingest-Ziele</legend>
+                <label class="u-flex-center-gap-8 u-clickable">
+                    <input type="checkbox" id="dsCadVectorEnabled" ${cfg.ds_cad_vector_enabled !== false ? 'checked' : ''}>
+                    Vektordatenbank – semantische Suche
+                </label>
+                <label class="u-flex-center-gap-8 u-clickable">
+                    <input type="checkbox" id="dsCadRelationalEnabled" ${cfg.ds_cad_relational_enabled !== false ? 'checked' : ''}>
+                    Relationale Datenbank – Eigenschaften, Stücklisten und Verwendung
+                </label>
+                <p class="u-fs-13 u-c-secondary">Gilt für künftige Importe. Bereits gespeicherte Daten bleiben erhalten.
+                Ohne Auswahl werden PKG-Dateien übersprungen. Andere Dateitypen sind davon unabhängig.</p>
+            </fieldset>
             <div class="modal-field"><label>Ausschlussmuster</label>
                 <input type="text" id="dsExcludePatterns" value="${SharedUi.runtime.escapeAttr(excludeStr)}" placeholder="Leer = Global (z.B. */tmp/*, *.bak)">
             </div>
@@ -996,7 +1025,7 @@ function _dsAdvancedSettingsHtml(cfg) {
                     Dateien mit unbekannter Endung werden anhand ihres Inhalts geprueft und als Plaintext indexiert, wenn sie lesbaren Text enthalten.
                 </div>
             </div>
-            <div id="dsIndexAttachmentsField" class="modal-field u-mt-12 ${dsType === 'imap' ? 'u-block' : 'u-hidden'}">
+            <div id="dsIndexAttachmentsField" class="modal-field u-mt-12 ${_ATTACHMENT_TOGGLE_CONNECTORS.has(dsType) ? 'u-block' : 'u-hidden'}">
                 <label class="u-flex-center-gap-8 u-clickable">
                     <input type="checkbox" id="dsIndexAttachments"
                            ${indexAtt ? 'checked' : ''}
@@ -1079,10 +1108,10 @@ function _onTypeChange(newType) {
     }
     const connDetails = document.getElementById('dsConnectorDetails');
     if (connDetails) connDetails.open = true;
-    // Anhaenge-indexieren-Toggle nur fuer IMAP sichtbar
+    // Anhaenge-indexieren-Toggle nur fuer Mail-Konnektoren mit Anhangsexport
     const attField = document.getElementById('dsIndexAttachmentsField');
     if (attField) {
-        if (newType === 'imap') {
+        if (_ATTACHMENT_TOGGLE_CONNECTORS.has(newType)) {
             attField.classList.remove('u-hidden');
             attField.classList.add('u-block');
         } else {
@@ -1311,6 +1340,8 @@ function _getDsFormData() {
         ds_enrichment_prompt_id: parseInt(document.getElementById('dsEnrichmentPromptId')?.value) || null,
         ds_enrichment_backend_id: parseInt(document.getElementById('dsEnrichmentBackendId')?.value) || null,
         ds_colbert_enabled: document.getElementById('dsColbertEnabled')?.checked || false,
+        ds_cad_vector_enabled: document.getElementById('dsCadVectorEnabled')?.checked ?? true,
+        ds_cad_relational_enabled: document.getElementById('dsCadRelationalEnabled')?.checked ?? true,
         ds_accept_all_text: document.getElementById('dsAcceptAllText')?.checked || false,
         ds_index_attachments: document.getElementById('dsIndexAttachments')?.checked ?? true,
         restriction_level: document.getElementById('dsRestrictionLevel')?.value || 'anonymize',
@@ -1372,7 +1403,8 @@ function _bindDatasourceModalCommon({ dsId, ds, openToken }) {
     _updateTestBtnVisibility();
     document.getElementById('dsTestBtn')?.addEventListener('click', () => _testDsConnection(dsId));
     _applyAvailabilityGuard('dsDduEnabled', window._dduAvailable,
-        'DDU nicht verfuegbar: Kein erreichbares Remote-DDU-Backend konfiguriert.');
+        'DDU nicht verfuegbar: ' +
+        (window._dduMessage || 'Kein erreichbares Remote-DDU-Backend konfiguriert.'));
     _applyAvailabilityGuard('dsVlmEnabled', window._vlmAvailable,
         window._vlmMessage || 'VLM nicht verfuegbar: Kein VLM-Modell konfiguriert (ollama.vlm_model in kiara.yaml)');
     _bindDduOcrImagesToggle();
@@ -1392,9 +1424,16 @@ async function _recoverDatasourceSchedulePartialFailure({ warningText, dsId, fal
     openEditDatasourceModal(dsId, fallbackDraft);
 }
 
-function openCreateDatasourceModal() {
+async function _reloadConnectorTypes() {
+    _connectorTypes = null;
+    await _loadConnectorTypes();
+}
+
+async function openCreateDatasourceModal() {
     _editOpenToken++;
     const myToken = _editOpenToken;
+    await _reloadConnectorTypes();
+    if (myToken !== _editOpenToken) return;
     _currentDsId = null;
     SharedUi.modal.open({
         title: 'Neue Datenquelle',
@@ -1455,10 +1494,12 @@ function openCreateDatasourceModal() {
     });
 }
 
-function openEditDatasourceModal(dsId, fallbackDs = null) {
+async function openEditDatasourceModal(dsId, fallbackDs = null) {
     // Invalidiere vorherige Open-Tokens BEVOR SharedUi.modal.open den alten Overlay entfernt
     _editOpenToken++;
     const myToken = _editOpenToken;
+    await _reloadConnectorTypes();
+    if (myToken !== _editOpenToken) return;
 
     // Daten: fallbackDs hat Vorrang fuer editierte Felder, Table-Payload ist Fallback
     const tableDs = dsTable ? dsTable.getAllData().find(d => d.id === dsId) : null;
@@ -1784,8 +1825,13 @@ function _getIngestEmbedModel() {
 }
 
 async function _triggerIngest(dsId, dsName, reingest) {
-    const embModel = _getIngestEmbedModel();
-    if (!embModel) {
+    const ds = dsTable?.getAllData().find(d => d.id === dsId);
+    let types = ds?.ds_file_types || [];
+    if (typeof types === 'string') { try { types = JSON.parse(types); } catch (_) { types = []; } }
+    const cadOnly = ds?.ds_cad_vector_enabled === false && types.length > 0
+        && types.every(t => t.toLowerCase() === '.pkg') && !ds.ds_accept_all_text;
+    const embModel = cadOnly ? '' : _getIngestEmbedModel();
+    if (!embModel && !cadOnly) {
         SharedUi.notify.show('Kein Embedding-Modell verfuegbar. Bitte unter KI-Backends konfigurieren.', 'error');
         return;
     }
@@ -1795,14 +1841,13 @@ async function _triggerIngest(dsId, dsName, reingest) {
     const lcText = lcSupported
         ? '<strong>' + SharedUi.runtime.escapeHtml(embModel) + '</strong> unterstuetzt Late Chunking'
         : '<strong>' + SharedUi.runtime.escapeHtml(embModel) + '</strong> unterstuetzt kein Late Chunking';
-    const lcInfoHtml = '<div class="' + lcBoxCls + '">' + lcText + '</div>';
+    const lcInfoHtml = cadOnly ? '' : '<div class="' + lcBoxCls + '">' + lcText + '</div>';
 
-    const mainMsg = reingest
+    const mainMsg = cadOnly ? SharedUi.runtime.escapeHtml('PKG-Import für "' + dsName + '" starten?') : reingest
         ? SharedUi.runtime.escapeHtml('"' + dsName + '" voll-indexieren mit Modell "' + embModel + '"?')
         : SharedUi.runtime.escapeHtml('"' + dsName + '" indexieren mit Modell "' + embModel + '"?');
-    const subMsg = reingest
-        ? 'Alle bestehenden Chunks werden geloescht und neu eingelesen.'
-        : 'Nur neue/geaenderte Dateien werden verarbeitet.';
+    const subMsg = 'Nur die gewählten Ingest-Ziele werden verarbeitet. Daten abgeschalteter PKG-Pfade bleiben erhalten.'
+        + (reingest ? ' Ausgewählte Ziele werden vollständig neu eingelesen.' : ' Unveränderte Dateien werden übersprungen.');
 
     const confirmed = await new Promise(resolve => {
         let settled = false;

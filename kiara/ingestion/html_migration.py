@@ -170,6 +170,9 @@ def preserve_selection(db, job_id: int, stats: dict) -> None:
     """Persistierte Auswahl auch bei fruehen Fehlern/Abbruch unveraendert erhalten."""
     row = db.execute("SELECT stats_json FROM ingestion_jobs WHERE id = %s", (job_id,)).fetchone()
     existing = _stats(row["stats_json"]) if row else {}
+    for key in ("retry_file_log_ids", "retry_source_file_count"):
+        if key in existing:
+            stats[key] = existing[key]
     from kiara.ingestion.html_reingest import request_fields
 
     for key, value in request_fields(existing).items():

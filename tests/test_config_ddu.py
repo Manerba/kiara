@@ -58,12 +58,21 @@ def test_backends_ignores_none_url(mock_all):
 
 
 @patch("kiara.backend_selector.get_all_active")
+def test_backends_uses_configured_conversion_timeout(mock_all):
+    """Der YAML-Timeout muss bis zum DDU-Client weitergereicht werden."""
+    mock_all.return_value = [_mock_backend()]
+    result = get_ddu_backends({"timeouts": {"ddu_convert": 7800.0}})
+
+    assert result[0]["timeout"] == 7800.0
+
+
+@patch("kiara.backend_selector.get_all_active")
 def test_backends_returns_custom_extra_config(mock_all):
     """JSON mit table_mode=fast, timeout=60, concurrency_limit=4."""
     mock_all.return_value = [
         _mock_backend(extra_config='{"table_mode": "fast", "timeout": 60, "concurrency_limit": 4}')
     ]
-    result = get_ddu_backends({})
+    result = get_ddu_backends({"timeouts": {"ddu_convert": 7800.0}})
 
     assert result[0]["table_mode"] == "fast"
     assert result[0]["timeout"] == 60

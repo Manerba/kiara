@@ -2216,6 +2216,15 @@ def _build_agent_tool_registry(config, data, allowed_ds):
     registry.register(ReadDocumentTool(retriever, config, references, allowed_ds))
     registry.register(ListDatasourcesTool(allowed_datasource_ids=allowed_ds))
     registry.register(CalculateTool())
+    from kiara.tools.cad import CadQueryTool
+
+    registry.register(CadQueryTool(config, allowed_ds, data.embedding_model))
+
+    # Hauspatch chat-werkzeug-plugins: zusaetzliche Agent-Tools aus tools.plugins
+    # (unabhaengig von tools.enabled, das nur die ERP-Tools schaltet).
+    from kiara.tools.registry import register_tool_plugins
+
+    register_tool_plugins(registry, config, allowed_ds)
 
     # ERP-Tools registrieren (falls Feature verfuegbar und Verbindungen konfiguriert)
     tools_cfg = config.get("tools", {})

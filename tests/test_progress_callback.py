@@ -155,6 +155,69 @@ def mock_db(job_db, monkeypatch):
     return job_db
 
 
+def _publishing_store():
+    """VectorStore-Attrappe mit heutiger Cleanup- und Publikationsschnittstelle.
+
+    Ein Volllauf bereinigt die Quellen vorab und prueft danach, dass keine
+    Dense-Vektoren uebrig sind; der Dateiabschluss wird nur ueber
+    ``finalize_document_versions(on_complete=...)`` mit der Gesamtversion
+    jeder geschriebenen Quelle bestaetigt.
+    """
+    store = MagicMock()
+    written = {}
+
+    def record(texts, metas, ids, *args, **kwargs):
+        written.update(zip(ids, metas, strict=True))
+        return list(ids)
+
+    def finalize(ids, *, publish_search, on_complete):
+        versions = {}
+        for cid in ids:
+            meta = written[cid]
+            versions.setdefault(meta["source"], {})[meta.get("parser", "standard")] = "v-test"
+        on_complete(versions)
+
+    store.get_collection_name.return_value = "kb_test"
+    store.get_ids_by_sources.return_value = []
+    store.add.side_effect = record
+    store.add_with_embeddings.side_effect = record
+    store.finalize_document_versions.side_effect = finalize
+    return store
+
+
+def _confirm_cli_completions(store, paths):
+    """Unveraenderte CLI-Dateien wie nach einem frueheren, abgeschlossenen Lauf.
+
+    Fuer die CLI-Datenquelle 0 bestaetigt ein passender Hash allein keinen
+    Abschluss: Dense muss Chunks der Quelle halten und PostgreSQL muss jeden
+    davon der Datenquelle 0 zuordnen. Sonst wird die Datei erneut verarbeitet.
+    """
+    import hashlib
+
+    from kiara.ingestion._file_utils import ChunkDatasources
+    from kiara.ingestion.pipeline import _ensure_cli_datasource
+
+    ids = {path: hashlib.md5(f"{path}::standard::0".encode()).hexdigest() for path in paths}
+    _ensure_cli_datasource()
+    ChunkDatasources().add_associations(list(ids.values()), 0, "test-model")
+    store.get_ids_by_sources.side_effect = lambda sources: [ids[s] for s in sources if s in ids]
+
+
+def _single_chunk_per_file(mock_load, mock_chunk, *, text, chunk):
+    """Loader/Chunker-Attrappen: je Datei ein Chunk mit deren eigener Quelle.
+
+    Chunk-IDs und Dokumentpublikation sind an die Quelle gebunden; eine fuer
+    alle Dateien gleiche Quelle wuerde sie zu einem Dokument verschmelzen.
+    """
+    mock_load.side_effect = lambda path, **kwargs: {
+        "text": text,
+        "metadata": {"source": path, "file_type": ".txt"},
+    }
+    mock_chunk.side_effect = lambda doc_text, metadata, **kwargs: [
+        {"text": chunk, "metadata": {"source": metadata["source"], "chunk_index": 0}}
+    ]
+
+
 # ---------------------------------------------------------------------------
 # progress_callback: Absolute Zahlen (skipped + processed / total)
 # ---------------------------------------------------------------------------
@@ -177,6 +240,7 @@ class TestProgressCallbackAbsolute:
         mock_hs_cls,
         minimal_config,
         tmp_path,
+        test_db,
     ):
         """Bei 3 skipped + 2 to_process von 5 total:
         - Initialer Callback: (3, 5) — skipped als Startwert
@@ -201,19 +265,10 @@ class TestProgressCallbackAbsolute:
                 return f"hash{idx}"
             return f"newhash{idx}"
 
-        mock_store = MagicMock()
-        mock_store_cls.return_value = mock_store
+        mock_store_cls.return_value = _publishing_store()
+        _confirm_cli_completions(mock_store_cls.return_value, stored)
 
-        mock_load.return_value = {
-            "text": "Inhalt",
-            "metadata": {"source": "x.txt", "file_type": ".txt"},
-        }
-        mock_chunk.return_value = [
-            {
-                "text": "chunk",
-                "metadata": {"source": "x.txt", "chunk_index": 0},
-            }
-        ]
+        _single_chunk_per_file(mock_load, mock_chunk, text="Inhalt", chunk="chunk")
 
         callback = MagicMock()
 
@@ -246,6 +301,7 @@ class TestProgressCallbackAbsolute:
         mock_hs_cls,
         minimal_config,
         tmp_path,
+        test_db,
     ):
         """Alle Dateien skipped → nur initialer Callback (skipped, total)."""
         all_files = [str(tmp_path / f"f{i}.txt") for i in range(4)]
@@ -262,7 +318,8 @@ class TestProgressCallbackAbsolute:
             idx = all_files.index(fp)
             return f"hash{idx}"
 
-        mock_store_cls.return_value = MagicMock()
+        mock_store_cls.return_value = _publishing_store()
+        _confirm_cli_completions(mock_store_cls.return_value, stored)
         callback = MagicMock()
 
         with (
@@ -308,17 +365,8 @@ class TestProgressCallbackAbsolute:
         def fake_hash(fp, _mode="mtime", *, file_stat=None):
             return "newhash"
 
-        mock_store_cls.return_value = MagicMock()
-        mock_load.return_value = {
-            "text": "Content",
-            "metadata": {"source": "x.txt", "file_type": ".txt"},
-        }
-        mock_chunk.return_value = [
-            {
-                "text": "c",
-                "metadata": {"source": "x.txt", "chunk_index": 0},
-            }
-        ]
+        mock_store_cls.return_value = _publishing_store()
+        _single_chunk_per_file(mock_load, mock_chunk, text="Content", chunk="c")
 
         callback = MagicMock()
 
@@ -355,6 +403,7 @@ class TestProgressCallbackAbsolute:
         mock_hs_cls,
         minimal_config,
         tmp_path,
+        test_db,
     ):
         """Resume-Szenario: 100 skipped + 50 zu verarbeiten von 200 total.
         Erster Callback: (100, 200), danach (101, 200), ..., (150, 200).
@@ -379,17 +428,9 @@ class TestProgressCallbackAbsolute:
                 return f"hash{idx}"
             return f"newhash{idx}"
 
-        mock_store_cls.return_value = MagicMock()
-        mock_load.return_value = {
-            "text": "Inhalt",
-            "metadata": {"source": "x.txt", "file_type": ".txt"},
-        }
-        mock_chunk.return_value = [
-            {
-                "text": "c",
-                "metadata": {"source": "x.txt", "chunk_index": 0},
-            }
-        ]
+        mock_store_cls.return_value = _publishing_store()
+        _confirm_cli_completions(mock_store_cls.return_value, stored)
+        _single_chunk_per_file(mock_load, mock_chunk, text="Inhalt", chunk="c")
 
         callback = MagicMock()
 
@@ -436,6 +477,7 @@ class TestStatsSkippedCalculation:
         mock_hs_cls,
         minimal_config,
         tmp_path,
+        test_db,
     ):
         """skipped_files = len(all_files) - len(files_to_process)."""
         all_files = [str(tmp_path / f"f{i}.txt") for i in range(10)]
@@ -455,7 +497,8 @@ class TestStatsSkippedCalculation:
                 return f"hash{idx}"
             return "new"
 
-        mock_store_cls.return_value = MagicMock()
+        mock_store_cls.return_value = _publishing_store()
+        _confirm_cli_completions(mock_store_cls.return_value, stored)
 
         with (
             patch("kiara_ingestion_core.file_diff.compute_file_hash", side_effect=fake_hash),
@@ -825,7 +868,7 @@ class TestProgressOnErrorFiles:
         def fake_hash(fp, _mode="mtime", *, file_stat=None):
             return "hash"
 
-        mock_store_cls.return_value = MagicMock()
+        mock_store_cls.return_value = _publishing_store()
         # Alle Dateien scheitern beim Laden
         mock_load.return_value = None
 
@@ -845,10 +888,11 @@ class TestProgressOnErrorFiles:
 
         # Initialer Callback: (0, 3)
         assert callback.call_args_list[0] == call(0, 3)
-        # Fehler-Dateien zaehlen trotzdem als Fortschritt (errors, nicht processed)
-        # Aber der Callback wird bei errors NICHT aufgerufen (nur bei processed)
-        # → Die 3 Dateien sind errors → kein weiterer Callback nach dem initialen
+        # Fehler-Dateien zaehlen als Fortschritt (errors, nicht processed):
+        # nach jeder uebersprungenen Datei wird skipped + processed gemeldet.
+        assert callback.call_args_list[1:] == [call(1, 3), call(2, 3), call(3, 3)]
         assert stats["errors"] == 3
+        assert stats["processed_files"] == 0
 
 
 # ---------------------------------------------------------------------------
@@ -873,6 +917,7 @@ class TestProgressConsistency:
         mock_hs_cls,
         minimal_config,
         tmp_path,
+        test_db,
     ):
         """Letzter Callback muss skipped + processed == total sein."""
         total = 50
@@ -892,17 +937,9 @@ class TestProgressConsistency:
             idx = all_files.index(fp)
             return f"h{idx}" if idx < skipped_count else "new"
 
-        mock_store_cls.return_value = MagicMock()
-        mock_load.return_value = {
-            "text": "x",
-            "metadata": {"source": "x.txt", "file_type": ".txt"},
-        }
-        mock_chunk.return_value = [
-            {
-                "text": "c",
-                "metadata": {"source": "x.txt", "chunk_index": 0},
-            }
-        ]
+        mock_store_cls.return_value = _publishing_store()
+        _confirm_cli_completions(mock_store_cls.return_value, stored)
+        _single_chunk_per_file(mock_load, mock_chunk, text="x", chunk="c")
 
         callback = MagicMock()
 

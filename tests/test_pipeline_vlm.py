@@ -58,6 +58,36 @@ def _mock_db_query_for_rows(rows):
 # -- Helpers ------------------------------------------------------------------
 
 
+def _publishing_store(mock_vs, store=None):
+    """Konfiguriert die VectorStore-Attrappe fuer die heutige Dokumentpublikation.
+
+    Ein Volllauf bereinigt die Quellen vorab und prueft danach, dass keine
+    Dense-Vektoren uebrig sind; der Dateiabschluss wird nur ueber
+    ``finalize_document_versions(on_complete=...)`` bestaetigt.
+    """
+    store = store if store is not None else mock_vs.return_value
+    mock_vs.return_value = store
+    written = {}
+
+    def record(texts, metas, ids, *args, **kwargs):
+        written.update(zip(ids, metas, strict=True))
+        return list(ids)
+
+    def finalize(ids, *, publish_search, on_complete):
+        versions = {}
+        for cid in ids:
+            meta = written[cid]
+            versions.setdefault(meta["source"], {})[meta.get("parser", "standard")] = "v-test"
+        on_complete(versions)
+
+    store.get_collection_name.return_value = "kb_test"
+    store.get_ids_by_sources.return_value = []
+    store.add.side_effect = record
+    store.add_with_embeddings.side_effect = record
+    store.finalize_document_versions.side_effect = finalize
+    return store
+
+
 def _base_config(tmp_path):
     """Minimale Config fuer Pipeline-Tests (mit VLM-Model)."""
     ds_path = tmp_path / "docs"
@@ -106,6 +136,7 @@ def _make_file(directory, name, content="Test content"):
 def test_vlm_enabled_calls_describe_image(mock_load, mock_describe, mock_vs, tmp_path):
     """ds_overrides={'vlm_enabled': True} + config mit vlm_model -> describe_image() aufgerufen."""
     config = _base_config(tmp_path)
+    _publishing_store(mock_vs)
     ds_path = tmp_path / "docs"
     _make_file(ds_path, "photo.png", b"\x89PNG\x00\x00")
 
@@ -126,6 +157,7 @@ def test_vlm_enabled_calls_describe_image(mock_load, mock_describe, mock_vs, tmp
 def test_vlm_disabled_no_describe_image_call(mock_load, mock_describe, mock_vs, tmp_path):
     """ds_overrides ohne vlm_enabled -> describe_image() wird NICHT aufgerufen."""
     config = _base_config(tmp_path)
+    _publishing_store(mock_vs)
     ds_path = tmp_path / "docs"
     _make_file(ds_path, "test.txt")
 
@@ -148,6 +180,7 @@ def test_vlm_enabled_no_model_no_describe_image_call(
 ):
     """ds_overrides={'vlm_enabled': True} aber kein VLM-Backend -> describe_image() NICHT aufgerufen."""
     config = _base_config(tmp_path)
+    _publishing_store(mock_vs)
     ds_path = tmp_path / "docs"
     _make_file(ds_path, "test.txt")
 
@@ -167,6 +200,7 @@ def test_vlm_enabled_no_model_no_describe_image_call(
 def test_vlm_overrides_none_no_describe_image_call(mock_load, mock_describe, mock_vs, tmp_path):
     """ds_overrides=None -> describe_image() wird NICHT aufgerufen."""
     config = _base_config(tmp_path)
+    _publishing_store(mock_vs)
     ds_path = tmp_path / "docs"
     _make_file(ds_path, "test.txt")
 
@@ -191,6 +225,7 @@ def test_vlm_prompt_from_config_passed_to_describe_image(
 ):
     """ingestion.vlm_prompt aus Config wird als prompt= an describe_image() durchgereicht."""
     config = _base_config(tmp_path)
+    _publishing_store(mock_vs)
     config["ingestion"]["vlm_prompt"] = "Describe in English please."
     ds_path = tmp_path / "docs"
     img_path = _make_file(ds_path, "photo.png", b"\x89PNG\x00\x00")
@@ -214,6 +249,7 @@ def test_vlm_prompt_from_config_passed_to_describe_image(
 def test_vlm_prompt_empty_passes_empty_string(mock_load, mock_describe, mock_vs, tmp_path):
     """Leerer vlm_prompt in Config -> prompt='' an describe_image() (Fallback in vision.py)."""
     config = _base_config(tmp_path)
+    _publishing_store(mock_vs)
     # vlm_prompt nicht gesetzt -> Default ""
     ds_path = tmp_path / "docs"
     img_path = _make_file(ds_path, "photo.png", b"\x89PNG\x00\x00")
@@ -240,6 +276,7 @@ def test_vlm_prompt_empty_passes_empty_string(mock_load, mock_describe, mock_vs,
 def test_vlm_enabled_adds_image_types(mock_load, mock_describe, mock_vs, tmp_path):
     """vlm_enabled=True -> .png/.jpg/.tiff werden in file_types aufgenommen."""
     config = _base_config(tmp_path)
+    _publishing_store(mock_vs)
     ds_path = tmp_path / "docs"
     _make_file(ds_path, "scan.png", b"\x89PNG\x00")
 
@@ -261,6 +298,7 @@ def test_vlm_enabled_adds_image_types(mock_load, mock_describe, mock_vs, tmp_pat
 def test_vlm_disabled_no_image_types(mock_load, mock_describe, mock_vs, tmp_path):
     """vlm_enabled=False -> Bilddateien werden NICHT gescannt."""
     config = _base_config(tmp_path)
+    _publishing_store(mock_vs)
     ds_path = tmp_path / "docs"
     _make_file(ds_path, "scan.png", b"\x89PNG\x00")
 
@@ -278,6 +316,7 @@ def test_ddu_or_vlm_both_add_image_types(mock_load, mock_describe, mock_vs, tmp_
     """Entweder ddu_enabled=True ODER vlm_enabled=True -> Bild-Extensions vorhanden."""
     for overrides_dict in [{"ddu_enabled": True}, {"vlm_enabled": True}]:
         config = _base_config(tmp_path)
+        _publishing_store(mock_vs)
         ds_path = tmp_path / "docs"
         _make_file(ds_path, "img.png", b"\x89PNG\x00")
 
@@ -287,12 +326,19 @@ def test_ddu_or_vlm_both_add_image_types(mock_load, mock_describe, mock_vs, tmp_
             "metadata": {"source": str(ds_path / "img.png"), "parser": "vlm", "file_type": ".png"},
         }
 
-        run_ingestion(config, embedding_model="nomic-embed-text", ds_overrides=overrides_dict)
+        from kiara.ingestion import pipeline
 
-        # Bild-Extensions sollten in file_types sein
-        ft = config["datasource"]["file_types"]
+        # run_ingestion arbeitet auf einer Kopie der Config (Aufrufer bleibt
+        # unveraendert); massgeblich ist die Config, mit der gescannt wird.
+        with patch.object(pipeline, "scan_files", wraps=pipeline.scan_files) as scan:
+            run_ingestion(config, embedding_model="nomic-embed-text", ds_overrides=overrides_dict)
+
+        # Bild-Extensions sollten in den gescannten file_types sein
+        scan.assert_called_once()
+        ft = scan.call_args.args[0]["datasource"]["file_types"]
         for ext in [".png", ".tiff", ".tif", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".heic"]:
             assert ext in ft, f"{ext} missing in file_types for {overrides_dict}"
+        assert ".png" not in config["datasource"]["file_types"]
 
         mock_load.reset_mock()
         mock_describe.reset_mock()
@@ -324,8 +370,7 @@ def test_both_ddu_and_vlm_produce_two_chunks(mock_load, mock_describe, mock_vs, 
         "metadata": {"source": img_path, "parser": "vlm", "file_type": ".png"},
     }
 
-    mock_store = MagicMock()
-    mock_vs.return_value = mock_store
+    mock_store = _publishing_store(mock_vs, MagicMock())
 
     run_ingestion(
         config,
@@ -355,8 +400,7 @@ def test_only_vlm_doc_when_load_file_returns_none(mock_load, mock_describe, mock
         "metadata": {"source": img_path, "parser": "vlm", "file_type": ".png"},
     }
 
-    mock_store = MagicMock()
-    mock_vs.return_value = mock_store
+    mock_store = _publishing_store(mock_vs, MagicMock())
 
     stats = run_ingestion(
         config, embedding_model="nomic-embed-text", ds_overrides={"vlm_enabled": True}
@@ -370,8 +414,10 @@ def test_only_vlm_doc_when_load_file_returns_none(mock_load, mock_describe, mock
 @patch("kiara.ingestion.pipeline.VectorStore")
 @patch("kiara.ingestion.runtime.describe_image")
 @patch("kiara.ingestion.runtime.load_file")
-def test_only_load_file_doc_when_vlm_fails(mock_load, mock_describe, mock_vs, tmp_path):
-    """load_file -> doc, describe_image -> None. 1 Chunk, vlm_errors erhoeht."""
+def test_failed_required_vlm_does_not_complete_partial_document(
+    mock_load, mock_describe, mock_vs, tmp_path
+):
+    """Fehlgeschlagene VLM-Verarbeitung bleibt trotz Standardtext wiederholbar."""
     config = _base_config(tmp_path)
     ds_path = tmp_path / "docs"
     img_path = _make_file(ds_path, "img.png", b"\x89PNG\x00")
@@ -387,19 +433,16 @@ def test_only_load_file_doc_when_vlm_fails(mock_load, mock_describe, mock_vs, tm
     }
     mock_describe.return_value = None  # VLM fehlgeschlagen
 
-    mock_store = MagicMock()
-    mock_vs.return_value = mock_store
+    mock_store = _publishing_store(mock_vs, MagicMock())
 
     stats = run_ingestion(
         config, embedding_model="nomic-embed-text", ds_overrides={"vlm_enabled": True}
     )
 
     assert stats.get("vlm_errors", 0) == 1
-    # 1 Chunk von load_file
-    total_texts = []
-    for c in mock_store.add.call_args_list:
-        total_texts.extend(c[0][0])
-    assert len(total_texts) == 1
+    assert stats["errors"] == 1
+    assert stats["processed_files"] == 0
+    mock_store.add.assert_not_called()
 
 
 @patch("kiara.ingestion.pipeline.VectorStore")
@@ -408,6 +451,7 @@ def test_only_load_file_doc_when_vlm_fails(mock_load, mock_describe, mock_vs, tm
 def test_both_none_increments_errors(mock_load, mock_describe, mock_vs, tmp_path):
     """load_file -> None, describe_image -> None. errors erhoeht."""
     config = _base_config(tmp_path)
+    _publishing_store(mock_vs)
     ds_path = tmp_path / "docs"
     _make_file(ds_path, "img.png", b"\x89PNG\x00")
 
@@ -439,8 +483,7 @@ def test_chunk_id_contains_parser_type(mock_load, mock_describe, mock_vs, tmp_pa
         "metadata": {"source": img_path, "parser": "vlm", "file_type": ".png"},
     }
 
-    mock_store = MagicMock()
-    mock_vs.return_value = mock_store
+    mock_store = _publishing_store(mock_vs, MagicMock())
 
     run_ingestion(config, embedding_model="nomic-embed-text", ds_overrides={"vlm_enabled": True})
 
@@ -474,8 +517,7 @@ def test_chunk_id_ddu_and_vlm_different(mock_load, mock_describe, mock_vs, tmp_p
         "metadata": {"source": img_path, "parser": "vlm", "file_type": ".png"},
     }
 
-    mock_store = MagicMock()
-    mock_vs.return_value = mock_store
+    mock_store = _publishing_store(mock_vs, MagicMock())
 
     run_ingestion(
         config,
@@ -512,8 +554,7 @@ def test_chunk_id_standard_parser_for_text_files(mock_load, mock_describe, mock_
         },
     }
 
-    mock_store = MagicMock()
-    mock_vs.return_value = mock_store
+    mock_store = _publishing_store(mock_vs, MagicMock())
 
     run_ingestion(config, embedding_model="nomic-embed-text")
 
@@ -538,8 +579,7 @@ def test_chunk_id_deterministic(mock_load, mock_describe, mock_vs, tmp_path):
         "metadata": {"source": img_path, "parser": "vlm", "file_type": ".png"},
     }
 
-    mock_store = MagicMock()
-    mock_vs.return_value = mock_store
+    mock_store = _publishing_store(mock_vs, MagicMock())
 
     # Erster Lauf
     run_ingestion(
@@ -584,8 +624,7 @@ def test_vlm_doc_is_single_chunk(mock_load, mock_describe, mock_vs, tmp_path):
         "metadata": {"source": img_path, "parser": "vlm", "file_type": ".png"},
     }
 
-    mock_store = MagicMock()
-    mock_vs.return_value = mock_store
+    mock_store = _publishing_store(mock_vs, MagicMock())
 
     run_ingestion(config, embedding_model="nomic-embed-text", ds_overrides={"vlm_enabled": True})
 
@@ -611,8 +650,7 @@ def test_vlm_doc_chunk_strategy_is_vlm_single(mock_load, mock_describe, mock_vs,
         "metadata": {"source": img_path, "parser": "vlm", "file_type": ".png"},
     }
 
-    mock_store = MagicMock()
-    mock_vs.return_value = mock_store
+    mock_store = _publishing_store(mock_vs, MagicMock())
 
     run_ingestion(config, embedding_model="nomic-embed-text", ds_overrides={"vlm_enabled": True})
 
@@ -637,8 +675,7 @@ def test_vlm_doc_chunk_index_is_zero(mock_load, mock_describe, mock_vs, tmp_path
         "metadata": {"source": img_path, "parser": "vlm", "file_type": ".png"},
     }
 
-    mock_store = MagicMock()
-    mock_vs.return_value = mock_store
+    mock_store = _publishing_store(mock_vs, MagicMock())
 
     run_ingestion(config, embedding_model="nomic-embed-text", ds_overrides={"vlm_enabled": True})
 
@@ -663,8 +700,7 @@ def test_vlm_doc_long_text_still_single_chunk(mock_load, mock_describe, mock_vs,
         "metadata": {"source": img_path, "parser": "vlm", "file_type": ".png"},
     }
 
-    mock_store = MagicMock()
-    mock_vs.return_value = mock_store
+    mock_store = _publishing_store(mock_vs, MagicMock())
 
     run_ingestion(config, embedding_model="nomic-embed-text", ds_overrides={"vlm_enabled": True})
 
@@ -684,6 +720,7 @@ def test_vlm_doc_long_text_still_single_chunk(mock_load, mock_describe, mock_vs,
 def test_vlm_chunks_counter_incremented(mock_load, mock_describe, mock_vs, tmp_path):
     """Erfolgreiche VLM-Beschreibung -> stats['vlm_chunks'] == 1."""
     config = _base_config(tmp_path)
+    _publishing_store(mock_vs)
     ds_path = tmp_path / "docs"
     img_path = _make_file(ds_path, "img.png", b"\x89PNG\x00")
 
@@ -706,6 +743,7 @@ def test_vlm_chunks_counter_incremented(mock_load, mock_describe, mock_vs, tmp_p
 def test_vlm_errors_counter_incremented(mock_load, mock_describe, mock_vs, tmp_path):
     """Fehlgeschlagene VLM-Beschreibung fuer Bilddatei -> stats['vlm_errors'] == 1."""
     config = _base_config(tmp_path)
+    _publishing_store(mock_vs)
     ds_path = tmp_path / "docs"
     _make_file(ds_path, "img.png", b"\x89PNG\x00")
 
@@ -725,6 +763,7 @@ def test_vlm_errors_counter_incremented(mock_load, mock_describe, mock_vs, tmp_p
 def test_vlm_errors_not_incremented_for_non_images(mock_load, mock_describe, mock_vs, tmp_path):
     """describe_image() gibt None fuer .pdf -> vlm_errors wird NICHT erhoeht."""
     config = _base_config(tmp_path)
+    _publishing_store(mock_vs)
     ds_path = tmp_path / "docs"
     pdf_path = _make_file(ds_path, "doc.pdf")
 
@@ -753,6 +792,7 @@ def test_vlm_errors_not_incremented_for_non_images(mock_load, mock_describe, moc
 def test_vlm_stats_multiple_files(mock_load, mock_describe, mock_vs, tmp_path):
     """3 Bilder: 2 erfolgreich, 1 fehlgeschlagen -> vlm_chunks==2, vlm_errors==1."""
     config = _base_config(tmp_path)
+    _publishing_store(mock_vs)
     ds_path = tmp_path / "docs"
     img1 = _make_file(ds_path, "img1.png", b"\x89PNG\x00")
     img2 = _make_file(ds_path, "img2.jpg", b"\xff\xd8\xff\x00")
@@ -1002,8 +1042,7 @@ def test_vlm_file_cannot_fall_back_to_dense_in_selected_late_index(
         "metadata": {"source": img_path, "parser": "vlm", "file_type": ".png"},
     }
 
-    mock_store = MagicMock()
-    mock_vs.return_value = mock_store
+    mock_store = _publishing_store(mock_vs, MagicMock())
 
     with patch("kiara.ingestion.runtime._mark_file_processed") as completed:
         stats = run_ingestion(

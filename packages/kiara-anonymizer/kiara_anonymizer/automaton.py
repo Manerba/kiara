@@ -27,6 +27,9 @@ from kiara_anonymizer._text_utils import _is_word_boundary, _resolve_overlaps
 logger = logging.getLogger(__name__)
 
 
+# Umlaute -> Umschrift fuer zusaetzliche Erkennungsvarianten (Hausaenderung)
+_UMLAUT_TRANSLITERATION = str.maketrans({"ä": "ae", "ö": "oe", "ü": "ue"})
+
 # -- Pseudonym-Praefix-Tabelle ------------------------------------------------
 
 _PSEUDONYM_PREFIXES = {
@@ -173,6 +176,22 @@ class AnonymizationAutomaton:
         self._word_boundaries = word_boundaries
 
     def add_entry(
+        self, text: str, entity_type: str, erp_key: str, reporting_category: str | None = None
+    ) -> bool:
+        """Fuegt einen Stammdaten-Eintrag hinzu, dazu die Schreibweise ohne Umlaute.
+
+        Hausaenderung: Zu "Müller" wird auch "Mueller" erkannt (Mailadressen,
+        Dateinamen, alte Texte). ß braucht keine Variante, casefold macht daraus ss.
+        """
+        added = self._add_surface(text, entity_type, erp_key, reporting_category)
+        if added:
+            folded = unicodedata.normalize("NFC", text.strip()).casefold()
+            transliterated = folded.translate(_UMLAUT_TRANSLITERATION)
+            if transliterated != folded and transliterated not in self._entries_by_surface:
+                self._add_surface(transliterated, entity_type, erp_key, reporting_category)
+        return added
+
+    def _add_surface(
         self, text: str, entity_type: str, erp_key: str, reporting_category: str | None = None
     ) -> bool:
         """Fuegt einen Stammdaten-Eintrag zum Automaten hinzu.

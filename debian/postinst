@@ -69,7 +69,11 @@ case "$1" in
         }
 
         rm -rf "$VENV_BUILD" "$VENV_OLD"
-        python3 -m venv "$VENV_BUILD"
+        # Alte In-Tree-Build-Artefakte entfernen: dpkg setzt die Mtimes der Quellen auf das
+        # Changelog-Datum, setuptools wuerde sonst ein veraltetes build/lib wiederverwenden.
+        rm -rf /opt/kiara/build /opt/kiara/packages/*/build \
+               /opt/kiara/*.egg-info /opt/kiara/packages/*/*.egg-info
+        python3.12 -m venv "$VENV_BUILD"
         PIP="$VENV_BUILD/bin/pip"
         "$PIP" install --upgrade pip --quiet
         # Reihenfolge kritisch: torch+torchvision CPU-only ZUERST, sonst koennte eine

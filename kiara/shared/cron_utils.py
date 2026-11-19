@@ -251,10 +251,17 @@ def write_schedule(ds_id: int, name: str, cron_expr: str) -> None:
 
 
 def remove_schedule(ds_id: int) -> None:
-    """Entfernt den Cron-Schedule fuer eine Datenquelle."""
+    """Entfernt den Cron-Schedule fuer eine Datenquelle.
+
+    Ohne Eintrag fuer die DS wird nichts geschrieben: Die Admin-UI ruft das
+    bei jedem Speichern mit Intervall "manuell"/"global" auf.
+    """
     with _cron_lock, _cross_process_lock():
         lines = _read_cron_lines()
         new_lines = _remove_ds_lines(lines, ds_id)
+        if new_lines == lines:
+            logger.debug("Kein Cron-Schedule fuer DS %s vorhanden", ds_id)
+            return
         _write_cron_lines(new_lines)
     logger.info("Cron-Schedule entfernt fuer DS %s", ds_id)
 

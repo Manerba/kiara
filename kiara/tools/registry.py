@@ -4,6 +4,7 @@ Verwaltet registrierte Tools, filtert nach Berechtigungen und generiert
 den Prompt-Abschnitt, der dem LLM die verfuegbaren Werkzeuge beschreibt.
 """
 
+import importlib
 import logging
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import replace
@@ -248,3 +249,32 @@ def load_config_tool_permissions() -> dict[str, list[str]]:
     config = load_config()
     permissions = (config.get("tools") or {}).get("permissions", {})
     return _normalize_permission_matrix(permissions)
+
+
+def register_tool_plugins(registry, config, allowed_datasource_ids=None) -> list[str]:
+    """Zusaetzliche Agent-Tools laden (Hauspatch chat-werkzeug-plugins).
+
+    ``tools.plugins`` ist eine Liste von ``modul:funktion`` (ohne Funktion:
+    ``chat_tools``). Aufruf: ``funktion(config=..., allowed_datasource_ids=...)``,
+    Rueckgabe sind BaseTool-Instanzen. ``allowed_datasource_ids`` ist die bereits
+    permission-gefilterte Datenquellen-Liste des Chats (None = alle). Ein fehlerhaftes
+    Plugin wird als Fehler protokolliert und verhindert die uebrigen Tools nicht.
+    """
+    tools_cfg = config.get("tools") if isinstance(config, dict) else None
+    specs = tools_cfg.get("plugins") if isinstance(tools_cfg, dict) else None
+    if not specs:
+        return []
+    if isinstance(specs, str):
+        specs = [specs]
+    names: list[str] = []
+    for spec in specs:
+        module_name, _, func_name = str(spec).partition(":")
+        try:
+            module = importlib.import_module(module_name.strip())
+            factory = getattr(module, (func_name or "chat_tools").strip())
+            for tool in factory(config=config, allowed_datasource_ids=allowed_datasource_ids) or []:
+                registry.register(tool)
+                names.append(tool.definition().name)
+        except Exception as exc:
+            logger.error("Tool-Plugin %s nicht geladen: %s: %s", spec, type(exc).__name__, exc)
+    return names

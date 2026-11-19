@@ -55,6 +55,7 @@ class SMBConnector(ConnectorBase):
 
     name = ConnectorType.SMB
     label = "SMB-Freigabe"
+    badge_label = "SMB"
     badge_class = "info"
     supports_browse = True
 

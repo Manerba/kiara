@@ -119,8 +119,14 @@ async function initSearchTab() {
             const source = SharedUi.runtime.escapeHtml(row._source_full || row.metadata?.source || '');
             const score = row._raw_score !== undefined ? (row._raw_score * 100).toFixed(1) + '%' : '';
             const text = SharedUi.runtime.escapeHtml(row._full_text || row.text || '');
+            const cad = row.metadata?.parser === 'cad-pkg'
+                ? `<div class="search-detail-meta"><strong>CAD-Objekt:</strong> ${SharedUi.runtime.escapeHtml(row.metadata.cad_object_id || '')}
+                   &nbsp; <strong>Dateiversion (SHA-256):</strong> ${SharedUi.runtime.escapeHtml(row.metadata.cad_source_hash || '')}
+                   &nbsp; <strong>Struktur:</strong> ${row.metadata.cad_structure_complete ? 'vollständig gelesen' : 'unvollständig gelesen'}</div>`
+                : '';
             return `<div class="search-detail">
                 <div class="search-detail-meta"><strong>Quelle:</strong> ${source} &nbsp; <strong>Score:</strong> ${score}</div>
+                ${cad}
                 <pre class="search-detail-text">${text}</pre>
             </div>`;
         },

@@ -288,6 +288,11 @@ DDU_DEFAULT_TABLE_MODE: str = "accurate"
 'accurate' liefert bessere Ergebnisse, ist aber langsamer als 'fast'.
 """
 
+# RT-DETR verwechselt Seitenlaengen von 1/3 Pixeln mit Farbkanaelen.
+DDU_IMAGE_MIN_SIDE: int = 4
+# Pillow-Standardgrenze; nicht global deaktivieren oder hochsetzen.
+DDU_IMAGE_MAX_PIXELS: int = 89_478_485
+
 HASH_CHECKPOINT_INTERVAL: int = 50
 """Batch-Groesse fuer File-Hash-Checkpoints waehrend der Ingestion.
 
@@ -749,6 +754,16 @@ Schuetzt vor sinnlosem Weiterlaufen, wenn ein Backend (Embedding-Server,
 DDU) ausgefallen ist. Einzelne transiente Fehler (< Schwellwert) werden
 toleriert; bei einem systematischen Ausfall (>= Schwellwert) bricht die
 Pipeline sofort mit RuntimeError ab.
+"""
+
+INGESTION_MAX_CONSECUTIVE_UNEXPECTED_ERRORS_DEFAULT: int = 50
+"""Lawinenschutz fuer unerwartete Ausnahmen einzelner Dateien.
+
+Eine unerwartete Ausnahme beim Laden oder Chunken einer Datei wird als
+Dateifehler verbucht, der Job laeuft weiter. Wirft dieselbe Ausnahme
+(Typ und Codestelle) bei so vielen Dateien hintereinander, liegt ein
+systematischer Fehler vor und der Job bricht ab. Config:
+``ingestion.max_consecutive_unexpected_errors``.
 """
 
 # ---------------------------------------------------------------------------

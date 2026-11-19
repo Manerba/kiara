@@ -12,6 +12,7 @@ Deckt ab:
 from unittest.mock import MagicMock, patch
 
 import pytest
+from kiara_ingestion_core.models import ProcessingContext
 
 from kiara.backend_selector import BackendUnavailableError
 
@@ -900,7 +901,7 @@ class TestRunCompletedTracking:
     ):
         from kiara.ingestion.pipeline import run_ingestion
 
-        mock_apply.return_value = MagicMock()
+        mock_apply.return_value = ProcessingContext()
         mock_hash_store = MagicMock()
         mock_diff.return_value = ([], [], {}, [], mock_hash_store, {})
         config = {
@@ -942,7 +943,7 @@ class TestRunCompletedTracking:
     ):
         from kiara.ingestion.pipeline import run_ingestion
 
-        mock_apply.return_value = MagicMock()
+        mock_apply.return_value = ProcessingContext()
         mock_hash_store = MagicMock()
         mock_diff.return_value = (
             ["/f1"],
@@ -998,7 +999,7 @@ class TestEmbeddingModelResolution:
     ):
         from kiara.ingestion.pipeline import run_ingestion
 
-        mock_apply.return_value = MagicMock()
+        mock_apply.return_value = ProcessingContext()
         mock_hash_store = MagicMock()
         mock_diff.return_value = ([], [], {}, [], mock_hash_store, {})
         config = {
@@ -1046,13 +1047,17 @@ class TestMarkerInRunIngestion:
             "ingestion": {"batch_size": 10},
             "datasource": {"path": "/tmp"},
         }
-        mock_apply.return_value = MagicMock()
+        mock_apply.return_value = ProcessingContext()
         mock_hash_store = MagicMock()
         mock_diff.return_value = ([], [], {}, [], mock_hash_store, {})
 
-        run_ingestion(config=None, embedding_model="m")
+        # Der aeussere CAD-Router (route_cad_ingestion) laedt die Config bei
+        # config=None bereits selbst ueber kiara.config.load_config und reicht
+        # die markierte Kopie durch; derselbe Mock deckt beide Ladestellen ab.
+        with patch("kiara.config.load_config", mock_load):
+            run_ingestion(config=None, embedding_model="m")
 
-        # load_config wurde aufgerufen
+        # load_config wurde genau einmal aufgerufen
         mock_load.assert_called_once()
         # Die Config die an _load_and_diff_files ging, hat den Marker
         actual_config = mock_diff.call_args[0][0]

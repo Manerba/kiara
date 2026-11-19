@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 from test_document_publication_colbert import colbert_pipeline  # noqa: F401
-from test_document_publication_memberships import _second_datasource
+from test_document_publication_memberships import _second_datasource, _use_es_sdk
 from test_document_publication_pipeline import whole_pipeline  # noqa: F401
 from test_document_version_completion import document_run  # noqa: F401
 from test_index_compatibility_s4 import _persist_contract, _resolved
@@ -267,13 +267,17 @@ def test_cli_cleanup_includes_historical_colbert_only_owner_and_graph(
 
 @pytest.mark.parametrize("failure", ["colbert", "graph", "elasticsearch", "dense"])
 def test_cli_cleanup_failure_retains_retry_anchor_and_recounts(
-    colbert_pipeline, test_db, monkeypatch, failure
+    colbert_pipeline, test_db, monkeypatch, request, failure
 ):
     state = colbert_pipeline
     case = state.case
     assert state.run()["processed_files"] == 1
     ids = [c["_doc_id"] for c in case.snapshot()]
     chunks = ChunkDatasources()
+    if failure == "elasticsearch":
+        # Der ES-Schritt existiert nur, wenn das Modell ES nutzt.
+        _use_es_sdk(case, case.ds, monkeypatch, request)
+        assert set(case.es) == set(ids)
 
     def cleanup():
         pipeline._cleanup_stale_chunks(
@@ -289,12 +293,16 @@ def test_cli_cleanup_failure_retains_retry_anchor_and_recounts(
         elif failure == "graph":
             fault.setattr(GraphStore, "delete_by_chunk_ids", fail)
         elif failure == "elasticsearch":
-            fault.setattr("kiara.ingestion.vectordb_ops.delete_from_elasticsearch", fail)
+            fault.setattr("kiara.retrieval.elasticsearch_service.delete_by_ids", fail)
         else:
             fault.setattr(case.store, "delete_by_sources", fail)
         with pytest.raises(RuntimeError, match="Injected cleanup failure"):
             cleanup()
     assert len(case.snapshot()) == 3
+    if failure == "elasticsearch":
+        assert set(case.es) == set(ids)
+        saved = publication.pending_source_cleanups("kb_test")[case.path]
+        assert len(saved["es::test-model"]) == len(ids)
     assert case.path not in case.hashes.load(case.ds, "test-model")
     # Vor dem PG-Commit bleibt die Zuordnung bestehen; danach sind die Zaehler
     # bereits konsistent, obwohl Dense/ES noch auf den Wiederanlauf warten.
@@ -313,6 +321,8 @@ def test_cli_cleanup_failure_retains_retry_anchor_and_recounts(
     assert not state.store.existing_ids(ids)
     assert not chunks.get_datasource_ids_for_chunks(ids, "test-model")
     assert not chunks.get_datasource_ids_for_chunks(ids, state.key)
+    if failure == "elasticsearch":
+        assert case.es == {}
 
 
 def test_cli_cleanup_without_membership_helper_retains_other_source(colbert_pipeline, test_db):

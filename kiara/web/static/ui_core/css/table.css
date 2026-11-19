@@ -48,6 +48,51 @@
     gap: 4px;
     white-space: nowrap;
     user-select: none;
+    position: relative;
+    min-width: 0;
+    justify-self: stretch;
+}
+
+.header-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ── Spaltenbreite per Ziehgriff (table.js) ─────────────────────── */
+
+.col-resize-handle {
+    position: absolute;
+    top: -6px;
+    bottom: -6px;
+    right: -8px;
+    width: 8px;
+    cursor: col-resize;
+    touch-action: none;
+    z-index: 1;
+}
+
+.col-resize-handle::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 3px;
+    width: 2px;
+    border-radius: 1px;
+    background-color: transparent;
+    transition: background-color var(--transition-speed);
+}
+
+.col-resize-handle:hover::after,
+.col-resize-handle.active::after {
+    background-color: var(--accent-primary);
+}
+
+body.table-col-resizing,
+body.table-col-resizing * {
+    cursor: col-resize !important;
+    user-select: none;
 }
 
 button.header-cell {

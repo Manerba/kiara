@@ -164,6 +164,8 @@ class _RefetchSession:
         self.conn = None
 
     def fetch(self, folder: str, uid: str, expected_validity: str) -> bytes:
+        from kiara.ingestion.imap_scanner import quote_mailbox
+
         scanner = self.scanner
         _number(uid, "UID")
         _number(expected_validity, "UIDVALIDITY der Registry")
@@ -172,7 +174,7 @@ class _RefetchSession:
         for attempt in range(2):
             try:
                 self.conn = scanner._ensure_connection_ready(self.conn)
-                status, _ = self.conn.select(folder, readonly=True)
+                status, _ = self.conn.select(quote_mailbox(folder), readonly=True)
                 if status != "OK":
                     raise ValueError(f"IMAP-Ordner nicht selektierbar: {folder}")
                 _kind, values = self.conn.response("UIDVALIDITY")

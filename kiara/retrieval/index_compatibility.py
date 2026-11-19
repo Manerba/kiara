@@ -902,9 +902,6 @@ def insert_index_contract(
         "collection_name",
         "vector_kind",
         "requested_model",
-        "backend_id",
-        "backend_provider",
-        "backend_url",
         "canonical_model_id",
         "profile_id",
         "profile_kind",
@@ -940,9 +937,6 @@ def insert_index_contract(
         target.collection_name,
         target.vector_kind.value,
         target.requested_model,
-        resolved.backend_id,
-        resolved.backend_provider,
-        resolved.backend_url,
         resolved.canonical_model_id,
         resolved.profile_id,
         resolved.profile_kind,
@@ -971,8 +965,8 @@ def insert_index_contract(
         backfill_run_id,
     )
     placeholders = ["%s"] * len(columns)
-    placeholders[33] = "now()"
-    sql_values = values[:33] + values[34:]
+    placeholders[30] = "now()"
+    sql_values = values[:30] + values[31:]
     row = conn.execute(
         f"INSERT INTO index_contracts ({', '.join(columns)}) VALUES "
         f"({', '.join(placeholders)}) RETURNING *",
@@ -1093,9 +1087,6 @@ def _validate_runtime_identity_binding(
 
     comparisons = (
         ("requested_model", target.requested_model, "index_requested_model_mismatch"),
-        ("backend_id", resolved.backend_id, "index_backend_mismatch"),
-        ("backend_provider", resolved.backend_provider, "index_backend_provider_mismatch"),
-        ("backend_url", resolved.backend_url, "index_backend_url_mismatch"),
         ("canonical_model_id", resolved.canonical_model_id, "index_canonical_model_mismatch"),
         ("profile_id", resolved.profile_id, "index_profile_mismatch"),
         ("profile_kind", resolved.profile_kind, "index_profile_kind_mismatch"),
@@ -1185,9 +1176,6 @@ def _resolved_from_stored_binding(
         state=ContractState.VALID,
         reason_code="index_stored_binding_verified",
         target=target,
-        backend_id=stored.get("backend_id"),
-        backend_provider=stored.get("backend_provider"),
-        backend_url=stored.get("backend_url"),
         canonical_model_id=stored.get("canonical_model_id"),
         profile_id=stored.get("profile_id"),
         profile_kind=stored.get("profile_kind"),

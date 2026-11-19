@@ -229,7 +229,11 @@ class TestVectorDBDeleteCollectionGraphCleanup:
             call_log.append((sql, params))
             cursor = MagicMock()
             s = " ".join(sql.split()).lower()  # normalize
-            if "db_remains" in s or "(select count(*) from datasource_embeddings" in s.replace(
+            if "from index_contracts" in s:
+                # Keine gespeicherte Bindung: Wartung loest das historische
+                # Dense-Ziel auf; der (Passthrough-)Guard bleibt massgeblich.
+                cursor.fetchone.return_value = None
+            elif "db_remains" in s or "(select count(*) from datasource_embeddings" in s.replace(
                 "\n", " "
             ):
                 cursor.fetchone.return_value = {"cnt": db_remains}

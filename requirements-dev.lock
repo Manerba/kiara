@@ -2,7 +2,7 @@
 # Do not edit manually. Run: make requirements-lock
 # Included extras: exchange, mcp, test, dev
 # Scope: local development and CI
-# Source-SHA256: 519f981a108af3e3ab25359c1e544073c80ec549a739a5c911cf196c9cf8b0bf
+# Source-SHA256: cf372d2bfacc1b8b00d13511350eaa35ef4df1910237c36fe6633ec11aec08b0
 --extra-index-url https://download.pytorch.org/whl/cpu
 
 aiohappyeyeballs==2.6.1
@@ -98,6 +98,7 @@ langgraph-prebuilt==1.0.13
 langgraph-sdk==0.3.14
 langsmith==0.8.3
 ldap3==2.9.1
+libpff-python==20260926
 lupa==2.8
 lxml==6.1.0
 markdown-it-py==4.2.0
@@ -115,6 +116,7 @@ networkx==3.6.1
 nodeenv==1.10.0
 numpy==2.4.4
 odfpy==1.4.1
+olefile==0.47
 ollama==0.6.2
 openai==2.36.0
 openapi-pydantic==0.5.1
@@ -214,6 +216,7 @@ watchfiles==1.1.1
 webencodings==0.6.1
 websockets==16.0
 wheel==0.47.0
+xlrd==2.0.2
 xlsxwriter==3.2.9
 xxhash==3.7.0
 yarl==1.23.0

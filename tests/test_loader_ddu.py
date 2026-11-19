@@ -4,7 +4,7 @@ Testet _load_with_docling() Remote-Failover, load_file() DDU-Pfad,
 Fallback, Binary-Guard und Nicht-DDU-Formate.
 """
 
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 
 import kiara.ingestion.loader as loader_module
 from kiara.ingestion.loader import (
@@ -40,7 +40,20 @@ _REMOTE_BACKEND = {
 def _make_file(tmp_path, name, content="Dummy content for testing"):
     """Erstelle eine temporaere Datei mit gegebenem Inhalt."""
     f = tmp_path / name
-    f.write_text(content)
+    if content == "Dummy content for testing" and f.suffix == ".pdf":
+        f.write_bytes(b"%PDF-1.4\ninvalid PDF for mocked DDU tests")
+    elif content == "Dummy content for testing" and f.suffix in {".png", ".jpg", ".tiff"}:
+        from PIL import Image
+
+        Image.new("RGB", (8, 8), "white").save(f)
+    elif content == "Dummy content for testing" and f.suffix == ".docx":
+        from docx import Document
+
+        document = Document()
+        document.add_paragraph(content)
+        document.save(f)
+    else:
+        f.write_text(content)
     return str(f)
 
 
@@ -202,7 +215,7 @@ def test_ddu_pdf_calls_docling(mock_docling, tmp_path):
     mock_docling.return_value = ("# PDF Content", "", "docling-remote")
 
     result = load_file(path, ddu_enabled=True, ddu_backends=[_REMOTE_BACKEND])
-    mock_docling.assert_called_once_with(path, ddu_backends=[_REMOTE_BACKEND])
+    mock_docling.assert_called_once_with(path, ddu_backends=[_REMOTE_BACKEND], metadata=ANY)
     assert result is not None
     assert result["text"] == "# PDF Content"
 
@@ -214,7 +227,7 @@ def test_ddu_png_calls_docling(mock_docling, tmp_path):
     mock_docling.return_value = ("OCR text from image", "", "docling-remote")
 
     result = load_file(path, ddu_enabled=True, ddu_backends=[_REMOTE_BACKEND])
-    mock_docling.assert_called_once_with(path, ddu_backends=[_REMOTE_BACKEND])
+    mock_docling.assert_called_once_with(path, ddu_backends=[_REMOTE_BACKEND], metadata=ANY)
     assert result is not None
     assert result["text"] == "OCR text from image"
 
@@ -226,7 +239,7 @@ def test_ddu_docx_calls_docling(mock_docling, tmp_path):
     mock_docling.return_value = ("# Word Content\n\nParagraph text", "", "docling-remote")
 
     result = load_file(path, ddu_enabled=True, ddu_backends=[_REMOTE_BACKEND])
-    mock_docling.assert_called_once_with(path, ddu_backends=[_REMOTE_BACKEND])
+    mock_docling.assert_called_once_with(path, ddu_backends=[_REMOTE_BACKEND], metadata=ANY)
     assert result is not None
 
 
@@ -280,51 +293,57 @@ def test_standard_loader_sets_parser_standard(tmp_path):
 
 
 @patch("kiara.ingestion.loader._load_with_docling")
-def test_docling_fails_pdf_fallback_standard(mock_docling, tmp_path):
-    """Docling schlaegt fehl bei .pdf → Fallback auf Standard-Loader."""
+def test_docling_fails_pdf_reports_error_without_fallback(mock_docling, tmp_path):
+    """Ein Parserfehler darf keinen scheinbar erfolgreichen Fallback liefern."""
     path = _make_file(tmp_path, "test.pdf")
     mock_docling.side_effect = RuntimeError("Docling crash")
 
     with patch.dict(loader_module._LOADERS, {".pdf": lambda p: "Standard PDF text"}):
         result = load_file(path, ddu_enabled=True, ddu_backends=[_REMOTE_BACKEND])
     assert result is not None
-    assert result["metadata"]["parser"] == "standard"
+    assert result["metadata"]["parser"] == "docling-remote"
+    assert result["metadata"]["ddu_error"] == "parser_error"
+    assert result["metadata"]["ddu_error_detail"] == "Docling crash"
+    assert result["text"] == ""
 
 
 @patch("kiara.ingestion.loader._load_with_docling")
-def test_docling_fails_png_returns_none(mock_docling, tmp_path):
-    """Docling schlaegt fehl bei .png → return dict with no_content (kein Standard-Loader)."""
+def test_docling_fails_png_reports_error(mock_docling, tmp_path):
+    """Ein PNG-Parserfehler ist kein erfolgreicher Leernachweis."""
     path = _make_file(tmp_path, "scan.png")
     mock_docling.side_effect = RuntimeError("OCR failed")
 
     result = load_file(path, ddu_enabled=True, ddu_backends=[_REMOTE_BACKEND])
     assert result is not None
     assert result["text"] == ""
-    assert result["metadata"]["no_content"] is True
+    assert result["metadata"]["ddu_error"] == "parser_error"
+    assert not result["metadata"].get("no_content")
 
 
 @patch("kiara.ingestion.loader._load_with_docling")
-def test_docling_fails_jpg_returns_none(mock_docling, tmp_path):
-    """Docling schlaegt fehl bei .jpg → return dict with no_content (kein Standard-Loader)."""
+def test_docling_fails_jpg_reports_error(mock_docling, tmp_path):
+    """Ein JPEG-Parserfehler ist kein erfolgreicher Leernachweis."""
     path = _make_file(tmp_path, "photo.jpg")
     mock_docling.side_effect = RuntimeError("OCR failed")
 
     result = load_file(path, ddu_enabled=True, ddu_backends=[_REMOTE_BACKEND])
     assert result is not None
     assert result["text"] == ""
-    assert result["metadata"]["no_content"] is True
+    assert result["metadata"]["ddu_error"] == "parser_error"
+    assert not result["metadata"].get("no_content")
 
 
 @patch("kiara.ingestion.loader._load_with_docling")
-def test_docling_fails_tiff_returns_none(mock_docling, tmp_path):
-    """Docling schlaegt fehl bei .tiff → return dict with no_content (kein Standard-Loader)."""
+def test_docling_fails_tiff_reports_error(mock_docling, tmp_path):
+    """Ein TIFF-Parserfehler ist kein erfolgreicher Leernachweis."""
     path = _make_file(tmp_path, "scan.tiff")
     mock_docling.side_effect = RuntimeError("OCR failed")
 
     result = load_file(path, ddu_enabled=True, ddu_backends=[_REMOTE_BACKEND])
     assert result is not None
     assert result["text"] == ""
-    assert result["metadata"]["no_content"] is True
+    assert result["metadata"]["ddu_error"] == "parser_error"
+    assert not result["metadata"].get("no_content")
 
 
 @patch("kiara.ingestion.loader._load_with_docling")
@@ -366,10 +385,10 @@ def test_binary_guard_ddu_path_few_nulls_sanitized(mock_docling, tmp_path):
 
 
 def test_binary_guard_standard_path_high_null_ratio(tmp_path):
-    """Standard-Loader liefert Text mit >5% Null-Bytes → return None."""
+    """Binaerdaten werden vor dem Textloader mit sichtbarem Grund abgelehnt."""
     path = _make_file(tmp_path, "test.txt", "AB\x00" * 10)
     result = load_file(path)
-    assert result is None
+    assert "Binaeres Dateiformat" in result["metadata"]["load_error"]
 
 
 def test_binary_guard_standard_path_few_nulls_sanitized(tmp_path):
@@ -530,3 +549,12 @@ def test_load_with_docling_first_remote_error_preserved(mock_convert):
     assert text is None
     assert remote_error == "connection"  # erster Fehler bleibt
     assert source == ""
+
+
+def test_ddu_enabled_text_with_wrong_odt_extension_is_loaded_as_text(tmp_path):
+    """Text mit .odt-Endung ist kein defektes ZIP und benoetigt keinen Office-Loader."""
+    path = _make_file(tmp_path, "kaputt.odt", "kein ZIP-Archiv")
+
+    result = load_file(path, ddu_enabled=True, ddu_backends=[_REMOTE_BACKEND])
+    assert result["text"] == "kein ZIP-Archiv"
+    assert result["metadata"]["detected_format"] == ".txt"

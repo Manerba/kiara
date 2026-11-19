@@ -298,6 +298,14 @@ class TestCronEmbeddingModel:
             "_get_default_embedding_model",
             lambda: "nomic-embed-text",
         )
+
+        # Kein echtes sudo: als Benutzer kiara (Selbsttest) fehlt die Berechtigung
+        # fuer den Temp-Pfad. FileNotFoundError fuehrt in den vorgesehenen
+        # Direktschreibweg (_write_cron_lines_direct).
+        def _no_sudo(cmd, *, input_text=None):
+            raise FileNotFoundError(cmd[0])
+
+        monkeypatch.setattr(cron_utils, "_run_sudo_command", _no_sudo)
         cron_utils.write_schedule(ds_id=3, name="Leere DS", cron_expr="0 2 * * *")
 
         content = (tmp_path / "kiara-cron").read_text()

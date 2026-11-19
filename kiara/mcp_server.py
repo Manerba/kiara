@@ -32,6 +32,7 @@ Error-Recovery im query()-Tool:
 
 import asyncio
 import hashlib
+import importlib
 import json
 import logging
 import time
@@ -97,6 +98,14 @@ def _run_rag_query(user, question, k):
         all_active = ds_repo.get_active()
         restriction_datasource_ids = sorted([r["id"] for r in all_active])
 
+    # MCP-Ausgaben gehen an externe Modelle: blocked-Quellen nie einbeziehen
+    from kiara.services.mcp_anonymization import McpOutputAnonymizer
+
+    blocked = McpOutputAnonymizer(config).blocked_ids()
+    if blocked:
+        restriction_datasource_ids = [i for i in restriction_datasource_ids if i not in blocked]
+        filter_datasource_ids = restriction_datasource_ids
+
     embedding_model = get_embedding_model(config)
 
     backend = _create_chain_backend(
@@ -119,6 +128,53 @@ def _run_rag_query(user, question, k):
     return answer, sources, route, duration_ms, model, chain
 
 
+def _anonymize_query_response(
+    user: dict, question: str, response: dict, correlation_id: str
+) -> dict[str, Any]:
+    """query-Antwort vor der Rueckgabe anonymisieren (fail-closed, mit Audit)."""
+    from kiara.config import load_config
+    from kiara.services.mcp_anonymization import McpOutputAnonymizer
+
+    response["correlation_id"] = correlation_id
+    anon = McpOutputAnonymizer(load_config())
+    if not anon.needs_anonymization(None):
+        response["anonymization"] = anon.summary()
+        return response
+    try:
+        response = anon.tree(response)
+        response["anonymization"] = anon.summary()
+        anon.audit(user, "query", question, correlation_id)
+    except Exception as exc:
+        logger.error("MCP-query: Anonymisierung/Audit fehlgeschlagen (fail-closed): %s", exc)
+        return {
+            "answer": "Die Antwort konnte nicht anonymisiert werden und wird nicht ausgegeben.",
+            "sources": [],
+            "route": "error",
+            "warnings": [],
+            "correlation_id": correlation_id,
+        }
+    return response
+
+
+def _research_blocked_response() -> dict[str, Any] | None:
+    """Recherche liefert JSON-Fragmente, die sich nicht sicher anonymisieren lassen."""
+    from kiara.config import load_config
+    from kiara.services.mcp_anonymization import McpOutputAnonymizer
+
+    if not McpOutputAnonymizer(load_config()).enabled:
+        return None
+    return {
+        "route": "research",
+        "status": "failed",
+        "error": (
+            "Recherche ueber MCP ist gesperrt, solange MCP-Ausgaben anonymisiert werden: "
+            "Die Ergebnisse werden in Fragmenten geliefert und lassen sich nicht sicher "
+            "anonymisieren. Bitte search_documents und get_document_context verwenden."
+        ),
+        "client_context_checked": False,
+    }
+
+
 def _run_retrieval_search(user: dict | None, params: dict[str, Any]) -> dict[str, Any]:
     """Synchroner Retrieval-only Suchaufruf fuer Worker-Threads."""
     from kiara.services.retrieval_only import RetrievalOnlyService
@@ -138,6 +194,12 @@ def _run_retrieval_get_context(user: dict | None, params: dict[str, Any]) -> dic
     from kiara.services.retrieval_only import RetrievalOnlyService
 
     return RetrievalOnlyService().get_document_context(user, params)
+
+
+def _run_cad_query(user: dict | None, params: dict[str, Any]) -> dict[str, Any]:
+    from kiara.services.retrieval_only import RetrievalOnlyService
+
+    return RetrievalOnlyService().cad_query(user, params)
 
 
 def _mcp_retrieval_error_response(exc: Exception) -> dict[str, Any]:
@@ -227,6 +289,34 @@ class _NoopMCPRegistry:
         if func is not None:
             return decorator(func)
         return decorator
+
+
+def _register_mcp_plugins(mcp, config: dict, current_user) -> list[str]:
+    """Zusaetzliche MCP-Werkzeuge laden (Hauspatch mcp-werkzeug-plugins).
+
+    ``web.mcp_plugins`` ist eine Liste von ``modul:funktion`` (ohne Funktion:
+    ``register``). Aufruf: ``register(mcp, config=..., current_user=...)``; die
+    Funktion gibt die Namen der registrierten Werkzeuge zurueck. Ein fehlerhaftes
+    Plugin wird als Fehler protokolliert und verhindert die uebrigen Werkzeuge nicht.
+    """
+    web = config.get("web") if isinstance(config, dict) else None
+    specs = web.get("mcp_plugins") if isinstance(web, dict) else None
+    if not specs:
+        return []
+    if isinstance(specs, str):
+        specs = [specs]
+    loaded: list[str] = []
+    for spec in specs:
+        module_name, _, func_name = str(spec).partition(":")
+        try:
+            module = importlib.import_module(module_name.strip())
+            register = getattr(module, (func_name or "register").strip())
+            names = [str(n) for n in (register(mcp, config=config, current_user=current_user) or [])]
+            loaded.extend(names)
+            logger.info("MCP-Plugin %s geladen: %s", spec, ", ".join(names) or "-")
+        except Exception as exc:
+            logger.error("MCP-Plugin %s nicht geladen: %s: %s", spec, type(exc).__name__, exc)
+    return loaded
 
 
 def _create_app(config: dict | None = None):
@@ -399,12 +489,15 @@ def _create_app(config: dict | None = None):
                 }
             )
 
-        return {
+        response = {
             "answer": sanitize_utf8(answer),
             "sources": formatted_sources,
             "route": route,
             "warnings": warnings.snapshot(),
         }
+        return await asyncio.to_thread(
+            _anonymize_query_response, user, question, response, correlation_id
+        )
 
     @mcp.tool
     async def research(
@@ -425,6 +518,9 @@ def _create_app(config: dict | None = None):
         """
         from kiara.services.research import run_mcp_research
 
+        blocked_response = _research_blocked_response()
+        if blocked_response:
+            return blocked_response
         try:
             return await run_mcp_research(
                 _current_user.get(),
@@ -456,6 +552,9 @@ def _create_app(config: dict | None = None):
         """
         from kiara.services.research import research_results
 
+        blocked_response = _research_blocked_response()
+        if blocked_response:
+            return blocked_response
         try:
             return await research_results.page(run_id, _current_user.get(), offset, max_chars)
         except Exception as exc:
@@ -481,7 +580,9 @@ def _create_app(config: dict | None = None):
 
         Gibt Chunks, Quellen, Scores, Metadaten und Retriever-Diagnostik
         strukturiert zurueck. Volltext wird nur ausgegeben, wenn die
-        Rohchunk-Policy dies erlaubt.
+        Rohchunk-Policy dies erlaubt. Personenbezogene Daten sind durch
+        Platzhalter ‹ANON:Typ_NNN› ersetzt (Feld anonymization); fuer
+        get_document_context source_ref des Treffers verwenden.
         """
         user = _current_user.get()
         params = {
@@ -518,7 +619,10 @@ def _create_app(config: dict | None = None):
         include_text: bool | None = None,
         max_chars_total: int | None = None,
     ) -> dict[str, Any]:
-        """Laedt kontrolliert Nachbar-Chunks einer gefundenen Quelle."""
+        """Laedt kontrolliert Nachbar-Chunks einer gefundenen Quelle.
+
+        source: source_ref aus search_documents (src_...) oder der Quellpfad.
+        """
         user = _current_user.get()
         params = {
             "source": source,
@@ -533,6 +637,50 @@ def _create_app(config: dict | None = None):
             return await asyncio.to_thread(_run_retrieval_get_context, user, params)
         except Exception as exc:
             return _mcp_retrieval_error_response(exc)
+
+    @mcp.tool
+    async def cad_query(
+        operation: str = "search",
+        query: str | None = None,
+        datasource_id: int | None = None,
+        model_id: str | None = None,
+        object_id: str | None = None,
+        occurrence_id: str | None = None,
+        source_hash: str | None = None,
+        recursive: bool = True,
+        property_name: str | None = None,
+        property_namespace: str | None = None,
+        property_value: str | None = None,
+        numeric_field: str | None = None,
+        numeric_unit: str | None = None,
+        minimum: float | None = None,
+        maximum: float | None = None,
+        minimum_exclusive: bool = False,
+        maximum_exclusive: bool = False,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        """CAD: search, object, bom, where_used. Zuerst search für model_id/object_id.
+
+        Stücklisten und Verwendungen auf eine Datei begrenzen; source_hash aus
+        dem Treffer schützt vor Versionswechseln. Zahlenfilter: dichte_g_cm3
+        (gespeicherte Dichte, g/cm³), blechdicke_mm (mm). numeric_unit erlaubt
+        auch kg/m3 bzw. cm/m/in. Grenzen standardmäßig inklusive;
+        minimum_exclusive/maximum_exclusive für strikt größer/kleiner.
+        property_name/property_value vergleichen exakt, führende Nullen bleiben.
+        bom recursive=true zählt Teilvorkommen, false direkte Kinder; ein
+        occurrence_id begrenzt auf das konkrete Baugruppenvorkommen.
+        Anonymisierte Ausgabe, Rechteprüfung und Seitenbegrenzung wie Retrieval.
+        """
+        params = {k: v for k, v in locals().items() if v is not None}
+        try:
+            return await asyncio.to_thread(_run_cad_query, _current_user.get(), params)
+        except Exception as exc:
+            return _mcp_retrieval_error_response(exc)
+
+    # Hauspatch mcp-werkzeug-plugins: zusaetzliche Werkzeuge aus web.mcp_plugins.
+    if mcp_endpoint_enabled:
+        _register_mcp_plugins(mcp, config, _current_user.get)
 
     # MCP ASGI-App nur erzeugen, wenn der MCP-Endpunkt aktiv ist.
     if mcp_endpoint_enabled:
@@ -557,6 +705,15 @@ def _create_app(config: dict | None = None):
             if not isinstance(payload, dict):
                 payload = {}
             return await asyncio.to_thread(_run_retrieval_search, user, payload)
+        except Exception as exc:
+            return _retrieval_http_error_response(exc)
+
+    @app.post("/api/retrieval/cad_query")
+    async def api_cad_query(request: Request):
+        try:
+            return await asyncio.to_thread(
+                _run_cad_query, _current_user.get(), await request.json()
+            )
         except Exception as exc:
             return _retrieval_http_error_response(exc)
 

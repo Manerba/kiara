@@ -407,6 +407,8 @@ class TestLoadEntities:
         from kiara.anonymization.stammdaten import build_automaton_from_sources
 
         tmp_config["anonymization"]["ldap_source"] = {"enabled": False}
+        # ERP aus: aktive ERP-Quelle ohne Exportdatei ist fail-closed (test_erp_stammdaten_quelle)
+        tmp_config["anonymization"]["erp_source"] = {"enabled": False}
         automaton = build_automaton_from_sources(tmp_config)
         anon = Anonymizer(automaton, tmp_config)
         assert anon.get_stats()["loaded"] is True
@@ -419,6 +421,7 @@ class TestLoadEntities:
             {"text": "Geheimprojekt Alpha", "category": "custom", "id": "c-1"},
         ]
         tmp_config["anonymization"]["ldap_source"] = {"enabled": False}
+        tmp_config["anonymization"]["erp_source"] = {"enabled": False}
 
         automaton = build_automaton_from_sources(tmp_config)
         anon = Anonymizer(automaton, tmp_config)

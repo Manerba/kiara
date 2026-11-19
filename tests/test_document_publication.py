@@ -256,14 +256,15 @@ def test_process_death_leaves_retryable_gate_and_releases_source_lock(document_r
     program = """
 import json, os, sys
 import kiara.shared.db as db
-db._dsn = "postgresql://kiara:kiara@localhost:5432/kiara_test"
+db._dsn = os.environ.get("KIARA_TEST_DSN", "postgresql://kiara:kiara@localhost:5432/kiara_test")
 from kiara.ingestion.document_publication import document_publication, stage_document_versions
 from kiara.ingestion._file_utils import HashStore
 from kiara.ingestion.pipeline import _complete_file
 from kiara.ingestion import vectordb_ops
 source, ds, versions, phase = json.loads(sys.argv[1])
 with db.db_query() as conn:
-    assert conn.execute("SELECT current_database() AS name").fetchone()["name"] == "kiara_test"
+    name = conn.execute("SELECT current_database() AS name").fetchone()["name"]
+    assert name == db._dsn.rsplit("/", 1)[-1]
 with document_publication("kb_test", source, "test-model", datasource_id=ds) as operation:
     operation.begin()
     if phase == "after_begin":

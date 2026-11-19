@@ -89,9 +89,6 @@ _REQUIRED_COLUMNS = {
         "collection_name",
         "vector_kind",
         "requested_model",
-        "backend_id",
-        "backend_provider",
-        "backend_url",
         "canonical_model_id",
         "profile_id",
         "profile_kind",
@@ -135,6 +132,10 @@ _REQUIRED_COLUMNS = {
     },
 }
 
+# Frueher Teil der Indexbindung; der Vertrag haengt nur noch am Kiron-Profil,
+# nicht am konkreten Backend. Vorhandene Spalten entfernt die Migration.
+_REMOVED_CONTRACT_COLUMNS = {"backend_id", "backend_provider", "backend_url"}
+
 _REQUIRED_CONSTRAINTS = {
     "index_contract_evidence_pkey",
     "index_contract_evidence_type_check",
@@ -157,7 +158,6 @@ _REQUIRED_CONSTRAINTS = {
 
 _REQUIRED_INDEXES = {
     "idx_index_contract_evidence_key_created",
-    "idx_index_contracts_backend",
     "idx_index_contracts_state",
     "idx_ingestion_jobs_contract_key",
 }
@@ -183,6 +183,8 @@ def _schema_is_current(conn) -> bool:
         not required.issubset(available_columns[table])
         for table, required in _REQUIRED_COLUMNS.items()
     ):
+        return False
+    if _REMOVED_CONTRACT_COLUMNS & available_columns["index_contracts"]:
         return False
 
     constraints = {
@@ -277,9 +279,6 @@ def _create_contract_table(conn) -> None:
             collection_name text NOT NULL,
             vector_kind text NOT NULL,
             requested_model text NOT NULL,
-            backend_id integer,
-            backend_provider text,
-            backend_url text,
             canonical_model_id text,
             profile_id text,
             profile_kind text,
@@ -356,8 +355,8 @@ def _create_contract_table(conn) -> None:
     )
     conn.execute("ALTER TABLE public.index_contracts ADD COLUMN IF NOT EXISTS backfill_run_id text")
     conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_index_contracts_backend "
-        "ON public.index_contracts (backend_id) WHERE backend_id IS NOT NULL"
+        "ALTER TABLE public.index_contracts DROP COLUMN IF EXISTS backend_id, "
+        "DROP COLUMN IF EXISTS backend_provider, DROP COLUMN IF EXISTS backend_url"
     )
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_index_contracts_state "

@@ -18,6 +18,8 @@ dependencies = [
     "python-docx>=1.1",
     "pypdf>=4.0",
     "openpyxl>=3.1",
+    "xlrd==2.0.2",
+    "olefile==0.47",
     "odfpy>=1.4",
     "python-pptx>=1.0",
     "watchdog>=4.0",
@@ -63,6 +65,8 @@ dependencies = [
     # transformers.PreTrainedModel laedt lazy torchvision::nms; ohne
     # torchvision kann der lokale Reranker trotz installiertem torch brechen.
     "torchvision>=0.20",
+    # PST-Datenquelle (Outlook-Archive): libyal libpff, Wheels fuer cp312/x86_64.
+    "libpff-python>=20231205",
 ]
 
 [project.optional-dependencies]
@@ -96,6 +100,7 @@ webdav = "kiara.connectors.webdav_connector:WebDAVConnector"
 imap = "kiara.connectors.imap_connector:IMAPConnector"
 exchange_online = "kiara.connectors.exchange_connector:ExchangeOnlineConnector"
 sql = "kiara.connectors.sql_ds_connector:SQLDatasourceConnector"
+pst = "kiara.connectors.pst_connector:PSTConnector"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -127,6 +132,7 @@ addopts = "--import-mode=importlib"
 target-version = "py310"
 line-length = 100
 extend-exclude = [
+    "kiara/cad/_vendor",
     ".git",
     ".ruff_cache",
     ".venv",
@@ -214,3 +220,4 @@ include = ["kiara", "kiara.*", "kiara_auth", "kiara_auth.*"]
 "kiara.retrieval" = ["schemas/*.json"]
 "kiara.workflows" = ["default_templates/*.j2"]
 "kiara.tools" = ["mock_data.json"]
+"kiara.cad._vendor" = ["provenance.json"]

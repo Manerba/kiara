@@ -680,6 +680,14 @@ CREATE TABLE public.document_publications (
     cleanup_chunks jsonb DEFAULT '{}'::jsonb NOT NULL,
     started_at timestamp with time zone DEFAULT now() NOT NULL,
     completed_at timestamp with time zone,
+    empty_file_hash text,
+    empty_processing_signature text,
+    CONSTRAINT document_publications_empty_completion_check CHECK (
+        (empty_file_hash IS NULL AND empty_processing_signature IS NULL)
+        OR (empty_file_hash IS NOT NULL AND empty_processing_signature IS NOT NULL
+            AND completed_at IS NOT NULL AND versions = '{}'::jsonb
+            AND cleanup_chunks = '{}'::jsonb)
+    ),
     PRIMARY KEY (collection_name, source)
 );
 
@@ -960,9 +968,6 @@ CREATE TABLE public.index_contracts (
     collection_name text NOT NULL,
     vector_kind text NOT NULL,
     requested_model text NOT NULL,
-    backend_id integer,
-    backend_provider text,
-    backend_url text,
     canonical_model_id text,
     profile_id text,
     profile_kind text,

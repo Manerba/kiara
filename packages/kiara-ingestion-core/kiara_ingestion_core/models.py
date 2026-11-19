@@ -25,6 +25,9 @@ class FileLogEntry:
     error_phase: str = ""
     is_infra_error: bool = False  # True bei DDU/Backend-Fehlern (Circuit-Breaker-relevant)
     duration_ms: int = 0
+    empty_content_confirmed: bool = (
+        False  # Interner Nachweis, kein Abschluss aus Log-Status allein.
+    )
 
 
 @dataclass

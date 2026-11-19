@@ -713,7 +713,13 @@ class TestIndexCompatibilityAbort:
 
         ds_id = mock_db["ds1_id"]
         job_id = enqueue_job(ds_id, embedding_model="guarded-model")
-        files = ["/data/first.txt", "/data/second.txt"]
+        # Die Pipeline haelt beim Laden den Dateistand fest (stat/Hash) und
+        # prueft ihn vor dem Abschluss erneut; die Dateien muessen existieren.
+        files = []
+        for name in ("first.txt", "second.txt"):
+            path = tmp_path / name
+            path.write_text(f"Inhalt {name}")
+            files.append(str(path))
         config = {
             "datasource": {
                 "path": str(tmp_path),

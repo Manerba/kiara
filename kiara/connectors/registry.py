@@ -136,9 +136,32 @@ def _load_builtin_modules() -> None:
         "kiara.connectors.imap_connector",
         "kiara.connectors.exchange_connector",
         "kiara.connectors.sql_ds_connector",
+        "kiara.connectors.pst_connector",
     ]
     for mod in _modules:
         try:
             __import__(mod)
         except Exception as exc:
             logger.error("Konnektor-Modul %s konnte nicht geladen werden: %s", mod, exc)
+
+
+def source_unavailable_reason(row: dict) -> str | None:
+    """Live-Pruefung, ob die Quelle einer Datenquelle derzeit fehlt.
+
+    Delegiert an ``ConnectorBase.source_unavailable_reason``. Fehler bei der
+    Pruefung sperren nichts (None), damit ein Defekt hier keine Ingestion blockiert.
+    """
+    from kiara.ingestion.datasource_runtime import load_connector_config
+
+    ensure_loaded()
+    connector_cls = _registry.get(row.get("type") or "")
+    if connector_cls is None:
+        return None
+    try:
+        raw = row.get("connector_config")
+        # Admin-Cache liefert die Config bereits dekodiert (Secrets maskiert).
+        config = dict(raw) if isinstance(raw, dict) else load_connector_config(row, connector_cls)
+        return connector_cls.source_unavailable_reason(config, row)
+    except Exception as exc:
+        logger.warning("Verfuegbarkeitspruefung fuer ds%s fehlgeschlagen: %s", row.get("id"), exc)
+        return None

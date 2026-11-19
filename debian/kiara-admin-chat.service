@@ -20,7 +20,9 @@ PrivateTmp=true
 # NoNewPrivileges deaktiviert: Worker/Admin-Pfade nutzen sudo (mount/install/systemctl-restart/davfs-tee)
 NoNewPrivileges=false
 ProtectSystem=full
-ReadWritePaths=/etc/kiara /var/lib/kiara /var/log/kiara /etc/davfs2
+# /etc/cron.d: Ingestion-Zeitplaene (cron_utils schreibt /etc/cron.d/kiara per sudo;
+# sudo-Kindprozesse erben den Mount-Namespace, ohne Freigabe EROFS)
+ReadWritePaths=/etc/kiara /var/lib/kiara /var/log/kiara /etc/davfs2 /etc/cron.d
 MemoryDenyWriteExecute=false
 LimitNOFILE=65536
 

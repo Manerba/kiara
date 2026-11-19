@@ -46,146 +46,21 @@ _REMOTE_BACKEND_2 = {
 
 # ── DB-Schema ────────────────────────────────────────────────────────────────
 
-_FULL_DS_SCHEMA = """
-    DROP TABLE IF EXISTS cache_jobs CASCADE;
-    DROP TABLE IF EXISTS cache_datasources CASCADE;
-    DROP TABLE IF EXISTS ingestion_jobs CASCADE;
-    DROP TABLE IF EXISTS datasource_embeddings CASCADE;
-    DROP TABLE IF EXISTS datasource_users CASCADE;
-    DROP TABLE IF EXISTS datasource_groups CASCADE;
-    DROP TABLE IF EXISTS datasources CASCADE;
-
-    CREATE TABLE datasources (
-        id SERIAL PRIMARY KEY,
-        name TEXT NOT NULL,
-        type TEXT NOT NULL DEFAULT 'local',
-        path TEXT DEFAULT '',
-        is_active BOOLEAN DEFAULT true,
-        created_at TEXT DEFAULT (NOW()),
-        updated_at TEXT DEFAULT (NOW()),
-        webdav_url TEXT DEFAULT '',
-        webdav_username TEXT DEFAULT '',
-        webdav_password TEXT DEFAULT '',
-        webdav_base_path TEXT DEFAULT '/',
-        smb_server TEXT DEFAULT '',
-        smb_share TEXT DEFAULT '',
-        smb_username TEXT DEFAULT '',
-        smb_password TEXT DEFAULT '',
-        smb_domain TEXT DEFAULT '',
-        smb_mount_point TEXT DEFAULT '',
-        imap_server TEXT DEFAULT '',
-        imap_port INTEGER DEFAULT 993,
-        imap_ssl INTEGER DEFAULT 1,
-        imap_username TEXT DEFAULT '',
-        imap_password TEXT DEFAULT '',
-        imap_folders TEXT DEFAULT 'INBOX',
-        imap_since_days INTEGER DEFAULT 90,
-        imap_download_attachments INTEGER DEFAULT 1,
-        imap_max_attachment_mb INTEGER DEFAULT 25,
-        sql_dsn TEXT DEFAULT '',
-        sql_driver TEXT DEFAULT 'auto',
-        sql_query TEXT DEFAULT '',
-        sql_text_columns TEXT DEFAULT '',
-        sql_id_column TEXT DEFAULT 'id',
-        sql_timestamp_column TEXT DEFAULT '',
-        sql_text_template TEXT DEFAULT '',
-        connector_config TEXT DEFAULT '{}',
-        ds_chunk_strategy TEXT DEFAULT 'auto',
-        ds_chunk_size INTEGER DEFAULT NULL,
-        ds_chunk_overlap INTEGER DEFAULT NULL,
-        ds_file_types TEXT DEFAULT NULL,
-        ds_exclude_patterns TEXT DEFAULT NULL,
-        ds_ddu_enabled BOOLEAN DEFAULT false,
-        ds_ddu_ocr_images INTEGER DEFAULT 1,
-        ds_vlm_enabled BOOLEAN DEFAULT false,
-        ds_index_attachments INTEGER DEFAULT 1,
-        ds_accept_all_text INTEGER DEFAULT 0,
-        sync_interval TEXT DEFAULT 'global',
-        ingestion_status TEXT DEFAULT 'idle',
-        last_ingested_at TEXT DEFAULT NULL,
-        last_error TEXT DEFAULT '',
-        chunk_count INTEGER DEFAULT 0,
-        file_count INTEGER DEFAULT 0,
-        processed_files INTEGER DEFAULT 0,
-        restriction_level TEXT DEFAULT 'anonymize' NOT NULL,
-        ds_contextual_retrieval INTEGER DEFAULT 0,
-        ds_enrichment_prompt_id INTEGER DEFAULT NULL,
-        ds_enrichment_backend_id INTEGER DEFAULT NULL,
-        ds_colbert_enabled BOOLEAN DEFAULT false,
-        progress_total INTEGER DEFAULT 0,
-        next_sync_at TEXT DEFAULT NULL
-    );
-
-    CREATE TABLE datasource_groups (
-        id SERIAL PRIMARY KEY,
-        datasource_id INTEGER NOT NULL,
-        group_id INTEGER NOT NULL
-    );
-
-    CREATE TABLE datasource_embeddings (
-        id SERIAL PRIMARY KEY,
-        datasource_id INTEGER NOT NULL,
-        embedding_model TEXT NOT NULL,
-        chunk_count INTEGER DEFAULT 0,
-        file_count INTEGER DEFAULT 0,
-        last_ingested_at TEXT DEFAULT NULL,
-        UNIQUE(datasource_id, embedding_model)
-    );
-
-    CREATE TABLE datasource_users (
-        id SERIAL PRIMARY KEY,
-        datasource_id INTEGER NOT NULL,
-        user_id INTEGER NOT NULL
-    );
-
-    CREATE TABLE ingestion_jobs (
-        id SERIAL PRIMARY KEY,
-        datasource_id INTEGER NOT NULL,
-        status TEXT NOT NULL DEFAULT 'pending',
-        job_type TEXT NOT NULL DEFAULT 'incremental',
-        triggered_by TEXT NOT NULL DEFAULT 'manual',
-        embedding_model TEXT DEFAULT '',
-        requested_action TEXT DEFAULT NULL,
-        progress_processed INTEGER DEFAULT 0,
-        progress_total INTEGER DEFAULT 0,
-        queued_at TEXT DEFAULT (NOW()),
-        started_at TEXT DEFAULT NULL,
-        finished_at TEXT DEFAULT NULL,
-        stats_json TEXT DEFAULT '{}',
-        error_message TEXT DEFAULT '',
-        resumed_from_job INTEGER DEFAULT NULL,
-        FOREIGN KEY (datasource_id) REFERENCES datasources(id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE cache_datasources (
-        datasource_id INTEGER PRIMARY KEY,
-        payload_json  TEXT NOT NULL DEFAULT '{}',
-        updated_at    TEXT DEFAULT (NOW())
-    );
-
-    CREATE TABLE cache_jobs (
-        job_id        INTEGER PRIMARY KEY,
-        datasource_id INTEGER DEFAULT 0,
-        status        TEXT DEFAULT '',
-        payload_json  TEXT NOT NULL DEFAULT '{}',
-        updated_at    TEXT DEFAULT (NOW())
-    );
-    CREATE INDEX IF NOT EXISTS idx_cache_jobs_status ON cache_jobs(status);
-"""
 
 
 # ── Fixture ──────────────────────────────────────────────────────────────────
 
 
 def _ensure_schema():
-    """Stellt sicher, dass alle benoetigten Tabellen und Spalten existieren.
+    """Echtes KIara-Schema (schema.sql + Migrationen), Testdaten geleert.
 
-    Erstellt das vollstaendige Schema immer neu, um Schema-Konflikte zu vermeiden.
+    Frueher legte der Test eine eigene Kopie der Datasource-Tabellen per
+    DROP ... CASCADE an; ihr fehlten neuere Spalten (z. B. CAD-Zielschalter),
+    und das CASCADE beschaedigte Fremdschluessel anderer Tests.
     """
-    conn = get_connection()
-    conn.executescript(_FULL_DS_SCHEMA)
-    conn.commit()
-    conn.close()
+    from db_helpers import reset_test_data
+
+    reset_test_data()
 
 
 @pytest.fixture
@@ -319,7 +194,7 @@ def test_ddu_available_ignores_local_backend(client):
     assert resp.status_code == 200
     data = resp.json()
     assert data["available"] is False
-    assert "nicht erreichbar" in data["message"]
+    assert "DDU-Backend" in data["message"]
 
 
 def test_ddu_available_without_backend(client):
@@ -417,16 +292,14 @@ def test_default_ds_ddu_enabled_is_zero(client):
     assert not ds["ds_ddu_enabled"]
 
 
-# ── 4.1b /api/admin/ddu-available — Remote + Cache ──────────────────────────
+# ── 4.1b /api/admin/ddu-available — Konfigurationspruefung + Probe ───────────
+# Hausaenderung 30.10.2026: ohne ``url`` keine Netzwerkprobe, kein IP-Pinning.
 
 
 @pytest.fixture
 def features_client():
     """TestClient mit Feature-Router, isoliert vom Haupt-Router."""
-    from kiara.web.api_datasource_features import invalidate_ddu_cache
     from kiara.web.api_datasource_features import router as feat_router
-
-    invalidate_ddu_cache()
 
     app = FastAPI()
     app.include_router(feat_router)
@@ -439,462 +312,62 @@ def features_client():
     with TestClient(app) as c:
         yield c
 
-    invalidate_ddu_cache()
 
-
-@patch(
-    "kiara.web.api_datasource_features._check_ddu_remote",
-    new_callable=AsyncMock,
-    return_value={"available": True, "mode": "remote", "url": "http://ddu:5001"},
-)
+@patch("kiara.ingestion.ddu_client.check_ddu_health")
 @patch("kiara.config.get_ddu_backends", return_value=[_REMOTE_BACKEND])
 @patch("kiara.web.api_datasource_features.load_config", return_value={})
-def test_ddu_available_remote_success(mock_cfg, mock_be, mock_remote, features_client):
-    """Remote erreichbar → {'available': True, 'mode': 'remote', 'url': ...}."""
-    resp = features_client.get("/api/admin/ddu-available")
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["available"] is True
-    assert data["mode"] == "remote"
-    assert data["url"] == "http://ddu:5001"
-
-
-@patch(
-    "kiara.web.api_datasource_features._check_ddu_remote", new_callable=AsyncMock, return_value=None
-)
-@patch("kiara.config.get_ddu_backends", return_value=[_REMOTE_BACKEND, _LOCAL_BACKEND])
-@patch("kiara.web.api_datasource_features.load_config", return_value={})
-def test_ddu_available_remote_unreachable_ignores_local_backend(
-    mock_cfg, mock_be, mock_remote, features_client
+def test_ddu_available_configured_without_network_probe(
+    mock_cfg, mock_be, mock_health, features_client
 ):
-    """Remote down + lokales Backend → unavailable, kein lokaler Fallback."""
+    """Aktives Remote-Backend → available, aber keine Netzwerkanfrage (GPU-Weckeffekt)."""
     resp = features_client.get("/api/admin/ddu-available")
     assert resp.status_code == 200
     data = resp.json()
-    assert data["available"] is False
-    assert "nicht erreichbar" in data["message"]
+    assert data == {"available": True, "mode": "remote", "url": "http://ddu:5001"}
+    mock_health.assert_not_called()
 
 
-@patch(
-    "kiara.web.api_datasource_features._check_ddu_remote", new_callable=AsyncMock, return_value=None
-)
-@patch("kiara.config.get_ddu_backends", return_value=[_REMOTE_BACKEND])
+@patch("kiara.config.get_ddu_backends", return_value=[_LOCAL_BACKEND])
 @patch("kiara.web.api_datasource_features.load_config", return_value={})
-def test_ddu_available_remote_unreachable_no_local(mock_cfg, mock_be, mock_remote, features_client):
-    """Remote down + kein lokales Backend → {'available': False, 'message': '...'}."""
-    resp = features_client.get("/api/admin/ddu-available")
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["available"] is False
-    assert "nicht erreichbar" in data["message"]
-
-
-@patch(
-    "kiara.web.api_datasource_features._check_ddu_remote",
-    new_callable=AsyncMock,
-    return_value={"available": True, "mode": "remote", "url": "http://ddu:5001"},
-)
-@patch("kiara.config.get_ddu_backends", return_value=[_REMOTE_BACKEND])
-@patch("kiara.web.api_datasource_features.load_config", return_value={})
-def test_ddu_cache_hit(mock_cfg, mock_be, mock_remote, features_client):
-    """Zweiter Aufruf innerhalb TTL → _check_ddu_remote nur 1x aufgerufen."""
-    features_client.get("/api/admin/ddu-available")
-    features_client.get("/api/admin/ddu-available")
-
-    assert mock_remote.call_count == 1
-
-
-@patch(
-    "kiara.web.api_datasource_features._check_ddu_remote",
-    new_callable=AsyncMock,
-    return_value={"available": True, "mode": "remote", "url": "http://ddu:5001"},
-)
-@patch("kiara.config.get_ddu_backends", return_value=[_REMOTE_BACKEND])
-@patch("kiara.web.api_datasource_features.load_config", return_value={})
-def test_ddu_cache_invalidation(mock_cfg, mock_be, mock_remote, features_client):
-    """invalidate_ddu_cache() → zweiter Check erzwungen."""
-    from kiara.web.api_datasource_features import invalidate_ddu_cache
-
-    features_client.get("/api/admin/ddu-available")
-    assert mock_remote.call_count == 1
-
-    invalidate_ddu_cache()
-    features_client.get("/api/admin/ddu-available")
-    assert mock_remote.call_count == 2
-
-
-@patch(
-    "kiara.web.api_datasource_features._check_ddu_remote", new_callable=AsyncMock, return_value=None
-)
-@patch("kiara.config.get_ddu_backends", return_value=[])
-@patch("kiara.web.api_datasource_features.load_config", return_value={})
-def test_ddu_no_backend_no_local(mock_cfg, mock_be, mock_remote, features_client):
-    """Kein Backend → {'available': False, 'message': 'Kein aktives DDU-Backend...'}."""
-    resp = features_client.get("/api/admin/ddu-available")
-    assert resp.status_code == 200
-    data = resp.json()
+def test_ddu_available_local_backend_only_is_unavailable(mock_cfg, mock_be, features_client):
+    """Nur lokales Backend ohne URL → unavailable (Docling ist remote-only)."""
+    data = features_client.get("/api/admin/ddu-available").json()
     assert data["available"] is False
     assert "Kein aktives DDU-Backend" in data["message"]
 
 
-@patch("kiara.web.api_datasource_features._check_ddu_remote", new_callable=AsyncMock)
-@patch("kiara.config.get_ddu_backends", return_value=[_REMOTE_BACKEND, _REMOTE_BACKEND_2])
+@patch("kiara.config.get_ddu_backends", return_value=[])
 @patch("kiara.web.api_datasource_features.load_config", return_value={})
-def test_ddu_available_failover_flag(mock_cfg, mock_be, mock_remote, features_client):
-    """Erstes Remote down, zweites erreichbar → Response enthaelt 'failover': True."""
-    mock_remote.side_effect = [
-        None,
-        {"available": True, "mode": "remote", "url": "http://ddu2:5001"},
-    ]
-
-    resp = features_client.get("/api/admin/ddu-available")
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["available"] is True
-    assert data["mode"] == "remote"
-    assert data["url"] == "http://ddu2:5001"
-    assert data.get("failover") is True
-
-
-@patch(
-    "kiara.web.api_datasource_features._check_ddu_remote", new_callable=AsyncMock, return_value=None
-)
-@patch("kiara.config.get_ddu_backends", return_value=[_REMOTE_BACKEND, _LOCAL_BACKEND])
-@patch("kiara.web.api_datasource_features.load_config", return_value={})
-def test_ddu_available_local_backend_no_failover_flag(
-    mock_cfg, mock_be, mock_remote, features_client
-):
-    """Remote down + lokales Backend → unavailable, kein failover-Flag."""
-    resp = features_client.get("/api/admin/ddu-available")
-    assert resp.status_code == 200
-    data = resp.json()
+def test_ddu_available_no_backend(mock_cfg, mock_be, features_client):
+    data = features_client.get("/api/admin/ddu-available").json()
     assert data["available"] is False
-    assert "failover" not in data or data.get("failover") is not True
+    assert "Kein aktives DDU-Backend" in data["message"]
 
 
-# ── 4.1c /api/admin/ddu-available — IP-Pinning + Probe-URL ───────────────────
+@pytest.mark.parametrize("url", ["http://10.20.30.40:5001", "https://ddu.example:5001/"])
+def test_ddu_probe_url_accepts_private_and_public_targets(features_client, url):
+    """Probe nutzt den Ingest-Check; auch private Adressen sind erlaubt."""
+    with patch("kiara.ingestion.ddu_client.check_ddu_health", return_value=(True, "")) as m:
+        data = features_client.get("/api/admin/ddu-available", params={"url": url}).json()
+    assert data == {"available": True, "mode": "remote", "url": url}
+    m.assert_called_once_with([{"url": url}])
 
 
-def _patch_dns_for_test(monkeypatch, host: str, ips: list[str]):
-    import socket as _sock
-
-    def fake(h, port, *args, **kwargs):
-        if h == host:
-            infos = []
-            for ip in ips:
-                fam = _sock.AF_INET6 if ":" in ip else _sock.AF_INET
-                sa = (ip, port, 0, 0) if fam == _sock.AF_INET6 else (ip, port)
-                infos.append((fam, _sock.SOCK_STREAM, _sock.IPPROTO_TCP, "", sa))
-            return infos
-        raise _sock.gaierror(f"unknown host: {h}")
-
-    monkeypatch.setattr(_sock, "getaddrinfo", fake)
-
-
-def test_ddu_probe_url_blocks_loopback(features_client):
-    """?url=http://127.0.0.1:5001 → 200, available=false (Hard-Block)."""
-    resp = features_client.get("/api/admin/ddu-available", params={"url": "http://127.0.0.1:5001"})
-    assert resp.status_code == 200
-    data = resp.json()
+def test_ddu_probe_url_failure_names_the_reason(features_client):
+    """Fehlschlag der Probe → Ursache aus dem Health-Check steht in der Meldung."""
+    err = "http://10.20.30.40:5001/health: Verbindung verweigert"
+    with patch("kiara.ingestion.ddu_client.check_ddu_health", return_value=(False, err)):
+        data = features_client.get(
+            "/api/admin/ddu-available", params={"url": "http://10.20.30.40:5001"}
+        ).json()
     assert data["available"] is False
+    assert "Verbindung verweigert" in data["message"]
 
 
-@pytest.mark.parametrize(
-    "url",
-    [
-        "http://example.de:bad/",
-        "http://user:pw@example.de:bad/",
-        "http://[::1/",
-        "http://[::1]:bad/",
-        "not a url",
-    ],
-)
-def test_ddu_probe_url_malformed_returns_200(features_client, url):
-    """Kaputte Probe-URLs muessen fail-closed mit 200 + available=false enden,
-    nicht als 500 nach aussen schlagen.
-    """
-    resp = features_client.get("/api/admin/ddu-available", params={"url": url})
-    assert resp.status_code == 200, (
-        f"URL {url!r} hat 500 erzeugt — Pinning haette PinningError werfen sollen"
-    )
-    data = resp.json()
+@pytest.mark.parametrize("url", ["ftp://ddu:5001", "file:///etc/passwd", "ddu:5001"])
+def test_ddu_probe_url_rejects_non_http_scheme(features_client, url):
+    with patch("kiara.ingestion.ddu_client.check_ddu_health") as m:
+        data = features_client.get("/api/admin/ddu-available", params={"url": url}).json()
     assert data["available"] is False
-
-
-def test_ddu_probe_malformed_ipv6_with_credentials_no_leak(features_client, caplog):
-    """Malformed IPv6 + Credentials: kein 500, keine Credentials im Log."""
-    caplog.set_level("DEBUG")
-    resp = features_client.get(
-        "/api/admin/ddu-available",
-        params={"url": "http://user:supersecret@[::1/"},
-    )
-    assert resp.status_code == 200
-    assert resp.json()["available"] is False
-    # In den Pinning- und DDU-Loggern darf das Secret NICHT auftauchen
-    relevant = [
-        r.getMessage()
-        for r in caplog.records
-        if r.name.startswith(("kiara.shared.http_pinning", "kiara.web.api_datasource_features"))
-    ]
-    log_text = " ".join(relevant)
-    assert "supersecret" not in log_text
-    assert "user:supersecret" not in log_text
-
-
-def test_ddu_probe_url_blocks_ftp_scheme(features_client):
-    """?url=ftp://example.de → 200, available=false (Scheme)."""
-    resp = features_client.get("/api/admin/ddu-available", params={"url": "ftp://example.de"})
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["available"] is False
-
-
-def test_ddu_probe_url_redacts_credentials(features_client, caplog):
-    """?url=http://user:pw@example.de → 200, Pinning- und DDU-Log redacted."""
-    caplog.set_level("DEBUG")
-    resp = features_client.get(
-        "/api/admin/ddu-available",
-        params={"url": "http://user:secret@example.de"},
-    )
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["available"] is False
-    # Nur die relevanten Logger (Pinning + DDU); httpx-Access-Log enthaelt
-    # die Original-URL als URL-encoded Query, das ist nicht unser Log.
-    relevant = [
-        r.getMessage()
-        for r in caplog.records
-        if r.name.startswith(("kiara.shared.http_pinning", "kiara.web.api_datasource_features"))
-    ]
-    log_text = " ".join(relevant)
-    assert "secret" not in log_text
-    assert "user:secret" not in log_text
-    assert "***@" in log_text
-
-
-@patch(
-    "kiara.config.get_ddu_backends",
-    return_value=[
-        {
-            "url": "http://gpu-server.local:5001",
-            "is_local": False,
-            "model": "docling",
-            "table_mode": "accurate",
-            "do_ocr": True,
-            "ocr_lang": ["de", "en"],
-            "timeout": 120.0,
-            "concurrency_limit": None,
-        }
-    ],
-)
-@patch(
-    "kiara.web.api_datasource_features.load_config",
-    return_value={"ddu": {"internal_cidrs": ["10.0.0.0/8"]}},
-)
-def test_ddu_internal_backend_reachable_with_allowlist(
-    mock_cfg, mock_be, features_client, monkeypatch
-):
-    """Internes Backend mit ddu.internal_cidrs erreichbar."""
-    _patch_dns_for_test(monkeypatch, "gpu-server.local", ["gpu-server.local"])
-
-    captured = []
-
-    def fake_handle(self, request):
-        captured.append(request)
-        return httpx.Response(200, request=request)
-
-    async def fake_async(self, request):
-        captured.append(request)
-        return httpx.Response(200, request=request)
-
-    monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", fake_async)
-
-    resp = features_client.get("/api/admin/ddu-available")
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["available"] is True
-    assert data["mode"] == "remote"
-
-
-@patch(
-    "kiara.config.get_ddu_backends",
-    return_value=[
-        {
-            "url": "http://gpu-server.local:5001",
-            "is_local": False,
-            "model": "docling",
-            "table_mode": "accurate",
-            "do_ocr": True,
-            "ocr_lang": ["de", "en"],
-            "timeout": 120.0,
-            "concurrency_limit": None,
-        }
-    ],
-)
-@patch("kiara.web.api_datasource_features.load_config", return_value={})
-def test_ddu_internal_backend_blocked_without_allowlist(
-    mock_cfg, mock_be, features_client, monkeypatch
-):
-    """Internes Backend ohne ddu.internal_cidrs nicht erreichbar."""
-    _patch_dns_for_test(monkeypatch, "gpu-server.local", ["gpu-server.local"])
-
-    resp = features_client.get("/api/admin/ddu-available")
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["available"] is False
-
-
-@patch("kiara.config.get_ddu_backends", return_value=[_LOCAL_BACKEND, _REMOTE_BACKEND])
-@patch(
-    "kiara.web.api_datasource_features.load_config",
-    return_value={"ddu": {"internal_cidrs": ["127.0.0.0/8"]}},
-)
-def test_ddu_invalid_cidr_validated_before_backend_loop(mock_cfg, mock_be, features_client, caplog):
-    """validate_allowed_private_cidrs laeuft VOR der Backend-Schleife.
-
-    Backend ohne URL zuerst + ungueltige CIDR → trotzdem fail-closed.
-    """
-    caplog.set_level("WARNING", logger="kiara.web.api_datasource_features")
-
-    resp = features_client.get("/api/admin/ddu-available")
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["available"] is False
-    assert "ungueltige ddu.internal_cidrs" in data["message"]
-    # Genau ein WARNING im DDU-Logger
-    warns = [
-        r
-        for r in caplog.records
-        if r.name == "kiara.web.api_datasource_features" and r.levelname == "WARNING"
-    ]
-    assert len(warns) == 1
-
-
-@patch("kiara.config.get_ddu_backends", return_value=[_REMOTE_BACKEND])
-@patch("kiara.web.api_datasource_features.load_config", return_value={"ddu": "broken"})
-def test_ddu_non_dict_ddu_section_is_pinning_config_error(
-    mock_cfg, mock_be, features_client, caplog
-):
-    """ddu: 'broken' (kein Dict) → PinningConfigError → fail-closed, 1 WARNING."""
-    caplog.set_level("WARNING", logger="kiara.web.api_datasource_features")
-
-    resp = features_client.get("/api/admin/ddu-available")
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["available"] is False
-    warns = [
-        r
-        for r in caplog.records
-        if r.name == "kiara.web.api_datasource_features" and r.levelname == "WARNING"
-    ]
-    assert len(warns) == 1
-
-
-@patch("kiara.config.get_ddu_backends", return_value=[_REMOTE_BACKEND])
-@patch(
-    "kiara.web.api_datasource_features.load_config",
-    return_value={"ddu": {"internal_cidrs": ["abc"]}},
-)
-def test_ddu_unparseable_cidr_fail_closed(mock_cfg, mock_be, features_client, caplog):
-    """ddu.internal_cidrs=['abc'] → PinningConfigError → fail-closed."""
-    caplog.set_level("WARNING")
-
-    resp = features_client.get("/api/admin/ddu-available")
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["available"] is False
-    feature_warns = [
-        r
-        for r in caplog.records
-        if r.name == "kiara.web.api_datasource_features" and r.levelname == "WARNING"
-    ]
-    assert len(feature_warns) == 1
-    pin_warns = [
-        r
-        for r in caplog.records
-        if r.name == "kiara.shared.http_pinning" and r.levelname == "WARNING"
-    ]
-    # Helper darf PinningConfigError NICHT loggen.
-    assert len(pin_warns) == 0
-
-
-def test_ddu_pinning_config_error_not_cached(features_client):
-    """Cache-Pollution: ungueltig → korrigiert → kein Lesen aus Fehler-Cache."""
-    # 1. Aufruf: ungueltige Config
-    with (
-        patch(
-            "kiara.web.api_datasource_features.load_config",
-            return_value={"ddu": {"internal_cidrs": ["127.0.0.0/8"]}},
-        ),
-        patch("kiara.config.get_ddu_backends", return_value=[_REMOTE_BACKEND]),
-    ):
-        resp1 = features_client.get("/api/admin/ddu-available")
-    assert resp1.json()["available"] is False
-    # 2. Aufruf: korrigierte Config + Remote-Mock
-    with (
-        patch(
-            "kiara.web.api_datasource_features._check_ddu_remote",
-            new_callable=AsyncMock,
-            return_value={"available": True, "mode": "remote", "url": "http://ddu:5001"},
-        ),
-        patch("kiara.config.get_ddu_backends", return_value=[_REMOTE_BACKEND]),
-        patch(
-            "kiara.web.api_datasource_features.load_config",
-            return_value={"ddu": {"internal_cidrs": ["10.0.0.0/8"]}},
-        ),
-    ):
-        resp2 = features_client.get("/api/admin/ddu-available")
-    # Wenn das Fehler-Resultat gecached gewesen waere, kaeme jetzt false zurueck.
-    assert resp2.json()["available"] is True
-
-
-@pytest.mark.asyncio
-async def test_check_ddu_remote_does_not_swallow_value_error(monkeypatch):
-    """_check_ddu_remote schluckt echte ValueError nicht.
-
-    Programmierfehler im Helper (z. B. unerlaubte kwargs) muessen
-    propagieren.
-    """
-    from kiara.web.api_datasource_features import _check_ddu_remote
-
-    async def boom(*args, **kwargs):
-        raise ValueError("programmierfehler")
-
-    monkeypatch.setattr("kiara.web.api_datasource_features.pinned_request_async", boom)
-
-    with pytest.raises(ValueError):
-        await _check_ddu_remote({"url": "http://ddu:5001"}, allowed_private_cidrs=None)
-
-
-@pytest.mark.asyncio
-async def test_check_ddu_remote_call_args_probe_path(monkeypatch):
-    """Probe-Pfad ruft _check_ddu_remote mit allowed_private_cidrs=None."""
-    seen_kwargs: list = []
-
-    async def fake_pinned(method, url, **kwargs):
-        seen_kwargs.append(kwargs)
-        return httpx.Response(200, request=httpx.Request(method, url))
-
-    # _check_ddu_remote selbst nutzen, nicht den Endpoint
-    monkeypatch.setattr("kiara.web.api_datasource_features.pinned_request_async", fake_pinned)
-    from kiara.web.api_datasource_features import _check_ddu_remote
-
-    await _check_ddu_remote({"url": "http://ddu:5001"}, allowed_private_cidrs=None)
-    assert seen_kwargs[0].get("allowed_private_cidrs") is None
-
-
-@pytest.mark.asyncio
-async def test_check_ddu_remote_call_args_with_cidrs(monkeypatch):
-    """Backend-Iteration ruft _check_ddu_remote mit Config-CIDRs auf."""
-    seen_kwargs: list = []
-
-    async def fake_pinned(method, url, **kwargs):
-        seen_kwargs.append(kwargs)
-        return httpx.Response(200, request=httpx.Request(method, url))
-
-    monkeypatch.setattr("kiara.web.api_datasource_features.pinned_request_async", fake_pinned)
-    from kiara.web.api_datasource_features import _check_ddu_remote
-
-    cidrs = ["10.0.0.0/8"]
-    await _check_ddu_remote({"url": "http://ddu:5001"}, allowed_private_cidrs=cidrs)
-    assert seen_kwargs[0].get("allowed_private_cidrs") == cidrs
+    assert "http://" in data["message"]
+    m.assert_not_called()

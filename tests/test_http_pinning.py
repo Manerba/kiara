@@ -21,6 +21,7 @@ from kiara.shared.http_pinning import (
     PinnedTarget,
     PinningConfigError,
     PinningError,
+    _is_ip_allowed,
     _resolve_pinned_target_async,
     _resolve_pinned_target_sync,
     create_pinned_client_sync,
@@ -194,8 +195,8 @@ class TestIpClassification:
             "224.0.0.1",
             "ff00::1",
             "fe80::1",
-            "::ffff:8.8.8.8",
             "::ffff:127.0.0.1",
+            "::ffff:10.0.0.5",
             "255.255.255.255",
         ],
     )
@@ -204,6 +205,14 @@ class TestIpClassification:
         with pytest.raises(PinningError) as exc:
             _resolve_pinned_target_sync("GET", f"https://{_brackets(host)}/")
         assert "Klassifikation" in exc.value.reason or "Allowlist" in exc.value.reason
+
+    def test_ipv4_mapped_public_address_is_classified_like_ipv4(self):
+        # Seit Python 3.12.4 klassifiziert ipaddress IPv4-gemappte IPv6-Adressen
+        # nach der eingebetteten IPv4-Adresse. ::ffff:8.8.8.8 erreicht 8.8.8.8
+        # und ist damit genauso zulaessig wie die IPv4-Adresse selbst.
+        assert ipaddress.ip_address("::ffff:8.8.8.8").is_global is True
+        allowed, reason = _is_ip_allowed(ipaddress.ip_address("::ffff:8.8.8.8"), [])
+        assert (allowed, reason) == (True, "")
 
     def test_multicast_blocked_despite_is_global(self):
         # 224.0.0.1 hat is_global=True in CPython 3.12, muss aber blockiert werden.

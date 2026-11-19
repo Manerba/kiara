@@ -12,7 +12,9 @@ from fastapi.testclient import TestClient
 # DB-Backend initialisieren
 import kiara.shared.db as _db
 
-_db._dsn = "postgresql://kiara:kiara@localhost:5432/kiara_test"
+from db_helpers import _TEST_DSN
+
+_db._dsn = _TEST_DSN
 
 
 # ---------------------------------------------------------------------------

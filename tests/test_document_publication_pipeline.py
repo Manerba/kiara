@@ -300,13 +300,16 @@ def test_newly_empty_document_removes_old_search_candidates(whole_pipeline, test
     assert case.path not in case.hashes.load(case.ds, "test-model")
 
 
-@pytest.mark.parametrize("failure", ["loading", "preparation"])
-def test_failed_preparation_cannot_leave_old_source_published(whole_pipeline, monkeypatch, failure):
+@pytest.mark.parametrize("failure", ["exception", "load_error"])
+def test_failed_load_keeps_previous_version_published(whole_pipeline, monkeypatch, failure):
+    """Hausaenderung 18.11.2026: Ein gescheiterter Ladeversuch nimmt nichts aus dem Index."""
     case = whole_pipeline
     case.run_whole(case.ds)
     before = case.snapshot()
+    old_hash = case.hashes.load(case.ds, "test-model")[case.path]
     Path(case.path).write_text("X" * 300)
-    if failure == "loading":
+    originals = (runtime._process_single_file, runtime.load_file)
+    if failure == "exception":
 
         def fail_load(*args, **kwargs):
             raise RuntimeError("load failed")
@@ -314,10 +317,34 @@ def test_failed_preparation_cannot_leave_old_source_published(whole_pipeline, mo
         monkeypatch.setattr(runtime, "_process_single_file", fail_load)
     else:
 
-        def fail_read(*args, **kwargs):
-            raise RuntimeError("preparation failed")
+        def broken(file_path, *args, **kwargs):
+            meta = {"source": file_path, "load_error": "TXT-Loader: kaputt"}
+            return {"text": "", "metadata": meta}
 
-        monkeypatch.setattr(case.store, "get_ids_by_sources", fail_read)
+        monkeypatch.setattr(runtime, "load_file", broken)
+    # Gitea #8: unerwartete Ladefehler bleiben dateilokal.
+    assert case.run_whole(case.ds)["errors"] == 1
+    assert case.snapshot() == before and case.embeddings == 3
+    # Alter Hash bleibt: der naechste Lauf versucht die geaenderte Datei erneut.
+    assert case.hashes.load(case.ds, "test-model")[case.path] == old_hash
+    tool, ref = case.reader(before)
+    assert read(tool, ref, max_chunks=3).success
+    runtime._process_single_file, runtime.load_file = originals
+    case.run_whole(case.ds)
+    assert case.embeddings > 3
+    assert case.hashes.load(case.ds, "test-model")[case.path] != old_hash
+
+
+def test_failed_preparation_cannot_leave_old_source_published(whole_pipeline, monkeypatch):
+    case = whole_pipeline
+    case.run_whole(case.ds)
+    before = case.snapshot()
+    Path(case.path).write_text("X" * 300)
+
+    def fail_read(*args, **kwargs):
+        raise RuntimeError("preparation failed")
+
+    monkeypatch.setattr(case.store, "get_ids_by_sources", fail_read)
     with pytest.raises(RuntimeError, match="failed"):
         case.run_whole(case.ds)
     assert case.path not in case.hashes.load(case.ds, "test-model")
@@ -381,3 +408,29 @@ def test_cli_adoption_and_repair_preserve_real_datasource_memberships(whole_pipe
     assert case.embeddings == 4
     _assert_shared(case, test_db, [0, case.ds])
     _assert_readable(case)
+
+
+def test_failed_load_restores_legacy_source_without_publication_row(whole_pipeline, monkeypatch):
+    """Altbestand ohne Freigabezeile bleibt nach gescheitertem Ladeversuch suchbar."""
+    from kiara.shared.db import db_transaction
+
+    case = whole_pipeline
+    case.run_whole(case.ds)
+    before = case.snapshot()
+    with db_transaction() as conn:
+        conn.execute("DELETE FROM document_publications WHERE source = %s", (case.path,))
+    Path(case.path).write_text("X" * 300)
+
+    def fail_load(*args, **kwargs):
+        raise RuntimeError("load failed")
+
+    monkeypatch.setattr(runtime, "_process_single_file", fail_load)
+    assert case.run_whole(case.ds)["errors"] == 1
+    with db_transaction() as conn:
+        rows = conn.execute(
+            "SELECT 1 FROM document_publications WHERE source = %s", (case.path,)
+        ).fetchall()
+    assert rows == []
+    assert case.path in case.hashes.load(case.ds, "test-model")
+    tool, ref = case.reader(before)
+    assert read(tool, ref, max_chunks=3).success

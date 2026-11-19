@@ -26,6 +26,18 @@ import kiara.ingestion.runtime as runtime_mod
 from kiara.shared.db import get_connection
 
 
+@pytest.fixture(autouse=True)
+def _dense_primary_config(tmp_path, monkeypatch):
+    """Die Jobs dieser Datei tragen einen Dense-Vertrag (wie im Betrieb mit
+    enrichment.late_chunking: false). Der Worker waehlt das Primaerziel aus
+    load_config(); mit den Code-Vorgaben (Late Chunking an) waere es ein
+    anderes Ziel und der Vertragswaechter blockierte das Auto-Resume zu Recht.
+    """
+    path = tmp_path / "kiara.yaml"
+    path.write_text("enrichment:\n  late_chunking: false\n", encoding="utf-8")
+    monkeypatch.setenv("KIARA_CONFIG", str(path))
+
+
 def _insert_running_job_with_contract(conn, datasource_id: int, model: str = "nomic") -> int:
     """Legt einen realistischen laufenden Job mit vollstaendigem S4-Vertrag an."""
     from kiara.retrieval.index_compatibility import dense_index_target
@@ -53,6 +65,38 @@ def _insert_running_job_with_contract(conn, datasource_id: int, model: str = "no
         ),
     ).fetchone()
     return row["id"]
+
+
+def _publishing_store(add_hook=None):
+    """VectorStore-Attrappe mit heutiger Dokumentpublikation.
+
+    Der Dateiabschluss gilt erst als bestaetigt, wenn
+    ``finalize_document_versions`` ``on_complete`` mit der Gesamtversion jeder
+    geschriebenen Quelle aufruft; eine nackte MagicMock-Methode bestaetigt nie.
+    ``add_hook`` laeuft vor dem Merken der Chunks (z. B. fuer Abbruch-Simulation).
+    """
+    store = MagicMock()
+    written = {}
+
+    def record(texts, metas, ids, *args, **kwargs):
+        if add_hook is not None:
+            add_hook(texts, metas, ids, *args, **kwargs)
+        written.update(zip(ids, metas, strict=True))
+        return list(ids)
+
+    def finalize(ids, *, publish_search, on_complete):
+        versions = {}
+        for cid in ids:
+            meta = written[cid]
+            versions.setdefault(meta["source"], {})[meta.get("parser", "standard")] = "v-test"
+        on_complete(versions)
+
+    store.get_collection_name.return_value = "kb_test"
+    store.get_ids_by_sources.return_value = []
+    store.add.side_effect = record
+    store.add_with_embeddings.side_effect = record
+    store.finalize_document_versions.side_effect = finalize
+    return store
 
 
 # ---------------------------------------------------------------------------
@@ -171,9 +215,7 @@ class TestHashCheckpoint:
         for i in range(num_files):
             (ds_path / f"file_{i:03d}.txt").write_text(f"Inhalt {i}")
 
-        mock_store = MagicMock()
-        mock_store.add = MagicMock()
-        mock_store.delete_by_sources = MagicMock()
+        mock_store = _publishing_store()
 
         mock_hs = MagicMock()
         mock_hs.load.return_value = {}
@@ -241,7 +283,7 @@ class TestHashCheckpoint:
         for i in range(num_files):
             (ds_path / f"file_{i:03d}.txt").write_text(f"Inhalt {i}")
 
-        mock_store = MagicMock()
+        mock_store = _publishing_store()
         mock_hs = MagicMock()
         mock_hs.load.return_value = {}
 
@@ -304,7 +346,7 @@ class TestCancelledError:
         for i in range(5):
             (ds_path / f"file_{i}.txt").write_text(f"Inhalt {i}")
 
-        mock_store = MagicMock()
+        mock_store = _publishing_store()
 
         call_count = {"n": 0}
 
@@ -372,7 +414,6 @@ class TestCancelledError:
         for i in range(3):
             (ds_path / f"file_{i}.txt").write_text(f"Inhalt {i}")
 
-        mock_store = MagicMock()
         embed_call_count = {"n": 0}
 
         def store_add_side_effect(*args, **kwargs):
@@ -380,7 +421,7 @@ class TestCancelledError:
             if embed_call_count["n"] >= 2:
                 raise _CancelledError()
 
-        mock_store.add.side_effect = store_add_side_effect
+        mock_store = _publishing_store(add_hook=store_add_side_effect)
         mock_hs = MagicMock()
         mock_hs.load.return_value = {}
 
@@ -756,7 +797,11 @@ class TestIMAPScanCache:
         # IMAP-Verbindung mocken
         mock_conn = MagicMock()
         mock_conn.select.return_value = ("OK", [b"1"])
-        mock_conn.search.return_value = ("OK", [b""])  # Keine Mails
+        # Der Scanner prueft UIDVALIDITY und sucht per UID SEARCH (nicht mehr
+        # per Sequenz-SEARCH); ohne passende Antworten zaehlt der Ordner als
+        # Fehler und der Marker bleibt bewusst aus.
+        mock_conn.response.return_value = ("OK", [b"1"])
+        mock_conn.uid.return_value = ("OK", [b""])  # Keine Mails
         mock_conn.logout.return_value = None
 
         with patch.object(scanner, "connect", return_value=mock_conn):
