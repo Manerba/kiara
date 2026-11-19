@@ -160,6 +160,36 @@ def _load_with_docling(
             image_min_side=backend.get("image_min_side", DDU_IMAGE_MIN_SIDE),
             image_max_pixels=backend.get("image_max_pixels", DDU_IMAGE_MAX_PIXELS),
         )
+        if metadata is not None and result.task_id:
+            metadata["docling_task_id"] = result.task_id
+        if metadata is not None and metadata.get("file_type") == ".pdf":
+            from kiara.ingestion.pdf_recovery import PageRecoveryError, has_text, recover_pdf
+
+            if (
+                result.error == "document_error"
+                or result.missing_pages
+                or (result.page_count and not has_text(result.content or ""))
+            ):
+                detail = result.detail or "Docling lieferte Seiten ohne verwertbaren Text"
+                try:
+                    text = recover_pdf(path, result, backend, metadata)
+                except PageRecoveryError as exc:
+                    metadata.update(
+                        load_error=str(exc),
+                        ddu_error_detail=detail,
+                        parser="pdf-recovery",
+                        parser_fallback=True,
+                    )
+                    return None, exc.kind, ""
+                parser = "docling-remote"
+                if metadata["pdf_ocr_pages"]:
+                    parser = "pdf-page-ocr"
+                elif metadata["pdf_native_pages"]:
+                    parser = "pdf-text-fallback"
+                if result.error:
+                    metadata["ddu_error_detail"] = detail
+                return text, result.error or "", parser
+
         if result.content is not None:
             return result.content, "", "docling-remote"
 
@@ -311,6 +341,9 @@ def load_file(
         # remote_error wird auch bei erfolgreichem Fallback gesetzt
         if ddu_error:
             metadata["ddu_error"] = ddu_error
+
+        if metadata.get("load_error"):
+            return {"text": "", "metadata": metadata}
 
         if metadata.get("skip_reason"):
             metadata.update(parser="image-preflight", no_content=True)

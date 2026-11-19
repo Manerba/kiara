@@ -329,6 +329,17 @@ def is_job_paused(job_id: int) -> bool:
     )
 
 
+def _preserve_interrupted_selection(db, job_id, stats):
+    preserve_selection(db, job_id, stats)
+    if "retry_source_file_count" in stats:
+        db.execute(
+            "UPDATE datasource_embeddings e SET file_count = %s FROM ingestion_jobs j "
+            "WHERE j.id = %s AND e.datasource_id = j.datasource_id "
+            "AND e.embedding_model = j.embedding_model",
+            (stats["retry_source_file_count"], job_id),
+        )
+
+
 class IngestionWorker:
     """Sequentieller Ingestion-Worker mit persistenter Queue.
 
@@ -833,6 +844,11 @@ class IngestionWorker:
                             and "cad_targets" in retry_row["stats_json"]
                             else {}
                         ),
+                        **{
+                            key: locked_old["stats_json"][key]
+                            for key in ("retry_file_log_ids", "retry_source_file_count")
+                            if key in (locked_old.get("stats_json") or {})
+                        },
                         **html_fields,
                         **({"html_migration": migration} if migration is not None else {}),
                     },
@@ -1127,7 +1143,9 @@ class IngestionWorker:
                 return
 
             # Phase 2: Callbacks aufbauen
-            callbacks = self._build_callbacks(job_id, ds_id)
+            callbacks = self._build_callbacks(
+                job_id, ds_id, update_source_progress="_retry_file_paths" not in config
+            )
             _on_progress = callbacks["on_progress"]
 
             # Phase 3: Backend-Warmup
@@ -1399,6 +1417,13 @@ class IngestionWorker:
             raise ValueError(f"Unbekannter Datenquellen-Typ: {ds_row['type']}")
 
         conn_config = load_connector_config(ds_row, connector_cls)
+        if "retry_file_log_ids" in queued_stats:
+            if row["job_type"] != "incremental" or ds_row["type"] not in {"local", "smb", "webdav"}:
+                raise ValueError("Ungueltiger Dateiwiederholungsjob")
+            with db_query() as db:
+                config["_retry_file_paths"] = _retry_file_paths(
+                    db, ds_id, row["embedding_model"], queued_stats["retry_file_log_ids"]
+                )
 
         migration = selection_from_stats(row.get("stats_json"), ds_id, row["embedding_model"])
         html_fields = request_fields(row.get("stats_json"))
@@ -1476,7 +1501,7 @@ class IngestionWorker:
         if cache is not None:
             cache.close()
 
-    def _build_callbacks(self, job_id, ds_id):
+    def _build_callbacks(self, job_id, ds_id, *, update_source_progress=True):
         """Erzeugt Progress-, File-Log-, File-Start- und Status-Callbacks.
 
         Returns:
@@ -1495,11 +1520,12 @@ class IngestionWorker:
                         "WHERE id = %s",
                         (processed, total, job_id),
                     )
-                    db.execute(
-                        "UPDATE datasources SET processed_files = %s, progress_total = %s "
-                        "WHERE id = %s",
-                        (processed, total, ds_id),
-                    )
+                    if update_source_progress:
+                        db.execute(
+                            "UPDATE datasources SET processed_files = %s, progress_total = %s "
+                            "WHERE id = %s",
+                            (processed, total, ds_id),
+                        )
             except Exception as exc:
                 logger.debug("Progress-Update fehlgeschlagen: %s", exc)
             if self._progress_cache is not None:
@@ -1862,7 +1888,8 @@ class IngestionWorker:
 
         cache_path = connector_cls.effective_path(conn_config, dict(ds_row))
         _use_parallel = (
-            job_type != "full"
+            config.get("_retry_file_paths") is None
+            and job_type != "full"
             and getattr(connector_cls, "SUPPORTS_PARALLEL_SCAN", False)
             and os.path.isdir(cache_path)
             and any(True for e in os.scandir(cache_path) if e.is_file() or e.is_dir())
@@ -1979,8 +2006,9 @@ class IngestionWorker:
         scan_dir = scan_info.get("mail_scan_dir")
         if not scan_dir:
             return
-        from kiara.ingestion.imap_scanner import IMAPScanner, read_scan_folder_errors
         from kiara_ingestion_core.models import FileLogEntry
+
+        from kiara.ingestion.imap_scanner import IMAPScanner, read_scan_folder_errors
 
         folder_errors = read_scan_folder_errors(scan_dir)
         if not folder_errors:
@@ -2568,7 +2596,10 @@ class IngestionWorker:
             stats_json=json.dumps(stats, ensure_ascii=False, default=str),
         )
         # datasource_embeddings upsert — Modell kommt bereits normalisiert aus enqueue_job()
-        if stats.get("html_migration"):
+        source_file_count = stats.get("retry_source_file_count")
+        if stats.get("html_migration") or (
+            stats.get("retry_file_log_ids") and source_file_count is None
+        ):
             from kiara.ingestion.vectordb_ops import _recount_datasource_embeddings
 
             _recount_datasource_embeddings(db, ds_id, embedding_model)
@@ -2577,7 +2608,7 @@ class IngestionWorker:
                 datasource_id=ds_id,
                 embedding_model=embedding_model,
                 chunk_count=chunk_count,
-                file_count=stats.get("total_files", 0),
+                file_count=stats.get("retry_source_file_count", stats.get("total_files", 0)),
                 conn=db,
             )
         _ds_repo.update(
@@ -2585,7 +2616,11 @@ class IngestionWorker:
             conn=db,
             ingestion_status=IngestionStatus.SUCCESS.value,
             last_error="",
-            processed_files=stats.get("processed_files", 0),
+            **(
+                {}
+                if stats.get("retry_file_log_ids")
+                else {"processed_files": stats.get("processed_files", 0)}
+            ),
         )
 
     def _log_job_completion(self, job_id, ds_id, stats, embedding_model):
@@ -2687,7 +2722,7 @@ class IngestionWorker:
             from kiara.cad.jobs import preserve_targets
 
             preserve_targets(db, job_id, stats)
-            preserve_selection(db, job_id, stats)
+            _preserve_interrupted_selection(db, job_id, stats)
             _job_repo.update(
                 job_id,
                 conn=db,
@@ -2743,7 +2778,7 @@ class IngestionWorker:
             from kiara.cad.jobs import preserve_targets
 
             preserve_targets(db, job_id, stats)
-            preserve_selection(db, job_id, stats)
+            _preserve_interrupted_selection(db, job_id, stats)
             _job_repo.update(
                 job_id,
                 conn=db,
@@ -2813,6 +2848,28 @@ def retry_html_job(job_id: int) -> int:
     return result
 
 
+def _retry_file_paths(db, ds_id, model, log_ids):
+    if (
+        not isinstance(log_ids, list)
+        or not log_ids
+        or any(type(i) is not int for i in log_ids)
+        or len(set(log_ids)) != len(log_ids)
+    ):
+        raise ValueError("Ungueltige Auswahl von Dateilog-Eintraegen")
+    rows = db.execute(
+        "SELECT f.file_path FROM ingestion_file_logs f JOIN ingestion_jobs j ON j.id=f.job_id "
+        "WHERE f.id=ANY(%s) AND j.datasource_id=%s AND j.embedding_model=%s AND f.status='error' "
+        "ORDER BY f.id",
+        (log_ids, ds_id, model),
+    ).fetchall()
+    paths = list(dict.fromkeys(r["file_path"] for r in rows))
+    if len(paths) != len(log_ids):
+        raise ValueError(
+            "Dateiauswahl fehlt, ist doppelt oder gehoert nicht zu Datenquelle und Modell"
+        )
+    return paths
+
+
 def enqueue_job(
     ds_id: int,
     job_type: str = "incremental",
@@ -2821,6 +2878,7 @@ def enqueue_job(
     embedding_model: str,
     html_migration: dict | None = None,
     html_reingest: str | None = None,
+    retry_file_log_ids: list[int] | None = None,
 ) -> int:
     """Erstellt einen neuen Job in der Queue.
 
@@ -2849,12 +2907,21 @@ def enqueue_job(
         and sql_only_source(dict(cad_ds), config)
         and html_migration is None
         and html_reingest is None
+        and retry_file_log_ids is None
     ):
         from kiara.cad.jobs import enqueue
 
         return enqueue(ds_id, job_type, triggered_by, config)
     embedding_model = normalize_model_name(embedding_model)
     initial_stats = {"cad_targets": targets(dict(cad_ds))} if cad_ds else {}
+    if retry_file_log_ids is not None:
+        if job_type != "incremental" or html_reingest is not None or html_migration is not None:
+            raise ValueError("Dateiwiederholung braucht einen eigenen inkrementellen Job")
+        if not cad_ds or cad_ds["type"] not in {"local", "smb", "webdav"}:
+            raise ValueError("Dateiwiederholung braucht eine Dateidatenquelle")
+        with db_query() as db:
+            _retry_file_paths(db, ds_id, embedding_model, retry_file_log_ids)
+        initial_stats["retry_file_log_ids"] = retry_file_log_ids
     if html_reingest is not None:
         from kiara.ingestion.html_reingest import build_request, validate_target
 
@@ -2922,6 +2989,16 @@ def enqueue_job(
         ).fetchone()
         if existing:
             raise ValueError(f"DS {ds_id} hat bereits einen aktiven Job (#{existing['id']})")
+        if retry_file_log_ids is not None:
+            # Der Teiljob scannt die Quelle nicht. Den letzten Bestand dieses
+            # Modells vor den dateiweisen Änderungen am Index festhalten.
+            previous = db.execute(
+                "SELECT file_count FROM datasource_embeddings "
+                "WHERE datasource_id = %s AND embedding_model = %s",
+                (ds_id, embedding_model),
+            ).fetchone()
+            if previous and previous["file_count"] is not None:
+                initial_stats["retry_source_file_count"] = previous["file_count"]
         job_id = insert_returning(
             db,
             "INSERT INTO ingestion_jobs (datasource_id, job_type, triggered_by, "

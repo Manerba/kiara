@@ -57,6 +57,9 @@ class DDUResult(NamedTuple):
     content: str | None
     error: str  # "" bei Erfolg; Infrastruktur-, Dokument- oder Bildfehler
     detail: str = ""
+    page_count: int = 0
+    missing_pages: tuple[int, ...] = ()
+    task_id: str = ""
 
 
 def is_infrastructure_error(error: str) -> bool:
@@ -200,13 +203,51 @@ def convert_document(
                 return DDUResult(content=None, error="http_error")
             if not isinstance(data, dict):
                 return DDUResult(None, "http_error", "Ungueltige DDU-Antwort: JSON-Objekt fehlt")
-            if data.get("status") in {"failure", "partial_success", "skipped"}:
-                detail = f"DDU-Konvertierung nicht vollstaendig: {data.get('status')}; {data.get('errors', [])}"
+            status = data.get("status")
+            task_id = str(data.get("task_id") or "")[:80]
+            detail = ""
+            if status in {"failure", "partial_success", "skipped"}:
+                errors = str(data.get("errors", []))[:500]
+                detail = f"DDU-Konvertierung nicht vollstaendig: {status}; {errors}"
+                if task_id:
+                    detail = f"Task {task_id}: {detail}"
                 logger.warning("%s: %s", file_path, detail)
-                return DDUResult(None, "document_error", detail)
+                if status != "partial_success" or detected.extension != ".pdf":
+                    return DDUResult(None, "document_error", detail, task_id=task_id)
             document = data.get("document")
             if isinstance(document, dict) and isinstance(document.get("md_content"), str):
-                return DDUResult(content=document["md_content"], error="")
+                content = document["md_content"]
+                if detected.extension == ".pdf":
+                    count = document.get("source_page_count")
+                    pages = document.get("missing_text_pages")
+                    if count is not None or pages is not None:
+                        if (
+                            type(count) is not int
+                            or count < 1
+                            or not isinstance(pages, list)
+                            or any(type(n) is not int or not 1 <= n <= count for n in pages)
+                            or len(pages) != len(set(pages))
+                        ):
+                            return DDUResult(None, "http_error", "Ungueltige PDF-Seitenabdeckung")
+                        if status != "partial_success" or pages:
+                            return DDUResult(
+                                content,
+                                "document_error" if detail else "",
+                                detail,
+                                count,
+                                tuple(pages),
+                                task_id,
+                            )
+                if detail:
+                    return DDUResult(None, "document_error", detail, task_id=task_id)
+                if content.strip() and "<!--" in content:
+                    from kiara.ingestion.pdf_recovery import has_text
+
+                    if not has_text(content):
+                        return DDUResult(None, "document_error", "Docling lieferte nur Platzhalter")
+                return DDUResult(content, "")
+            if detail:
+                return DDUResult(None, "document_error", detail, task_id=task_id)
             return DDUResult(content=None, error="http_error")
         except httpx.TimeoutException:
             logger.warning("DDU timeout for %s after %ds", file_path, timeout)

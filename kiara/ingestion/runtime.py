@@ -1084,7 +1084,8 @@ def _load_content(file_path, ctx, stats, file_log=None):
                 if file_log:
                     file_log.parser_fallback = True
                     file_log.error_phase = "ddu_fallback"
-                    file_log.error_message = f"Standard-Loader verwendet ({error_label})"[:2000]
+                    note = doc["metadata"].get("pdf_recovery_note", "Standard-Loader verwendet")
+                    file_log.error_message = f"{note} ({error_label})"[:2000]
                 return doc, False
             if doc["metadata"].get("load_error"):
                 error_label = (
@@ -1116,6 +1117,9 @@ def _load_content(file_path, ctx, stats, file_log=None):
         if doc["metadata"].get("parser_fallback"):
             stats.setdefault("ddu_fallback_files", 0)
             stats["ddu_fallback_files"] += 1
+            if file_log and (note := doc["metadata"].get("pdf_recovery_note")):
+                file_log.error_phase = "ddu_fallback"
+                file_log.error_message = note[:2000]
 
     return doc, False
 

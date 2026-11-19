@@ -1,0 +1,300 @@
+--- a/opt/app-root/lib/python3.12/site-packages/docling/backend/docling_parse_v4_backend.py
++++ b/opt/app-root/lib/python3.12/site-packages/docling/backend/docling_parse_v4_backend.py
+@@ -54,15 +54,20 @@
+         if self._dpage is not None:
+             return
+
+-        seg_page = self._dp_doc.get_page(
+-            self._page_no + 1,
+-            keep_chars=self._keep_chars,
+-            keep_lines=self._keep_lines,
+-            keep_bitmaps=self._keep_images,
+-            create_words=self._create_words,
+-            create_textlines=self._create_textlines,
+-            enforce_same_font=True,
+-        )
++        try:
++            seg_page = self._dp_doc.get_page(
++                self._page_no + 1,
++                keep_chars=self._keep_chars,
++                keep_lines=self._keep_lines,
++                keep_bitmaps=self._keep_images,
++                create_words=self._create_words,
++                create_textlines=self._create_textlines,
++                enforce_same_font=True,
++            )
++        except (RuntimeError, ValueError) as exc:
++            if "could not find the page-dimensions" in str(exc)[:200]:
++                raise RuntimeError(f"could not find the page-dimensions (page {self._page_no + 1})") from None
++            raise
+
+         # In Docling, all TextCell instances are expected with top-left origin.
+         [
+@@ -220,6 +225,8 @@
+         len_1 = len(self._pdoc)
+         len_2 = self.dp_doc.number_of_pages()
+
++        if len_1 and not len_2:
++            raise RuntimeError(f"PDF page count mismatch: PDFium={len_1}, docling-parse={len_2}")
+         if len_1 != len_2:
+             _log.error(f"Inconsistent number of pages: {len_1}!={len_2}")
+
+--- a/opt/app-root/lib/python3.12/site-packages/docling/datamodel/document.py
++++ b/opt/app-root/lib/python3.12/site-packages/docling/datamodel/document.py
+@@ -132,6 +132,7 @@
+     )
+     page_count: int = Field(0, description="Number of pages in the input document.")
+
++    _failure_reason: str = ""
+     _backend: AbstractDocumentBackend
+
+     def __init__(
+@@ -193,12 +194,16 @@
+
+         except (FileNotFoundError, OSError) as e:
+             self.valid = False
++            cause = e.__cause__ or e
++            self._failure_reason = f"{type(cause).__name__}: {str(cause)[:240]}"
+             _log.exception(
+                 f"File {self.file.name} not found or cannot be opened.", exc_info=e
+             )
+             # raise
+         except RuntimeError as e:
+             self.valid = False
++            cause = e.__cause__ or e
++            self._failure_reason = f"{type(cause).__name__}: {str(cause)[:240]}"
+             _log.exception(
+                 "An unexpected error occurred while opening the document "
+                 f"{self.file.name}",
+--- a/opt/app-root/lib/python3.12/site-packages/docling/document_converter.py
++++ b/opt/app-root/lib/python3.12/site-packages/docling/document_converter.py
+@@ -547,7 +547,7 @@
+                     )
+         else:
+             if raises_on_error:
+-                raise ConversionError(f"Input document {in_doc.file} is not valid.")
++                raise ConversionError(in_doc._failure_reason or f"Input document {in_doc.file} is not valid.")
+             else:
+                 # invalid doc or not of desired format
+                 conv_res = ConversionResult(
+--- a/opt/app-root/lib/python3.12/site-packages/docling_jobkit/convert/results.py
++++ b/opt/app-root/lib/python3.12/site-packages/docling_jobkit/convert/results.py
+@@ -37,7 +37,9 @@
+ ) -> ExportDocumentResponse:
+     document = ExportDocumentResponse(filename=conv_res.input.file.name)
+
+-    if conv_res.status == ConversionStatus.SUCCESS:
++    if conv_res.status == ConversionStatus.SUCCESS or (
++        conv_res.status == ConversionStatus.PARTIAL_SUCCESS and conv_res.input.format.value == "pdf"
++    ):
+         new_doc = conv_res.document._make_copy_with_refmode(
+             Path(), image_mode, page_no=None
+         )
+@@ -195,6 +197,19 @@
+             image_mode=conversion_options.image_export_mode,
+             md_page_break_placeholder=conversion_options.md_page_break_placeholder,
+         )
++        if (export_md and conv_res.status in (ConversionStatus.SUCCESS, ConversionStatus.PARTIAL_SUCCESS)
++                and conv_res.input.format.value == "pdf" and conv_res.input.page_count):
++            first, last = conversion_options.page_range
++            missing = set(range(max(1, first), min(conv_res.input.page_count, last) + 1))
++            for item, _ in conv_res.document.iterate_items():
++                text = getattr(item, "text", "") or ""
++                table = getattr(item, "data", None)
++                if any(c.isalnum() for c in text) or any(
++                    any(c.isalnum() for c in cell.text) for cell in getattr(table, "table_cells", ())
++                ):
++                    missing.difference_update(p.page_no for p in item.prov)
++            content.source_page_count = conv_res.input.page_count
++            content.missing_text_pages = sorted(missing)
+         task_result = ExportResult(
+             content=content,
+             status=conv_res.status,
+--- a/opt/app-root/lib/python3.12/site-packages/docling_jobkit/datamodel/result.py
++++ b/opt/app-root/lib/python3.12/site-packages/docling_jobkit/datamodel/result.py
+@@ -10,6 +10,8 @@
+
+ class ExportDocumentResponse(BaseModel):
+     filename: str
++    missing_text_pages: Optional[list[int]] = None
++    source_page_count: Optional[int] = None
+     md_content: Optional[str] = None
+     json_content: Optional[DoclingDocument] = None
+     html_content: Optional[str] = None
+--- a/opt/app-root/lib/python3.12/site-packages/docling_jobkit/datamodel/task.py
++++ b/opt/app-root/lib/python3.12/site-packages/docling_jobkit/datamodel/task.py
+@@ -26,6 +26,7 @@
+     task_id: str
+     task_type: TaskType = TaskType.CONVERT
+     task_status: TaskStatus = TaskStatus.PENDING
++    failure: Optional[dict[str, str]] = None
+     sources: list[TaskSource] = []
+     target: TaskTarget = InBodyTarget()
+     options: Annotated[
+--- a/opt/app-root/lib/python3.12/site-packages/docling_jobkit/orchestrators/local/worker.py
++++ b/opt/app-root/lib/python3.12/site-packages/docling_jobkit/orchestrators/local/worker.py
+@@ -5,6 +5,7 @@
+ from typing import TYPE_CHECKING, Any, Optional, Union
+
+ from docling.datamodel.base_models import DocumentStream
++from docling.exceptions import ConversionError
+
+ from docling_jobkit.convert.chunking import process_chunk_results
+ from docling_jobkit.convert.manager import DoclingConverterManager
+@@ -122,9 +123,15 @@
+                 )
+
+             except Exception as e:
+-                _log.error(
+-                    f"Worker {self.worker_id} failed to process job {task_id}: {e}"
+-                )
++                message = str(e)[:500].split("\n", 1)[0]
++                infrastructure = any(s in message.lower() for s in (
++                    "out of memory", "no pipeline could be initialized", "cuda error",
++                    "no space left", "cannot allocate memory", "model files",
++                ))
++                code = "conversion_failed" if isinstance(e, ConversionError) and not infrastructure else "backend_error"
++                task.failure = {"code": code, "message": message}
++                task.sources = []
++                _log.error("Worker %s failed task %s (%s): %s", self.worker_id, task_id, code, message)
+                 task.set_status(TaskStatus.FAILURE)
+
+             finally:
+--- a/opt/app-root/src/docling_serve/app.py
++++ b/opt/app-root/src/docling_serve/app.py
+@@ -82,7 +82,7 @@
+     get_metrics_endpoint_content,
+     setup_otel_instrumentation,
+ )
+-from docling_serve.response_preparation import prepare_response
++from docling_serve.response_preparation import prepare_response, schedule_removal
+ from docling_serve.settings import AsyncEngine, docling_serve_settings
+ from docling_serve.storage import get_scratch
+ from docling_serve.websocket_notifier import WebsocketNotifier
+@@ -179,6 +179,9 @@
+         lifespan=lifespan,
+         version=version,
+     )
++
++    from docling_serve.pdf_page_ocr import register as register_page_ocr
++    register_page_ocr(app, require_auth)
+
+     # Setup OpenTelemetry instrumentation
+     redis_url = (
+@@ -355,6 +358,17 @@
+         )
+         return task
+
++    async def missing_result(orchestrator, task_id, background_tasks):
++        task = await orchestrator.task_status(task_id=task_id)
++        if not task.is_completed():
++            return JSONResponse(status_code=202, content={"task_id": task_id, "status": task.task_status.value})
++        failure = task.failure or {"code": "backend_error", "message": "Terminal task without result"}
++        schedule_removal(task_id, orchestrator, background_tasks)
++        return JSONResponse(
++            background=background_tasks, status_code=200 if failure["code"] == "conversion_failed" else 503,
++            content={"status": "failure", "task_id": task_id, "errors": [failure]},
++        )
++
+     async def _wait_task_complete(orchestrator: BaseOrchestrator, task_id: str) -> bool:
+         start_time = time.monotonic()
+         while True:
+@@ -511,10 +525,7 @@
+
+         task_result = await orchestrator.task_result(task_id=task.task_id)
+         if task_result is None:
+-            raise HTTPException(
+-                status_code=404,
+-                detail="Task result not found. Please wait for a completion status.",
+-            )
++            return await missing_result(orchestrator, task.task_id, background_tasks)
+         response = await prepare_response(
+             task_id=task.task_id,
+             task_result=task_result,
+@@ -567,10 +578,7 @@
+
+         task_result = await orchestrator.task_result(task_id=task.task_id)
+         if task_result is None:
+-            raise HTTPException(
+-                status_code=404,
+-                detail="Task result not found. Please wait for a completion status.",
+-            )
++            return await missing_result(orchestrator, task.task_id, background_tasks)
+         response = await prepare_response(
+             task_id=task.task_id,
+             task_result=task_result,
+@@ -767,10 +775,7 @@
+
+             task_result = await orchestrator.task_result(task_id=task.task_id)
+             if task_result is None:
+-                raise HTTPException(
+-                    status_code=404,
+-                    detail="Task result not found. Please wait for a completion status.",
+-                )
++                return await missing_result(orchestrator, task.task_id, background_tasks)
+             response = await prepare_response(
+                 task_id=task.task_id,
+                 task_result=task_result,
+@@ -849,10 +854,7 @@
+
+             task_result = await orchestrator.task_result(task_id=task.task_id)
+             if task_result is None:
+-                raise HTTPException(
+-                    status_code=404,
+-                    detail="Task result not found. Please wait for a completion status.",
+-                )
++                return await missing_result(orchestrator, task.task_id, background_tasks)
+             response = await prepare_response(
+                 task_id=task.task_id,
+                 task_result=task_result,
+@@ -986,10 +988,7 @@
+         try:
+             task_result = await orchestrator.task_result(task_id=task_id)
+             if task_result is None:
+-                raise HTTPException(
+-                    status_code=404,
+-                    detail="Task result not found. Please wait for a completion status.",
+-                )
++                return await missing_result(orchestrator, task_id, background_tasks)
+             response = await prepare_response(
+                 task_id=task_id,
+                 task_result=task_result,
+--- a/opt/app-root/src/docling_serve/datamodel/responses.py
++++ b/opt/app-root/src/docling_serve/datamodel/responses.py
+@@ -23,6 +23,7 @@
+
+
+ class ConvertDocumentResponse(BaseModel):
++    task_id: Optional[str] = None
+     document: ExportDocumentResponse
+     status: ConversionStatus
+     errors: list[ErrorItem] = []
+--- a/opt/app-root/src/docling_serve/response_preparation.py
++++ b/opt/app-root/src/docling_serve/response_preparation.py
+@@ -39,6 +39,7 @@
+     if isinstance(task_result.result, ExportResult):
+         response = ConvertDocumentResponse(
+             document=task_result.result.content,
++            task_id=task_id if task_result.result.status.value != "success" else None,
+             status=task_result.result.status,
+             processing_time=task_result.processing_time,
+             timings=task_result.result.timings,
+@@ -68,6 +69,12 @@
+     else:
+         raise ValueError("Unknown result type")
+
++    schedule_removal(task_id, orchestrator, background_tasks)
++
++    return response
++
++
++def schedule_removal(task_id, orchestrator, background_tasks):
+     if docling_serve_settings.single_use_results:
+
+         async def _remove_task_impl():
+@@ -78,5 +85,3 @@
+             asyncio.create_task(_remove_task_impl())  # noqa: RUF006
+
+         background_tasks.add_task(_remove_task)
+-
+-    return response

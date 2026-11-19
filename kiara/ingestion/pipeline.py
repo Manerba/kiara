@@ -535,15 +535,31 @@ def _load_and_diff_files(
     selection = validate_run_selection(config, datasource_id, embedding_model)
     hash_store = HashStore()
 
+    from pathlib import Path
+
     file_stats = {}
-    all_files = (
-        list(selection["paths"])
-        if selection is not None
-        else scan_files(config, file_stats=file_stats)
-    )
+    retry_paths = config.get("_retry_file_paths")
+    if retry_paths is not None:
+        root = Path(config["datasource"]["path"]).resolve(strict=True)
+        if not incremental or selection is not None or not retry_paths:
+            raise ValueError("Dateiwiederholung braucht eine inkrementelle Auswahl")
+        if any(
+            not Path(path).is_absolute() or not Path(path).resolve().is_relative_to(root)
+            for path in retry_paths
+        ):
+            raise ValueError("Wiederholungspfad ausserhalb der Datenquelle")
+        all_files = list(retry_paths)
+    elif selection is not None:
+        all_files = list(selection["paths"])
+    else:
+        all_files = scan_files(config, file_stats=file_stats)
     # An explicit migration replays only its selected files, even when their
     # completion hashes already match. Unselected paths never enter the diff.
-    stored_hashes = {} if selection is not None else hash_store.load(datasource_id, embedding_model)
+    stored_hashes = (
+        {}
+        if selection is not None or retry_paths is not None
+        else hash_store.load(datasource_id, embedding_model)
+    )
     from kiara.cad.ingestion import pkg
 
     cad_vector = config.get("ingestion", {}).get("cad_vector_enabled", True)
@@ -583,12 +599,12 @@ def _load_and_diff_files(
         hash_mode=hash_mode,
         file_stats=file_stats,
     )
-    if selection is not None and set(file_hashes) != set(all_files):
+    if (selection is not None or retry_paths is not None) and set(file_hashes) != set(all_files):
         missing = sorted(set(all_files) - set(file_hashes))
-        raise ValueError(
-            "Vorvalidierte HTML-Migrationsdatei fehlt oder ist keine regulaere Datei: "
-            + ", ".join(missing)
+        kind = (
+            "Vorvalidierte HTML-Migrationsdatei" if selection is not None else "Ausgewaehlte Datei"
         )
+        raise ValueError(f"{kind} fehlt oder ist keine regulaere Datei: " + ", ".join(missing))
 
     file_hashes = {
         path: (processing_file_hash(config, path, digest), size)
@@ -614,6 +630,7 @@ def _load_and_diff_files(
         path
         for path, (digest, _size) in file_hashes.items()
         if not incremental
+        or retry_paths is not None
         or (stored_hashes.get(path) != digest and empty_hashes.get(path) != digest)
         or path in pending_sources
     ]
@@ -648,7 +665,9 @@ def _load_and_diff_files(
     for source in pending_cleanup_sources(str(store.get_collection_name())):
         if retain_cad_source(source):
             continue
-        if selection is not None:
+        if retry_paths is not None:
+            in_scope = source in file_hashes
+        elif selection is not None:
             in_scope = source in selection["paths"]
         else:
             in_scope = os.path.commonpath([root, os.path.abspath(source)]) == root
@@ -1583,6 +1602,7 @@ def run_ingestion(
     from kiara.ingestion.html_migration import validate_run_selection
 
     selection = validate_run_selection(config, datasource_id, embedding_model)
+    whole_source = selection is None and config.get("_retry_file_paths") is None
     if selection is not None:
         ds_overrides = {**(ds_overrides or {}), "colbert_enabled": False}
     if datasource_id is None or datasource_id == 0:
@@ -1700,7 +1720,7 @@ def run_ingestion(
     if not files_to_process:
         logger.info("No files to process.")
         # No-Files-Pfad gilt als run_completed=True
-        if selection is None and not _run_colbert_model_switch_cleanup(
+        if whole_source and not _run_colbert_model_switch_cleanup(
             config,
             datasource_id,
             chunk_ds,
@@ -1709,7 +1729,7 @@ def run_ingestion(
             stats=stats,
         ):
             return stats
-        if selection is None:
+        if whole_source:
             hash_store.set_hash_mode(datasource_id, embedding_model, hash_mode)
         # CLI-Pfad: datasource_embeddings aus SoT (chunk_datasources +
         # file_hashes) recounten, damit der 4-Schichten-Counter ohne
@@ -1741,7 +1761,7 @@ def run_ingestion(
     def complete_file(path):
         version = loaded_versions[path]
         version.validate()
-        completion_options = {"sync_model_sizes": selection is None}
+        completion_options = {"sync_model_sizes": whole_source}
         if _colbert_enabled_for_run(ictx):
             from kiara.retrieval.colbert import colbert_ds_model_key
             from kiara.shared.constants import COLBERT_DEFAULT_MODEL
@@ -1828,11 +1848,11 @@ def run_ingestion(
             break
 
     _persist_hashes_checkpoint(ictx, force=True)
-    if selection is None:
+    if whole_source:
         hash_store.set_hash_mode(datasource_id, embedding_model, hash_mode)
 
     # ColBERT Model-Switch Cleanup am Ende des Laufs
-    if selection is None and not _run_colbert_model_switch_cleanup(
+    if whole_source and not _run_colbert_model_switch_cleanup(
         config,
         datasource_id,
         chunk_ds,
