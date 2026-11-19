@@ -12,14 +12,14 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-_WORD_CONNECTORS = frozenset("-_'–—’ʼ")
-
-
 def _is_word_boundary(text: str, start: int, end: int) -> bool:
     """Prueft ob der Treffer an Wortgrenzen liegt.
 
-    Verhindert Teil-Matches wie "Mueller" in "Benzmueller" sowie
-    in Bindestrich-/Apostroph-Komposita wie "Mueller-Schmidt" oder "O'Brien".
+    Verhindert Teil-Matches wie "Mueller" in "Benzmueller". Bindestriche,
+    Unterstriche und Apostrophe gelten als Grenze (Hausaenderung): Namen in
+    Doppelnamen ("Mueller-Schmidt"), Dateinamen ("Angebot_Mueller.pdf") und
+    Pfaden ("/Mueller-Projekt/") werden ersetzt. Steht der ganze Doppelname
+    selbst in den Stammdaten, gewinnt der laengere Treffer.
 
     Args:
         text: Der durchsuchte Text (lowercase).
@@ -28,11 +28,11 @@ def _is_word_boundary(text: str, start: int, end: int) -> bool:
     """
     if start > 0:
         ch = text[start - 1]
-        if ch.isalnum() or ch in _WORD_CONNECTORS:
+        if ch.isalnum():
             return False
     if end < len(text):
         ch = text[end]
-        if ch.isalnum() or ch in _WORD_CONNECTORS:
+        if ch.isalnum():
             return False
     return True
 

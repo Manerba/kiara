@@ -260,6 +260,8 @@ def test_mcp_query_serializes_model_window_warning_and_isolates_requests():
         patch("kiara.mcp_server._run_rag_query", side_effect=run_query),
         patch("kiara.mcp_server._log_mcp_query"),
         patch("kiara.web.api_key_auth.validate_api_key", return_value={"id": 1}),
+        # Anonymisierung der Ausgabe ist in test_mcp_anonymization abgedeckt
+        patch("kiara.mcp_server._anonymize_query_response", side_effect=lambda u, q, r, c: r),
     ):
         app = _create_app({"web": {"mcp_enabled": True, "mcp_retrieval_enabled": False}})
         with TestClient(app) as client:

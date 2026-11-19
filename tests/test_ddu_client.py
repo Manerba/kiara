@@ -131,6 +131,25 @@ def test_convert_params_forwarded(tmp_path):
     assert call_kwargs["data"]["ocr_lang"] == ["fr"]
 
 
+def test_convert_images_as_placeholder(tmp_path):
+    """Bilder nicht als base64 ins Markdown (docling-serve-Default "embedded")."""
+    f = tmp_path / "test.pdf"
+    f.write_bytes(b"%PDF-1.4 dummy")
+
+    mock_resp = _mock_response({"document": {"md_content": "# OK"}})
+
+    with patch("kiara.ingestion.ddu_client.httpx") as mock_httpx:
+        mock_httpx.post.return_value = mock_resp
+        mock_httpx.TimeoutException = httpx.TimeoutException
+        mock_httpx.ConnectError = httpx.ConnectError
+        mock_httpx.HTTPStatusError = httpx.HTTPStatusError
+
+        convert_document(str(f), "http://ddu:5001")
+
+    _, call_kwargs = mock_httpx.post.call_args
+    assert call_kwargs["data"]["image_export_mode"] == "placeholder"
+
+
 def test_convert_default_timeout(tmp_path):
     """Ohne timeout → DEFAULT_TIMEOUTS['ddu_convert'] (120.0)."""
     f = tmp_path / "test.pdf"
@@ -231,7 +250,7 @@ def test_convert_http_status_error(tmp_path):
     error = httpx.HTTPStatusError(
         "500 Internal Server Error",
         request=MagicMock(),
-        response=MagicMock(status_code=500),
+        response=httpx.Response(500, text="Konvertierungsdienst ausgefallen"),
     )
 
     with patch("kiara.ingestion.ddu_client.httpx") as mock_httpx:
@@ -243,11 +262,11 @@ def test_convert_http_status_error(tmp_path):
 
         result = convert_document(str(f), "http://ddu:5001")
 
-    assert result == DDUResult(None, "http_error")
+    assert result == DDUResult(None, "http_error", "HTTP 500: Konvertierungsdienst ausgefallen")
 
 
 def test_convert_generic_exception(tmp_path):
-    """RuntimeError → DDUResult(None, 'connection')."""
+    """Unerwartete Clientfehler sind kein Nachweis eines Backend-Ausfalls."""
     f = tmp_path / "test.pdf"
     f.write_bytes(b"%PDF-1.4 dummy")
 
@@ -259,7 +278,7 @@ def test_convert_generic_exception(tmp_path):
 
         result = convert_document(str(f), "http://ddu:5001")
 
-    assert result == DDUResult(None, "connection")
+    assert result == DDUResult(None, "client_error", "unexpected")
 
 
 def test_convert_url_trailing_slash(tmp_path):

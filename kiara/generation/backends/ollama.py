@@ -11,6 +11,7 @@ from collections.abc import Generator
 from importlib import import_module
 
 from kiara.generation.backends.base import LLMBackend, _clean_think_blocks
+from kiara.generation.runner_options import fixed_runner_options
 from kiara.shared.constants import (
     DEFAULT_LLM_NUM_CTX,
     DEFAULT_LLM_TEMPERATURE,
@@ -83,6 +84,7 @@ class OllamaBackend(LLMBackend):
         self._model = model
         self._temperature = temperature
         self._num_ctx = num_ctx
+        self._runner_options = fixed_runner_options(url, model)
         self._last_usage: dict = {}
 
     def _make_client(self, timeout: float | None = None):
@@ -134,7 +136,7 @@ class OllamaBackend(LLMBackend):
         """
         self._last_usage = {}
         temperature = kwargs.get("temperature", self._temperature)
-        num_ctx = kwargs.get("num_ctx", self._num_ctx)
+        num_ctx = self._runner_options.get("num_ctx", kwargs.get("num_ctx", self._num_ctx))
         timeout = kwargs.get("timeout")
 
         # Messages bauen — leere System-Messages weglassen
@@ -146,7 +148,7 @@ class OllamaBackend(LLMBackend):
         chat_kwargs = dict(
             model=self._model,
             messages=messages,
-            options={"temperature": temperature, "num_ctx": num_ctx},
+            options={"temperature": temperature, "num_ctx": num_ctx, **self._runner_options},
             stream=False,
         )
         if "max_tokens" in kwargs:
@@ -199,7 +201,7 @@ class OllamaBackend(LLMBackend):
         """
         self._last_usage = {}
         temperature = kwargs.get("temperature", self._temperature)
-        num_ctx = kwargs.get("num_ctx", self._num_ctx)
+        num_ctx = self._runner_options.get("num_ctx", kwargs.get("num_ctx", self._num_ctx))
         timeout = kwargs.get("timeout")
 
         messages = []
@@ -210,7 +212,7 @@ class OllamaBackend(LLMBackend):
         chat_kwargs = dict(
             model=self._model,
             messages=messages,
-            options={"temperature": temperature, "num_ctx": num_ctx},
+            options={"temperature": temperature, "num_ctx": num_ctx, **self._runner_options},
             stream=True,
         )
 

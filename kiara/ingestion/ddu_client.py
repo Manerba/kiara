@@ -13,19 +13,22 @@ Concurrency-Hinweis:
 """
 
 import logging
-import mimetypes
 import threading
 import time
 from pathlib import Path
 from typing import NamedTuple
 
 import httpx
+from httpx import RequestError
+from kiara_document_loaders.content_detect import detect_file_format
 
 from kiara.config import DEFAULT_TIMEOUTS
 from kiara.shared.constants import (
     DDU_DEFAULT_CONCURRENCY,
     DDU_DEFAULT_OCR_LANGUAGES,
     DDU_DEFAULT_TABLE_MODE,
+    DDU_IMAGE_MAX_PIXELS,
+    DDU_IMAGE_MIN_SIDE,
 )
 
 logger = logging.getLogger(__name__)
@@ -52,7 +55,13 @@ class DDUResult(NamedTuple):
     """Ergebnis einer Remote-DDU-Konvertierung."""
 
     content: str | None
-    error: str  # "" bei Erfolg, "timeout", "connection", "http_error"
+    error: str  # "" bei Erfolg; Infrastruktur-, Dokument- oder Bildfehler
+    detail: str = ""
+
+
+def is_infrastructure_error(error: str) -> bool:
+    """Nur voruebergehende Backend-Probleme duerfen Recovery ausloesen."""
+    return error in {"timeout", "connection", "http_error"}
 
 
 def check_ddu_health(ddu_backends: list[dict], timeout: float = 120.0) -> tuple[bool, str]:
@@ -104,6 +113,8 @@ def convert_document(
     ocr_lang: list[str] | None = None,
     timeout: float | None = None,
     concurrency_limit: int | None = None,
+    image_min_side: int = DDU_IMAGE_MIN_SIDE,
+    image_max_pixels: int = DDU_IMAGE_MAX_PIXELS,
 ) -> DDUResult:
     """Sendet Datei an docling-serve und gibt Ergebnis zurueck.
 
@@ -115,6 +126,8 @@ def convert_document(
         ocr_lang: Sprachen fuer OCR (Default: ["de", "en"]).
         timeout: Request-Timeout in Sekunden (Default: DEFAULT_TIMEOUTS["ddu_convert"]).
         concurrency_limit: Max parallele Requests (Default: 2).
+        image_min_side: Mindestseitenlaenge aller Bildframes in Pixeln.
+        image_max_pixels: Maximale Pixelzahl je Bildframe.
 
     Returns:
         DDUResult mit content (Markdown oder None) und error-Typ.
@@ -124,11 +137,28 @@ def convert_document(
     if timeout is None:
         timeout = DEFAULT_TIMEOUTS["ddu_convert"]
 
+    from kiara.ingestion.ddu_images import check_image
+
+    try:
+        detected = detect_file_format(file_path)
+    except Exception as exc:
+        return DDUResult(None, "document_error", f"Formaterkennung fehlgeschlagen: {exc}")
+
+    image_error, detail = check_image(
+        file_path,
+        min_side=image_min_side,
+        max_pixels=image_max_pixels,
+        detected_extension=detected.extension,
+    )
+    if image_error:
+        logger.info("DDU Bildpruefung fuer %s: %s", file_path, detail)
+        return DDUResult(None, image_error, detail)
+
     url = f"{ddu_url.rstrip('/')}/v1/convert/file"
-    filename = Path(file_path).name
+    filename = Path(file_path).with_suffix(detected.extension).name
 
     # Korrekter MIME-Type statt pauschal application/octet-stream
-    mime_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+    mime_type = detected.mime_type
 
     deadline = time.monotonic() + timeout
 
@@ -155,6 +185,10 @@ def convert_document(
                         "table_mode": table_mode,
                         "to_formats": "md",
                         "ocr_lang": ocr_lang,
+                        # Hausaenderung 01.11.2026: ohne Angabe bettet docling-serve
+                        # alle Bilder als base64-Data-URI ins Markdown ein (Default
+                        # "embedded"); die landeten als Hunderte Chunks im Index.
+                        "image_export_mode": "placeholder",
                     },
                     timeout=remaining,
                 )
@@ -164,8 +198,14 @@ def convert_document(
             except ValueError:
                 logger.warning("DDU non-JSON response for %s: %s", file_path, resp.text[:200])
                 return DDUResult(content=None, error="http_error")
-            document = data.get("document", {})
-            if "md_content" in document and document["md_content"] is not None:
+            if not isinstance(data, dict):
+                return DDUResult(None, "http_error", "Ungueltige DDU-Antwort: JSON-Objekt fehlt")
+            if data.get("status") in {"failure", "partial_success", "skipped"}:
+                detail = f"DDU-Konvertierung nicht vollstaendig: {data.get('status')}; {data.get('errors', [])}"
+                logger.warning("%s: %s", file_path, detail)
+                return DDUResult(None, "document_error", detail)
+            document = data.get("document")
+            if isinstance(document, dict) and isinstance(document.get("md_content"), str):
                 return DDUResult(content=document["md_content"], error="")
             return DDUResult(content=None, error="http_error")
         except httpx.TimeoutException:
@@ -174,11 +214,35 @@ def convert_document(
         except httpx.ConnectError:
             logger.warning("DDU connection refused for %s at %s", file_path, ddu_url)
             return DDUResult(content=None, error="connection")
+        except RequestError as exc:
+            logger.warning("DDU Transportfehler fuer %s: %s", file_path, exc)
+            return DDUResult(None, "connection", str(exc))
         except httpx.HTTPStatusError as exc:
-            logger.warning("DDU HTTP error for %s: %s", file_path, exc)
-            return DDUResult(content=None, error="http_error")
+            response = exc.response
+            body = response.text
+            logger.warning("DDU HTTP %s fuer %s: %s", response.status_code, file_path, body)
+            error = "http_error"
+            if response.status_code == 404:
+                try:
+                    task_missing = response.json().get("detail") == (
+                        "Task result not found. Please wait for a completion status."
+                    )
+                except (ValueError, AttributeError):
+                    task_missing = False
+                error = "document_error" if task_missing else "request_error"
+            elif 400 <= response.status_code < 500 and response.status_code not in {
+                408,
+                409,
+                425,
+                429,
+            }:
+                error = "request_error"
+            return DDUResult(None, error, f"HTTP {response.status_code}: {body[:2000]}")
+        except OSError as exc:
+            logger.warning("DDU Quelldatei nicht lesbar %s: %s", file_path, exc)
+            return DDUResult(None, "document_error", str(exc))
         except Exception as exc:
-            logger.warning("DDU request failed for %s: %s", file_path, exc)
-            return DDUResult(content=None, error="connection")
+            logger.exception("DDU Clientfehler fuer %s", file_path)
+            return DDUResult(None, "client_error", str(exc))
     finally:
         semaphore.release()

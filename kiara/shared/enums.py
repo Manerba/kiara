@@ -77,3 +77,4 @@ class ConnectorType(str, Enum):
     IMAP = "imap"
     EXCHANGE_ONLINE = "exchange_online"
     SQL = "sql"
+    PST = "pst"

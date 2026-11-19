@@ -98,6 +98,8 @@ def describe_image(
     ollama_url: str,
     prompt: str = "",
     timeout: float = 300.0,
+    *,
+    detected_extension: str | None = None,
 ) -> dict[str, Any] | None:
     """Describe an image file using a Vision Language Model.
 
@@ -106,7 +108,7 @@ def describe_image(
         The text is a natural-language description of the image content.
     """
     path = Path(file_path)
-    ext = path.suffix.lower()
+    ext = detected_extension or path.suffix.lower()
 
     if ext not in IMAGE_FORMATS:
         return None
@@ -132,6 +134,8 @@ def describe_image(
         "directory": str(path.parent),
         "filename": path.name,
         "file_type": ext,
+        "source_extension": path.suffix.lower(),
+        "detected_format": ext,
         "modified": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
         "size_bytes": stat.st_size,
         "parser": "vlm",

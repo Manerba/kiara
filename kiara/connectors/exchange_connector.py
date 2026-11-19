@@ -39,6 +39,7 @@ class ExchangeOnlineConnector(ConnectorBase):
 
     name = ConnectorType.EXCHANGE_ONLINE
     label = "Exchange Online (OAuth2)"
+    badge_label = "EXO"
     badge_class = "info"
     HASH_MODE = "content"  # Mails werden bei Resync neu geschrieben
     SUPPORTS_PARALLEL_SCAN = True

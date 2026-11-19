@@ -43,6 +43,8 @@ from kiara.shared.constants import (
     CLOUD_BUDGET_ALERT_THRESHOLD_PCT,
     CLOUD_MONTHLY_BUDGET_EUR,
     COLBERT_DEFAULT_MODEL,
+    DDU_IMAGE_MAX_PIXELS,
+    DDU_IMAGE_MIN_SIDE,
     DEFAULT_AGENT_MAX_ITERATIONS,
     DEFAULT_AGENT_NUM_CTX,
     DEFAULT_CHUNK_OVERLAP,
@@ -79,6 +81,7 @@ from kiara.shared.constants import (
     INGESTION_D_STATE_TIMEOUT_SECS_DEFAULT,
     INGESTION_D_STATE_WARNING_SECS_DEFAULT,
     INGESTION_DEFAULT_BATCH_SIZE,
+    INGESTION_MAX_CONSECUTIVE_UNEXPECTED_ERRORS_DEFAULT,
     INGESTION_STALL_POLL_INTERVAL_SECS_DEFAULT,
     MAIL_ARCHIVE_MAX_BODY_BYTES_DEFAULT,
     MCP_PORT_DEFAULT,
@@ -107,6 +110,7 @@ DEFAULT_PATHS: dict[str, str] = {
     "mail_cache": "/var/lib/kiara/mail-cache",
     "mail_originals": "/var/lib/kiara/mail-originals",
     "sql_cache": "/var/lib/kiara/sql-cache",
+    "pst_dropzone": "/srv/kiara/pst",
     "log": "/var/log/kiara/kiara.log",
     "config": "/etc/kiara/kiara.yaml",
     "templates": "/etc/kiara/templates",
@@ -279,6 +283,7 @@ DEFAULT_CONFIG = {
             ".pptx",
             ".csv",
             ".dxf",
+            ".pkg",
             ".step",
             ".stp",
             ".iges",
@@ -306,6 +311,9 @@ DEFAULT_CONFIG = {
         "qdrant_grpc": False,
     },
     "ingestion": {
+        # PKG mit ungeklärten Feldformen: skip = Datei überspringen,
+        # audit = Fundstellen protokollieren und Datei markiert veröffentlichen.
+        "cad_unknown_fields": "skip",
         "mail_archive": {
             "path": DEFAULT_PATHS["mail_originals"],
             "max_body_bytes": MAIL_ARCHIVE_MAX_BODY_BYTES_DEFAULT,
@@ -313,6 +321,9 @@ DEFAULT_CONFIG = {
         "chunk_size": DEFAULT_CHUNK_SIZE,
         "chunk_overlap": DEFAULT_CHUNK_OVERLAP,
         "batch_size": INGESTION_DEFAULT_BATCH_SIZE,
+        # Gleiche unerwartete Ausnahme bei so vielen Dateien hintereinander
+        # bricht den Job ab (Lawinenschutz, Gitea #8).
+        "max_consecutive_unexpected_errors": INGESTION_MAX_CONSECUTIVE_UNEXPECTED_ERRORS_DEFAULT,
         "admin_cache_refresh_seconds": 3,
         "ds_ids_sync_attempts": 3,
         "vlm_prompt": "",
@@ -886,9 +897,20 @@ def get_ddu_backends(config: dict) -> list[dict]:
     Jedes Dict enthaelt die gleichen Keys wie get_ddu_backend() plus:
     - is_local: immer False; KIara nutzt DDU nur noch als Remote-Service.
 
-    Hinweis: ``config`` wird aktuell nicht verwendet (kein YAML-Fallback),
-    aber als Parameter beibehalten fuer API-Symmetrie.
+    Bildgrenzen kommen aus ``ddu`` in der YAML-Konfiguration; die
+    Backend-Auswahl bleibt ausschliesslich in der Datenbank.
     """
+    from kiara.exceptions import ConfigurationError
+
+    image_config = config.get("ddu", {})
+    if not isinstance(image_config, dict):
+        raise ConfigurationError("ddu muss ein Konfigurationsobjekt sein")
+    image_min_side = image_config.get("image_min_side", DDU_IMAGE_MIN_SIDE)
+    image_max_pixels = image_config.get("image_max_pixels", DDU_IMAGE_MAX_PIXELS)
+    if type(image_min_side) is not int or image_min_side < DDU_IMAGE_MIN_SIDE:
+        raise ConfigurationError(f"ddu.image_min_side muss mindestens {DDU_IMAGE_MIN_SIDE} sein")
+    if type(image_max_pixels) is not int or image_max_pixels < image_min_side**2:
+        raise ConfigurationError("ddu.image_max_pixels muss mindestens image_min_side ** 2 sein")
     try:
         from kiara.backend_selector import get_all_active
 
@@ -924,8 +946,10 @@ def get_ddu_backends(config: dict) -> list[dict]:
                 "table_mode": extra.get("table_mode", "accurate"),
                 "do_ocr": extra.get("do_ocr", True),
                 "ocr_lang": extra.get("ocr_lang", ["de", "en"]),
-                "timeout": extra.get("timeout", DEFAULT_TIMEOUTS["ddu_convert"]),
+                "timeout": extra.get("timeout", get_timeout(config, "ddu_convert")),
                 "concurrency_limit": extra.get("concurrency_limit"),
+                "image_min_side": image_min_side,
+                "image_max_pixels": image_max_pixels,
             }
         )
     return result

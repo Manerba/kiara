@@ -308,6 +308,69 @@ class TestWarmupStrategies:
             assert "/v1/convert/file" in call_args[0][0] or "/v1/convert/file" in str(call_args)
             mock_resp.raise_for_status.assert_called_once()
 
+    def test_warmup_ddu_png_is_not_degenerate(self):
+        """Das DDU-Warmup-Bild darf nicht 1x1 sein (Docling-Layoutmodell stuerzt sonst ab)."""
+        import io
+
+        from PIL import Image
+
+        from kiara.backend_warmup import _get_ocr_warmup_png
+
+        png = _get_ocr_warmup_png()
+        assert png[:4] == b"\x89PNG"
+        img = Image.open(io.BytesIO(png))
+        assert img.size[0] >= 64 and img.size[1] >= 32
+        assert img.mode == "RGB"
+
+    def test_warmup_embedding_waits_for_kiron_gpu_gate(self):
+        """409/503 'GPU-Operation blockiert' (Docling startet) → Retry statt Abbruch."""
+        warmer = BackendWarmer()
+        task = _emb_task()
+        blocked = MagicMock(status_code=409, text='{"error": "GPU-Operation blockiert"}')
+        ok = MagicMock(status_code=200, text="{}")
+        ok.json.return_value = {"embeddings": [[0.1, 0.2]]}
+        with (
+            patch("kiara.backend_warmup.httpx.post", side_effect=[blocked, blocked, ok]) as post,
+            patch("kiara.backend_warmup.time.sleep") as sleep,
+        ):
+            warmer._warm_embedding(task, 60)
+        assert post.call_count == 3
+        assert sleep.call_count == 2
+        blocked.raise_for_status.assert_not_called()
+
+    def test_warmup_embedding_gate_wait_is_bounded(self, monkeypatch):
+        """Bleibt das Gate zu, endet der Warmup nach EMBED_GATE_RETRY_MAX_WAIT_S mit dem Fehler."""
+        import httpx
+
+        from kiara.retrieval import embedding
+
+        monkeypatch.setattr(embedding, "EMBED_GATE_RETRY_MAX_WAIT_S", 0.0)
+        warmer = BackendWarmer()
+        task = _emb_task()
+        blocked = MagicMock(status_code=503, text='{"error": "GPU-Operation blockiert"}')
+        blocked.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "503", request=MagicMock(), response=blocked
+        )
+        with patch("kiara.backend_warmup.httpx.post", return_value=blocked) as post:
+            with pytest.raises(httpx.HTTPStatusError):
+                warmer._warm_embedding(task, 60)
+        assert post.call_count == 1
+
+    def test_warmup_embedding_other_errors_not_retried_on_gate_path(self):
+        """Nur der Gate-Marker loest den Retry aus; sonstige Fehler gehen sofort durch."""
+        import httpx
+
+        warmer = BackendWarmer()
+        task = _emb_task()
+        bad = MagicMock(status_code=503, text="Service Unavailable")
+        bad.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "503", request=MagicMock(), response=bad
+        )
+        with patch("kiara.backend_warmup.httpx.post", return_value=bad) as post:
+            with pytest.raises(httpx.HTTPStatusError):
+                warmer._warm_embedding(task, 60)
+        assert post.call_count == 1
+
     def test_warmup_colbert_success(self):
         warmer = BackendWarmer()
         task = WarmupTask("colbert", "colbert-xm", "http://colbert.local", "ColBERT (colbert-xm)")

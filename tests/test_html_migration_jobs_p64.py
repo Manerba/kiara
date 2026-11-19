@@ -150,8 +150,21 @@ def test_latest_matching_job_invalidates_older_success(tmp_path):
     assert migration_completion(selection, jobs)["complete"] is False
 
 
+@pytest.fixture
+def canonical_schema():
+    """Echtes schema.sql statt evtl. hinterlassener Handschemata anderer Tests.
+
+    reset_test_data() legt fehlende Tabellen an, ersetzt aber keine reduzierten
+    Tabellen ohne CHECK-Constraints (z. B. aus test_api_ingestion_jobs.py).
+    Dieser Test prueft gerade den echten triggered_by-Vertrag.
+    """
+    from db_helpers import restore_test_schema
+
+    restore_test_schema()
+
+
 def test_enqueue_next_persists_existing_trigger_and_selection(
-    test_db, s4_guard_passthrough, tmp_path, monkeypatch
+    canonical_schema, test_db, s4_guard_passthrough, tmp_path, monkeypatch
 ):
     from kiara.ingestion.html_migration import build_selection, enqueue_next
 

@@ -607,9 +607,6 @@ def test_logical_key_is_physical_kind_aware_and_secret_free():
 @pytest.mark.parametrize(
     ("field", "current", "reason_code"),
     [
-        ("backend_id", 8, "index_backend_mismatch"),
-        ("backend_provider", "other", "index_backend_provider_mismatch"),
-        ("backend_url", "http://other", "index_backend_url_mismatch"),
         ("canonical_model_id", "other", "index_canonical_model_mismatch"),
         ("profile_id", "other", "index_profile_mismatch"),
         ("profile_kind", "late_chunking", "index_profile_kind_mismatch"),
@@ -636,6 +633,16 @@ def test_verified_guard_rejects_every_identity_mismatch(field, current, reason_c
     with pytest.raises(IndexCompatibilityError) as error:
         _validate_stored_contract("query", resolved.target, _stored(), resolved)
     assert error.value.reason_code == reason_code
+
+
+def test_verified_guard_ignores_backend_location():
+    resolved = replace(
+        _resolved(),
+        backend={"id": 8, "provider": "ollama", "url": "http://other:11434"},
+        backend_id=8,
+        backend_url="http://other:11434",
+    )
+    _validate_stored_contract("query", resolved.target, _stored(), resolved)
 
 
 @pytest.mark.parametrize(

@@ -15,7 +15,6 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from kiara.shared.db import get_connection
 from kiara.web.api_datasource import router
 from kiara.web.auth import get_admin_user
 from tests.admin_confirm import confirmed_request
@@ -24,87 +23,6 @@ from tests.admin_confirm import confirmed_request
 # DB-Schema (Phase 11.1: connector_config statt 30+ Einzelspalten)
 # ---------------------------------------------------------------------------
 
-_FULL_DS_SCHEMA = """
-    DROP TABLE IF EXISTS cache_jobs CASCADE;
-    DROP TABLE IF EXISTS cache_datasources CASCADE;
-    DROP TABLE IF EXISTS ingestion_jobs CASCADE;
-    DROP TABLE IF EXISTS datasource_embeddings CASCADE;
-    DROP TABLE IF EXISTS datasource_users CASCADE;
-    DROP TABLE IF EXISTS datasource_groups CASCADE;
-    DROP TABLE IF EXISTS datasources CASCADE;
-
-    CREATE TABLE datasources (
-        id SERIAL PRIMARY KEY,
-        name TEXT NOT NULL,
-        type TEXT NOT NULL DEFAULT 'local',
-        path TEXT DEFAULT '',
-        is_active BOOLEAN DEFAULT true,
-        created_at TEXT DEFAULT (NOW()),
-        updated_at TEXT DEFAULT (NOW()),
-        connector_config TEXT DEFAULT '{}',
-        ds_chunk_strategy TEXT DEFAULT 'auto',
-        ds_chunk_size INTEGER DEFAULT NULL,
-        ds_chunk_overlap INTEGER DEFAULT NULL,
-        ds_file_types TEXT DEFAULT NULL,
-        ds_exclude_patterns TEXT DEFAULT NULL,
-        ds_ddu_enabled BOOLEAN DEFAULT false,
-        ds_ddu_ocr_images INTEGER DEFAULT 1,
-        ds_vlm_enabled BOOLEAN DEFAULT false,
-        ds_accept_all_text INTEGER DEFAULT 0,
-        ds_index_attachments INTEGER DEFAULT 1,
-        sync_interval TEXT DEFAULT 'global',
-        restriction_level TEXT DEFAULT 'anonymize',
-        ds_contextual_retrieval INTEGER DEFAULT 0,
-        ds_enrichment_prompt_id INTEGER DEFAULT NULL,
-        ds_enrichment_backend_id INTEGER DEFAULT NULL,
-        ds_colbert_enabled BOOLEAN DEFAULT false
-    );
-
-    CREATE TABLE datasource_groups (
-        id SERIAL PRIMARY KEY,
-        datasource_id INTEGER NOT NULL,
-        group_id INTEGER NOT NULL
-    );
-
-    CREATE TABLE datasource_users (
-        id SERIAL PRIMARY KEY,
-        datasource_id INTEGER NOT NULL,
-        user_id INTEGER NOT NULL
-    );
-
-    CREATE TABLE datasource_embeddings (
-        id SERIAL PRIMARY KEY,
-        datasource_id INTEGER NOT NULL,
-        embedding_model TEXT NOT NULL,
-        chunk_count INTEGER DEFAULT 0,
-        file_count INTEGER DEFAULT 0,
-        last_ingested_at TEXT DEFAULT NULL,
-        UNIQUE(datasource_id, embedding_model)
-    );
-
-    CREATE TABLE ingestion_jobs (
-        id SERIAL PRIMARY KEY,
-        datasource_id INTEGER NOT NULL,
-        status TEXT DEFAULT 'pending',
-        embedding_model TEXT DEFAULT '',
-        created_at TEXT DEFAULT (NOW())
-    );
-
-    CREATE TABLE cache_datasources (
-        datasource_id INTEGER PRIMARY KEY,
-        payload_json  TEXT NOT NULL DEFAULT '{}',
-        updated_at    TEXT DEFAULT (NOW())
-    );
-
-    CREATE TABLE cache_jobs (
-        job_id        INTEGER PRIMARY KEY,
-        datasource_id INTEGER DEFAULT 0,
-        status        TEXT DEFAULT '',
-        payload_json  TEXT NOT NULL DEFAULT '{}',
-        updated_at    TEXT DEFAULT (NOW())
-    );
-    CREATE INDEX IF NOT EXISTS idx_cache_jobs_status ON cache_jobs(status);
-"""
 
 
 # ---------------------------------------------------------------------------
@@ -115,10 +33,10 @@ _FULL_DS_SCHEMA = """
 @pytest.fixture
 def client():
     """API TestClient mit PostgreSQL-DB und gemockten Abhaengigkeiten."""
-    conn = get_connection()
-    conn.executescript(_FULL_DS_SCHEMA)
-    conn.commit()
-    conn.close()
+    # Echtes KIara-Schema statt eigener Tabellenkopie (fehlende Spalten).
+    from db_helpers import reset_test_data
+
+    reset_test_data()
 
     from kiara.admin.registry import admin_registry, load_admin_functions
     from kiara.admin.router import generate_admin_routes

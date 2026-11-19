@@ -19,7 +19,8 @@ import weakref
 import psycopg2
 from kiara_db import connection as db
 
-DSN = "postgresql://kiara:kiara@localhost:5432/kiara_test"
+DSN = os.environ.get("KIARA_TEST_DSN", "postgresql://kiara:kiara@localhost:5432/kiara_test")
+DB_NAME = DSN.rsplit("/", 1)[-1].split("?", 1)[0]
 _shutdown_refs = []
 
 
@@ -121,7 +122,7 @@ def main(mode, rotate):
                 assert child_pid not in (parent_pid, spare_pid)
                 assert (
                     fresh.execute("SELECT current_database() AS db").fetchone()["db"]
-                    == "kiara_test"
+                    == DB_NAME
                 )
                 fresh.execute("CREATE TEMP TABLE p50_child_only (value integer)")
                 fresh.commit()

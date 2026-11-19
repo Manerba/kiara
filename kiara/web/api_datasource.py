@@ -79,6 +79,8 @@ class DatasourceRequest(BaseModel):
     ds_enrichment_prompt_id: int | None = None
     ds_enrichment_backend_id: int | None = None
     ds_colbert_enabled: bool = False
+    ds_cad_vector_enabled: bool = True
+    ds_cad_relational_enabled: bool = True
 
 
 class GroupAssignRequest(BaseModel):

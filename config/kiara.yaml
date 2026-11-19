@@ -65,6 +65,17 @@ ingestion:
     warning_after_seconds: 30
     timeout_seconds: 120
 
+timeouts:
+  # Oberhalb von Docling (7200 s) und Proxy (7500 s), mit Uebertragungspuffer.
+  ddu_convert: 7800.0
+
+ddu:
+  # Winzige Bilder vor dem Upload ueberspringen (RT-DETR braucht Seiten >= 4 px).
+  image_min_side: 4
+  # Pro Frame; groessere Bilder bleiben sichtbare Dateifehler. Keine Skalierung.
+  # Die zusaetzlichen Pillow-Schutzgrenzen bleiben aktiv.
+  image_max_pixels: 89478485
+
 index_contract:
   discovery_timeout_seconds: 10
   discovery_attempts: 3

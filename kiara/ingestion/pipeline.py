@@ -501,6 +501,7 @@ def _load_and_diff_files(
     resume_skip_files=None,
     hash_mode="mtime",
     chunk_ds=None,
+    empty_signature=None,
 ):
     """Scannt Dateien, berechnet Hashes und ermittelt den Incremental-Diff.
 
@@ -524,6 +525,7 @@ def _load_and_diff_files(
                hash_store, resumed_hashes).
     """
     from kiara.ingestion.document_publication import (
+        completed_empty_hashes,
         pending_cleanup_sources,
         pending_document_sources,
     )
@@ -542,6 +544,17 @@ def _load_and_diff_files(
     # An explicit migration replays only its selected files, even when their
     # completion hashes already match. Unselected paths never enter the diff.
     stored_hashes = {} if selection is not None else hash_store.load(datasource_id, embedding_model)
+    from kiara.cad.ingestion import pkg
+
+    cad_vector = config.get("ingestion", {}).get("cad_vector_enabled", True)
+    cad_failed = set(config.get("_cad_failed_sources", ()))
+
+    def retain_cad_source(path):
+        return path in cad_failed or (not cad_vector and pkg(path))
+
+    if not cad_vector or cad_failed:
+        all_files = [p for p in all_files if not retain_cad_source(p)]
+        stored_hashes = {p: h for p, h in stored_hashes.items() if not retain_cad_source(p)}
     missing_size_paths = (
         hash_store.get_missing_size_paths(datasource_id) if incremental and stored_hashes else set()
     )
@@ -559,6 +572,8 @@ def _load_and_diff_files(
             )
             hash_store.migrate_hash_mode(datasource_id, embedding_model, hash_mode)
             stored_hashes = hash_store.load(datasource_id, embedding_model)
+            if not cad_vector or cad_failed:
+                stored_hashes = {p: h for p, h in stored_hashes.items() if not retain_cad_source(p)}
             missing_size_paths = hash_store.get_missing_size_paths(datasource_id)
 
     _candidates, file_hashes, deleted_files = _compute_file_diff(
@@ -580,6 +595,9 @@ def _load_and_diff_files(
         for path, (digest, size) in file_hashes.items()
     }
     pending_sources = pending_document_sources(str(store.get_collection_name()), list(file_hashes))
+    empty_hashes = completed_empty_hashes(
+        str(store.get_collection_name()), list(file_hashes), empty_signature
+    )
     if datasource_id == 0:
         # CLI-Hashes bleiben als Pfadinventar erhalten, auch nach Verlust des
         # Owners. Ein passender Hash allein bestaetigt dessen Zuordnung nicht.
@@ -595,7 +613,9 @@ def _load_and_diff_files(
     files_to_process = [
         path
         for path, (digest, _size) in file_hashes.items()
-        if not incremental or stored_hashes.get(path) != digest or path in pending_sources
+        if not incremental
+        or (stored_hashes.get(path) != digest and empty_hashes.get(path) != digest)
+        or path in pending_sources
     ]
     # Disappeared/non-regular files are absent from the validated diff.
     file_stats.clear()
@@ -626,6 +646,8 @@ def _load_and_diff_files(
     # entfernte Dateien brauchen dann den gespeicherten Wiederanlaufanker.
     root = os.path.abspath(config["datasource"]["path"])
     for source in pending_cleanup_sources(str(store.get_collection_name())):
+        if retain_cad_source(source):
+            continue
         if selection is not None:
             in_scope = source in selection["paths"]
         else:
@@ -1411,6 +1433,11 @@ def _run_colbert_model_switch_cleanup(
     stats: dict,
 ) -> bool:
     """Orchestrierungsgrenze fuer einen strukturierten Compatibility-ABORT."""
+    if not config.get("ingestion", {}).get("cad_vector_enabled", True) or config.get(
+        "_cad_failed_sources"
+    ):
+        # Model-wide cleanup would also remove retained PKG representations.
+        return True
     from kiara.retrieval.index_compatibility import IndexCompatibilityError
 
     try:
@@ -1491,6 +1518,10 @@ def _ensure_cli_datasource() -> int:
     return 0
 
 
+from kiara.cad.ingestion import route_cad_ingestion
+
+
+@route_cad_ingestion
 @_refresh_search_on_exit
 def run_ingestion(
     config: dict | None = None,
@@ -1561,6 +1592,9 @@ def run_ingestion(
 
     ctx = _apply_ds_overrides(config, ds_overrides)
     _check_ddu_preflight(ctx, warmup_stats)
+    from kiara.ingestion.processing_revision import empty_processing_signature
+
+    empty_signature = empty_processing_signature(ctx, ds_overrides)
 
     # Backend-Setup
     os.makedirs(config["vectordb"]["path"], exist_ok=True)
@@ -1598,6 +1632,7 @@ def run_ingestion(
             resume_skip_files=resume_skip_files,
             hash_mode=hash_mode,
             chunk_ds=chunk_ds,
+            empty_signature=empty_signature,
         )
     )
 
@@ -1649,7 +1684,9 @@ def run_ingestion(
             model_uses_elasticsearch,
         )
 
-        if model_uses_elasticsearch(config, embedding_model):
+        if model_uses_elasticsearch(config, embedding_model) and chunk_ds.count_by_datasource(
+            datasource_id, embedding_model
+        ):
             mark_search_data_adopted(config, [datasource_id])
     if selection is not None:
         stats["html_migration_completed_paths"] = []
@@ -1735,6 +1772,25 @@ def run_ingestion(
             ids,
         )
 
+    def complete_empty_file(path):
+        from kiara.ingestion.document_publication import complete_empty_publication
+        from kiara.ingestion.vectordb_ops import _recount_datasource_embeddings
+
+        version = loaded_versions[path]
+        version.validate()
+        with db_transaction() as conn:
+            complete_empty_publication(
+                conn,
+                path,
+                embedding_model,
+                datasource_id=datasource_id,
+                file_hash=version.completion[0],
+                processing_signature=empty_signature,
+            )
+            _recount_datasource_embeddings(conn, datasource_id, embedding_model)
+        if selection is not None:
+            stats["html_migration_completed_paths"].append(path)
+
     # Context buendeln
     ictx = _IngestionContext(
         config=config,
@@ -1751,6 +1807,7 @@ def run_ingestion(
         stats=stats,
         pending_hashes={},
         file_completion_callback=complete_file,
+        empty_file_completion_callback=complete_empty_file if empty_signature else None,
         file_preparation_callback=prepare_file,
         file_loading_context=loading_file,
         skipped=skipped,

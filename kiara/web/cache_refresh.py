@@ -358,7 +358,14 @@ def _build_ds_payload(
     # Passwort-Maskierung
     raw_cc = d.get("connector_config", "{}")
     config = safe_json_loads(raw_cc, {})
-    connector_cls = get_connector(d["type"])
+    try:
+        connector_cls = get_connector(d["type"])
+    except KeyError:
+        # Ein fehlender Konnektor darf die Liste aller Datenquellen nicht
+        # blockieren. Ohne dessen Schema koennen wir Secrets nicht maskieren;
+        # die gespeicherte Config bleibt deshalb ausschliesslich in der DB.
+        connector_cls = None
+    d["connector_available"] = connector_cls is not None
     if connector_cls:
         for field in connector_cls.secret_fields():
             if config.get(field):
@@ -367,8 +374,8 @@ def _build_ds_payload(
         d["source_display"] = connector_cls.source_display(config, d)
         d["effective_path"] = connector_cls.effective_path(config, d)
     else:
-        d["connector_config"] = config
-        d["source_display"] = d.get("path", "")
+        d["connector_config"] = {}
+        d["source_display"] = f"Konnektor '{d['type']}' nicht verfuegbar"
         d["effective_path"] = ""
 
     if d.get("type") == ConnectorType.LOCAL:

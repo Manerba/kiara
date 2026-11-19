@@ -205,6 +205,11 @@ def _get_registry() -> ToolRegistry:
                 raise
             logger.warning("Workflow-Tools konnten nicht registriert werden: %s", exc)
 
+        # Hauspatch chat-werkzeug-plugins: Plugin-Tools fuer Liste, Test und Berechtigungen
+        from kiara.tools.registry import register_tool_plugins
+
+        register_tool_plugins(registry, config, None)
+
         _registry = registry
         logger.info(
             "ToolRegistry initialisiert mit %d Tools.", len(registry.list_tools(user_groups=["*"]))

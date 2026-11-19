@@ -87,7 +87,8 @@ def _enqueue_validated_job(
         raise HTTPException(status_code=400, detail="Datenquelle ist deaktiviert")
 
     em = data.embedding_model if data else ""
-    if not em:
+    from kiara.cad.ingestion import sql_only_source
+    if not em and not sql_only_source(dict(row), load_config()):
         from kiara.config import get_embedding_model
 
         em = get_embedding_model(load_config())

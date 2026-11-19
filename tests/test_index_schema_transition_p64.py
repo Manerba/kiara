@@ -12,6 +12,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
+from db_helpers import TEST_DB_NAME
 from qdrant_client.models import Distance, VectorParams
 from test_index_compatibility_s4 import _persist_contract, _server_discovery
 
@@ -27,7 +28,7 @@ def _sha(text):
 def transition_case(test_db, monkeypatch, request):
     from kiara.retrieval import index_schema_transition as transition
 
-    assert test_db.execute("SELECT current_database() AS name").fetchone()["name"] == "kiara_test"
+    assert test_db.execute("SELECT current_database() AS name").fetchone()["name"] == TEST_DB_NAME
     kind = getattr(request, "param", contracts.IndexVectorKind.DENSE)
     historical_provider = kind == "historical_provider"
     if historical_provider:
@@ -239,8 +240,6 @@ def test_historical_provider_phase_admits_current_strict_profile_without_identit
     [
         ("index_compatibility_id", "sha256:" + "a" * 64),
         ("query_compatibility_id", "sha256:" + "b" * 64),
-        ("backend_id", 99),
-        ("backend_url", "http://different.invalid:11434"),
         ("artifact_revision", "different-revision"),
         ("artifact_manifest_digest", "sha256:" + "c" * 64),
         ("profile_id", "another-profile"),
@@ -363,7 +362,7 @@ def test_apply_idempotency_and_audited_rollback_never_reuses_fence(transition_ca
 
 @pytest.mark.parametrize(
     "field, changed",
-    [("index_compatibility_id", "sha256:" + "d" * 64), ("backend_id", 99)],
+    [("index_compatibility_id", "sha256:" + "d" * 64), ("profile_id", "another-profile")],
 )
 def test_rollback_rejects_changed_live_binding(transition_case, field, changed):
     case = transition_case

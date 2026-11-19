@@ -1,0 +1,24 @@
+{
+  "repository": "cad-pkg-reverse (internes Reverse-Engineering-Repository)",
+  "commit": "a9f78e632147783fc199b035a2ec5dd3392034d9",
+  "files": {
+    "altformat.py": "dd23305b8e33fbfdb4e423d5688f6b74f6aff5e8b784e050463201b9e76affd0",
+    "analyse/baugruppenbeschriftungen.py": "5cb6717238b081a1292cc7a9b2ffecd23c505949ea3836aa6d7283b037d3b4e2",
+    "analyse/baugruppencontainer.py": "e58bca643e2e1ba862cfa6e33861a4027f7b61541b885f34a3a00d05cdb33fa5",
+    "analyse/beschriftungen.py": "7eb91ec593d5a7209633ce98fded7823079efe0eb993608fb6d5994e797e84df",
+    "analyse/featurebeschriftungen.py": "15e65a6b1593235727e3ea0a0c82b1d7e3711e8a76ed9eb6ffa46d7c8785ee1a",
+    "analyse/featurewissen.py": "058bfee14156df15a828136d6d061ccd4fbfe49b04795139110986d0e56205ce",
+    "analyse/inhaltscontainer.py": "a95ba1d2a20f31c5fcb5793f227602aed18f533e686e1bb81f6cd903896f7648",
+    "analyse/kantenbeschriftungen.py": "2aac87850078a5981e6359f32472ec78e299a03ed4c998dcb6bb1cc62458ecd0",
+    "analyse/materialschluessel.py": "02062f96f2409822eb39a572e8c7f0d77d6ce9a4463bb420038f9a21f122e7e1",
+    "analyse/metadaten.py": "005e6089a99b4e8945c12b0dafd2081e1f7d7bac5bd44c66d61176b72ddd2599",
+    "analyse/protokollfelder.py": "f2bc64ae98d65c1dd519b5b7f970981cf659e2577af1eb9a39fc70cf8c7a79df",
+    "analyse/topologieroh.py": "5333392ab70e46b83e061661712e8bdf08e27bae659fa9c092c51615871deadb",
+    "analyse/versuchsartefakte.py": "b8f58753e39ce7cef687d2af26bd2e1c20c7e7db07c00ece6728df11a4d52a72",
+    "geometrie.py": "ab3519f8e7afd39bd2d03b6528ac93918bc55b32c1b472c2c81fefc62c4d1455",
+    "objstrom.py": "f136787f86ce8cabbc51b84d4711411146684748f10b5dba5c7846750edbe601",
+    "pkgcontainer.py": "287164aa09d4cd869ac76062bad787969e37940ca5f335b91480a538155c439a",
+    "pkgleser.py": "6dc506ca928f83ebd69940a92961c0fe71906e56c73b95f8c0b428efd4a2cb96"
+  },
+  "public_export_note": "Kommentare im oeffentlichen Export um Kunden- und Ticketbezuege bereinigt; Code unveraendert."
+}

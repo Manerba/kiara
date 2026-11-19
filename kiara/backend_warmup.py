@@ -132,6 +132,17 @@ def _is_transient_http_error(exc: Exception) -> bool:
     return False
 
 
+def _is_gpu_admission_conflict(exc: httpx.HTTPStatusError) -> bool:
+    """Nur die explizite Ressourcenbelegung erlaubt Warten bis zum Timeout."""
+    if exc.response.status_code != 409:
+        return False
+    try:
+        body = exc.response.json()
+    except ValueError:
+        return False
+    return isinstance(body, dict) and body.get("reason") == "resource_conflict"
+
+
 # ---------------------------------------------------------------------------
 # Hilfsfunktionen
 # ---------------------------------------------------------------------------
@@ -164,6 +175,23 @@ def _get_tiny_png() -> bytes:
             Image.new("RGB", (1, 1), (255, 255, 255)).save(buf, format="PNG")
             _warmup_tiny_png = buf.getvalue()
     return _warmup_tiny_png
+
+
+def _get_ocr_warmup_png() -> bytes:
+    """PNG mit Text fuer den Docling-Warmup (320x80, RGB).
+
+    Hausaenderung 30.10.2026: Das 1x1-PNG liess das Layout-Modell von
+    docling-serve (RT-DETR) abstuerzen; docling-serve antwortete dann mit
+    404 "Task result not found", und der DDU-Warmup (und damit der ganze
+    Ingest-Job) schlug fehl.
+    """
+    from PIL import Image, ImageDraw
+
+    img = Image.new("RGB", (320, 80), (255, 255, 255))
+    ImageDraw.Draw(img).text((10, 30), "Hello Docling", fill=(0, 0, 0))
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
 
 
 def _mark_healthy_safe(url: str) -> None:
@@ -208,28 +236,57 @@ class BackendWarmer:
             operation="warmup_document_embedding",
             input_count=1,
         )
-        response = httpx.post(
-            f"{task.url.rstrip('/')}/api/embed",
-            json={
-                "model": task.model,
-                "input": [WARMUP_DUMMY_TEXT],
-                "input_type": SEARCH_DOCUMENT,
-                "keep_alive": WARMUP_KEEP_ALIVE,
-            },
-            timeout=timeout,
+        # Hausaenderung 30.10.2026: Der Kiron-Proxy sperrt GPU-Operationen, solange
+        # Docling startet oder konvertiert (HTTP 409/503 "GPU-Operation blockiert").
+        # Der Warmup laeuft parallel zum DDU-Warmup und gab deshalb nach einem
+        # Retry auf. Wie im Produktivpfad (retrieval.embedding) bis zu
+        # EMBED_GATE_RETRY_MAX_WAIT_S auf das Gate warten.
+        from kiara.retrieval.embedding import (
+            _GPU_GATE_BODY_MARKER,
+            EMBED_GATE_RETRY_DELAY_S,
+            EMBED_GATE_RETRY_MAX_WAIT_S,
         )
+
+        gate_deadline = time.monotonic() + EMBED_GATE_RETRY_MAX_WAIT_S
+        while True:
+            response = httpx.post(
+                f"{task.url.rstrip('/')}/api/embed",
+                json={
+                    "model": task.model,
+                    "input": [WARMUP_DUMMY_TEXT],
+                    "input_type": SEARCH_DOCUMENT,
+                    "keep_alive": WARMUP_KEEP_ALIVE,
+                },
+                timeout=timeout,
+            )
+            if (
+                response.status_code in (409, 503)
+                and _GPU_GATE_BODY_MARKER in (response.text or "")
+                and time.monotonic() + EMBED_GATE_RETRY_DELAY_S < gate_deadline
+            ):
+                logger.warning(
+                    "Warmup embedding(%s) vom Kiron-GPU-Gate blockiert (HTTP %d), Retry in %.0fs",
+                    task.model,
+                    response.status_code,
+                    EMBED_GATE_RETRY_DELAY_S,
+                )
+                time.sleep(EMBED_GATE_RETRY_DELAY_S)
+                continue
+            break
         response.raise_for_status()
         embeddings = response.json().get("embeddings")
         if not isinstance(embeddings, list) or len(embeddings) != 1:
             raise TypeError("Embedding-Warmup lieferte kein einzelnes Embedding")
 
     def _warm_llm(self, task, timeout):
+        from kiara.generation.runner_options import fixed_runner_options
+
         client = _make_warmup_client(task.url, timeout)
         client.generate(
             model=task.model,
             prompt="Hi",
             stream=False,
-            options={"num_predict": 1},
+            options={"num_predict": 1, **fixed_runner_options(task.url, task.model)},
             keep_alive=WARMUP_KEEP_ALIVE,
         )
 
@@ -252,7 +309,7 @@ class BackendWarmer:
         # Kleines PNG mit OCR senden, damit Docling seine OCR-/Vision-Modelle
         # in den VRAM laedt. Eine Textdatei ohne OCR wuerde die Modelle nicht
         # laden und der erste echte PDF-Request koennte in einen Timeout laufen.
-        dummy_png = io.BytesIO(_get_tiny_png())
+        dummy_png = io.BytesIO(_get_ocr_warmup_png())
         with httpx.Client(timeout=httpx.Timeout(timeout)) as client:
             resp = client.post(
                 f"{task.url}/v1/convert/file",
@@ -268,12 +325,20 @@ class BackendWarmer:
 
     # -- Retry-Logik --
 
-    def _attempt(self, fn, task, timeout, retries=TRANSIENT_RETRIES):
+    def _attempt(self, fn, task, timeout, retries=TRANSIENT_RETRIES, *, stop_event=None):
         """Fuehrt fn aus, mit optionalem Retry bei transienten Fehlern."""
         last_exc = None
-        for attempt in range(1 + retries):
+        deadline = time.monotonic() + timeout
+        gpu_blocked = False
+        attempt = 0
+        while attempt <= retries:
+            if stop_event is not None and stop_event.is_set():
+                raise concurrent.futures.CancelledError("Warmup abgebrochen")
+            request_timeout = deadline - time.monotonic() if gpu_blocked else timeout
+            if request_timeout <= 0 and last_exc is not None:
+                raise last_exc
             try:
-                return fn(task, timeout)
+                return fn(task, request_timeout)
             except ollama_client.ResponseError as exc:
                 if _is_permanent_ollama_error(exc):
                     raise
@@ -300,6 +365,25 @@ class BackendWarmer:
                 if not _is_transient_http_error(exc):
                     raise
                 last_exc = exc
+                if _is_gpu_admission_conflict(exc):
+                    # Docling und Embedding koennen dieselbe GPU vorwaermen.
+                    # Ein belegter Admission-Lease ist noch kein Backend-Ausfall.
+                    gpu_blocked = True
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise
+                    delay = min(WARMUP_RETRY_DELAY, remaining)
+                    logger.info(
+                        "Warmup %s: GPU belegt, erneuter Versuch in %.1fs (noch %.1fs)",
+                        task.backend_name,
+                        delay,
+                        remaining,
+                    )
+                    if stop_event is None:
+                        time.sleep(delay)
+                    elif stop_event.wait(delay):
+                        raise concurrent.futures.CancelledError("Warmup abgebrochen") from exc
+                    continue
                 if attempt < retries:
                     logger.warning(
                         "Warmup %s transient HTTP %d, retry in %ds",
@@ -310,17 +394,18 @@ class BackendWarmer:
                     time.sleep(WARMUP_RETRY_DELAY)
             except Exception:
                 raise  # Unbekannte Fehler sofort weiterleiten
+            attempt += 1
         if last_exc is not None:
             raise last_exc
         raise RuntimeError(
             f"Warmup {task.backend_name}: alle {1 + retries} Versuche fehlgeschlagen"
         )
 
-    def _timed_attempt(self, fn, task, timeout, retries=TRANSIENT_RETRIES):
+    def _timed_attempt(self, fn, task, timeout, retries=TRANSIENT_RETRIES, *, stop_event=None):
         """Wrapper um _attempt(). Misst Dauer, haengt sie bei Fehler an die Exception."""
         t_start = time.monotonic()
         try:
-            self._attempt(fn, task, timeout, retries)
+            self._attempt(fn, task, timeout, retries, stop_event=stop_event)
             return time.monotonic() - t_start
         except Exception as exc:
             exc._warmup_duration = time.monotonic() - t_start
@@ -408,11 +493,14 @@ class BackendWarmer:
             max_workers=max(1, len(tasks)),
             thread_name_prefix="warmup",
         )
+        stop_event = threading.Event()
         try:
             futures = {}
             for task in tasks:
                 fn = getattr(self, self._CATEGORY_FN_MAP[task.category])
-                futures[pool.submit(self._timed_attempt, fn, task, timeout)] = task
+                futures[
+                    pool.submit(self._timed_attempt, fn, task, timeout, stop_event=stop_event)
+                ] = task
 
             pending = set(futures.keys())
             cancelled = False
@@ -458,6 +546,7 @@ class BackendWarmer:
             if cancelled:
                 self._handle_cancel(futures, details, on_progress, t0)
         finally:
+            stop_event.set()
             pool.shutdown(wait=False, cancel_futures=True)
 
         return details

@@ -15,7 +15,7 @@ from kiara_document_loaders.cad import (
 )
 
 # --- content_detect.py ---
-from kiara_document_loaders.content_detect import detect_content, is_text_file
+from kiara_document_loaders.content_detect import detect_content, detect_file_format, is_text_file
 from kiara_document_loaders.general import (
     _CODE_LANGUAGES,
     _load_code,
@@ -26,6 +26,7 @@ from kiara_document_loaders.general import (
     _load_pdf,
     _load_plaintext,
     _load_pptx,
+    _load_xls,
     _load_xlsx,
 )
 

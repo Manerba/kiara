@@ -547,6 +547,8 @@ def test_authenticated_mcp_tool_full_run(build, monkeypatch):
     monkeypatch.setattr(
         "kiara.web.api_key_auth.validate_api_key", lambda key: {"id": 1, "is_admin": True}
     )
+    # Recherche-Mechanik ohne MCP-Ausgabesperre (siehe test_mcp_anonymization)
+    monkeypatch.setattr("kiara.mcp_server._research_blocked_response", lambda: None)
     app = _create_app({"web": {"mcp_enabled": True}})
     audits = []
     monkeypatch.setattr(

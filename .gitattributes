@@ -1,0 +1,2 @@
+# Preserve the upstream reader byte-for-byte, including its Windows line endings.
+kiara/cad/_vendor/** -text whitespace=cr-at-eol

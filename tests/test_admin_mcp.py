@@ -289,11 +289,13 @@ class TestMCPToggleConfigError:
 
 def test_mcp_toggle_sudoers_are_versioned_for_admin_chat():
     root = Path(__file__).resolve().parent.parent
-    deploy = (root / "deploy.sh").read_text(encoding="utf-8")
     postinst = (root / "debian" / "postinst").read_text(encoding="utf-8")
 
-    assert "/usr/bin/systemctl restart kiara-mcp.service" in deploy
     assert "/usr/bin/systemctl restart kiara-mcp.service" in postinst
+    # deploy.sh ist ein lokales Entwicklerwerkzeug und fehlt im oeffentlichen Export.
+    if (root / "deploy.sh").exists():
+        deploy = (root / "deploy.sh").read_text(encoding="utf-8")
+        assert "/usr/bin/systemctl restart kiara-mcp.service" in deploy
 
 
 def test_prerm_does_not_disable_mcp_service_on_upgrade():

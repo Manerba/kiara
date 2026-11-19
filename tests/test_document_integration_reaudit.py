@@ -1,10 +1,12 @@
 """R1/R2: CLI-Owner und Cleanup nach Verlust des Dense-Wiederanlaufankers."""
 
 import asyncio
+import json
 from pathlib import Path
 
 import pytest
 from test_document_publication_colbert import colbert_pipeline  # noqa: F401
+from test_document_publication_memberships import _use_es_sdk
 from test_document_publication_pipeline import whole_pipeline  # noqa: F401
 from test_document_version_completion import document_run  # noqa: F401
 
@@ -105,12 +107,17 @@ def test_cli_owner_conflict_fails_before_index_write(whole_pipeline, test_db):
 @pytest.mark.parametrize("lost", ["middle", "all"])
 @pytest.mark.parametrize("failure", [None, "colbert", "graph", "elasticsearch", "dense"])
 def test_cleanup_after_dense_loss_survives_each_boundary(
-    colbert_pipeline, test_db, monkeypatch, lost, failure
+    colbert_pipeline, test_db, monkeypatch, request, lost, failure
 ):
     state = colbert_pipeline
     case = state.case
     assert state.run()["processed_files"] == 1
     ids = [c["_doc_id"] for c in case.snapshot()]
+    if failure == "elasticsearch":
+        # ES-Schritte laufen nur, wenn das Modell ES nutzt; die Dokumente liegen
+        # danach im Datenquellen-Index und ueberleben den Dense-Verlust.
+        _use_es_sdk(case, case.ds, monkeypatch, request)
+        assert set(case.es) == set(ids)
     case.store.delete_by_ids(ids if lost == "all" else ids[1:2])
     Path(case.path).write_text("")
 
@@ -130,7 +137,7 @@ def test_cleanup_after_dense_loss_survives_each_boundary(
             elif failure == "graph":
                 fault.setattr(GraphStore, "delete_by_chunk_ids", fail)
             elif failure == "elasticsearch":
-                fault.setattr("kiara.ingestion.vectordb_ops.delete_from_elasticsearch", fail)
+                fault.setattr("kiara.retrieval.elasticsearch_service.delete_by_ids", fail)
             else:
                 fault.setattr(case.store, "delete_by_sources", fail)
             with pytest.raises(RuntimeError, match="cleanup interruption"):
@@ -138,6 +145,11 @@ def test_cleanup_after_dense_loss_survives_each_boundary(
         saved = publication.pending_source_cleanups("kb_test")[case.path]
         assert set(saved["test-model"]) == set(ids)
         assert set(saved[state.key]) == set(ids)
+        if failure == "elasticsearch":
+            # Vollstaendige ES-Adressen bleiben als Wiederanlaufanker erhalten.
+            addresses = {tuple(json.loads(v)) for v in saved["es::test-model"]}
+            assert addresses == {(case.ds, f"kiara_ds_{case.ds}", cid) for cid in ids}
+            assert set(case.es) == set(ids)
         assert case.path not in case.hashes.load(case.ds, "test-model")
         assert case.path not in case.hashes.load(None, "test-model")
     result = case.run_whole(None)
@@ -150,6 +162,8 @@ def test_cleanup_after_dense_loss_survives_each_boundary(
             "SELECT * FROM datasource_embeddings WHERE embedding_model=%s", (model,)
         ).fetchall()
     assert publication.pending_source_cleanups("kb_test") == {}
+    if failure == "elasticsearch":
+        assert case.es == {}
     assert case.run_whole(None)["errors"] == 0
 
 

@@ -74,6 +74,19 @@ class RecordingTracer:
             return [s for s in self.spans if s.name == name]
 
 
+def _publishing_store():
+    """Store-Attrappe, die den Dokumentabschluss wie der VectorStore bestaetigt.
+
+    Erfolg einer Datei erfordert heute ``finalize_document_versions`` mit
+    ``on_complete``; ohne diesen Rueckruf gilt der Abschluss als unbestaetigt.
+    """
+    store = MagicMock()
+    store.finalize_document_versions.side_effect = lambda ids, *, publish_search, on_complete: (
+        on_complete({})
+    )
+    return store
+
+
 # ---------------------------------------------------------------------------
 # Thread-local job_id Tests
 # ---------------------------------------------------------------------------
@@ -154,11 +167,12 @@ class TestIngestFileSpan:
         ictx.progress_callback = None
         ictx.ctx = MagicMock()
         ictx.ctx.ddu_enabled = False
-        ictx.store = MagicMock()
+        ictx.store = _publishing_store()
         ictx.batch_size = 100
         ictx.embedding_model = "test"
         ictx.chunk_ds = MagicMock()
         ictx.hash_store = MagicMock()
+        ictx.file_completion_callback = MagicMock()
         ictx.file_hashes = {}
         ictx.pending_hashes = {}
         ictx.consecutive_errors = 0
@@ -213,6 +227,8 @@ class TestIngestFileSpan:
         assert span is not None
         assert span.attributes["file_path"] == str(test_file)
         assert span.attributes["final_status"] == "success"
+        # Erfolg erst nach bestaetigtem Dokumentabschluss
+        ictx.file_completion_callback.assert_called_once_with(str(test_file))
 
     def test_ingest_file_span_cancelled_before_start(self, tmp_path):
         """Cancel vor Start: final_status=cancelled_before_start."""
@@ -552,7 +568,7 @@ class TestIngestFileRetrySpan:
         ictx.file_start_callback = None
         ictx.progress_callback = None
         ictx.ctx = MagicMock(ddu_enabled=False)
-        ictx.store = MagicMock()
+        ictx.store = _publishing_store()
         ictx.batch_size = 100
         ictx.embedding_model = "test"
         ictx.chunk_ds = MagicMock()

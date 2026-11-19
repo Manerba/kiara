@@ -1,16 +1,38 @@
 """Shared Fixtures fuer KIara-Tests.
 
-Alle Tests laufen gegen PostgreSQL (separate Test-DB kiara_test).
+Alle Tests laufen gegen PostgreSQL (separate Test-DB kiara_test, per
+KIARA_TEST_DSN umstellbar, siehe db_helpers).
 DSN wird auf Modul-Level gesetzt damit Imports waehrend Test-Collection
 bereits funktionieren.
 """
 
 # ---------------------------------------------------------------------------
+# Eigene, leere Konfiguration fuer die Testsuite (vor allen kiara-Imports)
+# ---------------------------------------------------------------------------
+# Ohne KIARA_CONFIG lesen ungepatchte load_config()-Aufrufe die Produktiv-
+# konfiguration /etc/kiara/kiara.yaml, und save_config() schreibt dorthin
+# (notfalls per sudo tee). Das machte Tests vom Server abhaengig und gefaehrdet
+# den Betrieb. Immer ueberschreiben: der Selbsttest erbt die Umgebung des
+# Admin-Dienstes. Eigene Datei per KIARA_TEST_CONFIG moeglich.
+import atexit
+import os
+import tempfile
+
+if os.environ.get("KIARA_TEST_CONFIG"):
+    os.environ["KIARA_CONFIG"] = os.environ["KIARA_TEST_CONFIG"]
+else:
+    _fd, _test_config_path = tempfile.mkstemp(prefix="kiara-test-config-", suffix=".yaml")
+    os.close(_fd)
+    os.environ["KIARA_CONFIG"] = _test_config_path
+    atexit.register(lambda: os.path.exists(_test_config_path) and os.unlink(_test_config_path))
+
+# ---------------------------------------------------------------------------
 # DB-Backend SOFORT initialisieren (vor allen Imports die DB brauchen)
 # ---------------------------------------------------------------------------
 import kiara.shared.db as _db
+from db_helpers import _TEST_DSN
 
-_db._dsn = "postgresql://kiara:kiara@localhost:5432/kiara_test"
+_db._dsn = _TEST_DSN
 
 # CSRF-Middleware-Bypass fuer die bestehende Test-Suite. test_middleware_csrf.py
 # importiert die Original-Middleware gezielt. Die hier gesetzte No-Op-Variante
@@ -633,6 +655,37 @@ def restore_test_schema():
     from db_helpers import restore_test_schema as _restore
 
     _restore()
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _test_security_log(tmp_path_factory):
+    """OIDC-Sicherheitsprotokoll in eine Temp-Datei statt /var/log/kiara.
+
+    ensure_security_log_handler() schreibt sonst fest nach
+    /var/log/kiara/security.log: als root verschmutzen Tests das Produktiv-
+    protokoll (und legen es root-eigen an), als kiara (Selbsttest) fehlt die
+    Berechtigung und OIDC antwortet fail-closed mit 503.
+    """
+    from kiara.web import oidc_auth
+
+    oidc_auth.ensure_security_log_handler(
+        str(tmp_path_factory.mktemp("security-log") / "security.log")
+    )
+    yield
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _canonical_schema_guard():
+    """Nach jeder Testdatei: veraendertes DB-Schema wiederherstellen.
+
+    Verhindert Kettenfehler im Gesamtlauf, wenn eine Datei Tabellen durch
+    eigene Kopien ersetzt oder loescht (siehe db_helpers.ensure_canonical_schema).
+    """
+    from db_helpers import ensure_canonical_schema
+
+    ensure_canonical_schema()
+    yield
+    ensure_canonical_schema()
 
 
 @pytest.fixture

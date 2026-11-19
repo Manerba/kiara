@@ -50,6 +50,11 @@ async def datasource_list(user: dict) -> AdminResult:
 
         refresh_datasource_cache()
         cached = cache_repo.get_cached_datasources()
+    # Live statt aus dem Cache: Quelle kann jederzeit verschwinden (z.B. PST geloescht).
+    from kiara.connectors.registry import source_unavailable_reason
+
+    for entry in cached or []:
+        entry["source_unavailable"] = source_unavailable_reason(entry)
     return AdminResult.ok("Datenquellen", data={"data": cached})
 
 
@@ -165,6 +170,7 @@ async def datasource_connector_types(user: dict) -> AdminResult:
                 "name": cls.name,
                 "label": cls.label,
                 "badge_class": cls.badge_class,
+                "badge_label": getattr(cls, "badge_label", None) or cls.label,
                 "schema": cls.config_schema(),
                 "default_config": cls.default_config(),
                 "supports_browse": getattr(cls, "supports_browse", False) is True,
@@ -265,7 +271,7 @@ async def datasource_ingestion_status(user: dict, ds_id: int) -> AdminResult:
             "type": {
                 "type": "string",
                 "description": "Konnektor-Typ",
-                "enum": ["local", "smb", "webdav", "imap", "exchange_online", "sql"],
+                "enum": ["local", "smb", "webdav", "imap", "exchange_online", "sql", "pst"],
             },
             "connector_config": {
                 "type": "object",
@@ -327,6 +333,14 @@ async def datasource_ingestion_status(user: dict, ds_id: int) -> AdminResult:
                 "type": "integer",
                 "description": "Enrichment-Backend-ID (Pflicht wenn CR aktiv)",
             },
+            "ds_cad_vector_enabled": {
+                "type": "boolean",
+                "description": "PKG: Vektordatenbank (Default: true)",
+            },
+            "ds_cad_relational_enabled": {
+                "type": "boolean",
+                "description": "PKG: relationale Datenbank (Default: true)",
+            },
             "ds_colbert_enabled": {
                 "type": "boolean",
                 "description": "ColBERT Multi-Vector-Index aktivieren",
@@ -362,6 +376,8 @@ async def datasource_create(
     ds_enrichment_prompt_id: int | None = None,
     ds_enrichment_backend_id: int | None = None,
     ds_colbert_enabled: bool = False,
+    ds_cad_vector_enabled: bool = True,
+    ds_cad_relational_enabled: bool = True,
 ) -> AdminResult:
     try:
         from kiara.admin.services.datasource_service import create_datasource
@@ -386,6 +402,8 @@ async def datasource_create(
             ds_enrichment_prompt_id=ds_enrichment_prompt_id,
             ds_enrichment_backend_id=ds_enrichment_backend_id,
             ds_colbert_enabled=ds_colbert_enabled,
+            ds_cad_vector_enabled=ds_cad_vector_enabled,
+            ds_cad_relational_enabled=ds_cad_relational_enabled,
         )
         # raw_response=True → data muss bestehendes Frontend-Format haben
         return AdminResult.ok(f"Datenquelle '{name}' erstellt (ID {result['id']})", data=result)
@@ -450,6 +468,14 @@ async def datasource_create(
             "ds_enrichment_backend_id": {
                 "type": "integer",
                 "description": "Enrichment-Backend-ID (Pflicht wenn CR aktiv)",
+            },
+            "ds_cad_vector_enabled": {
+                "type": "boolean",
+                "description": "PKG: Vektordatenbank (Default: true)",
+            },
+            "ds_cad_relational_enabled": {
+                "type": "boolean",
+                "description": "PKG: relationale Datenbank (Default: true)",
             },
             "ds_colbert_enabled": {
                 "type": "boolean",
@@ -516,6 +542,8 @@ async def datasource_update(
         "restriction_level",
         "ds_contextual_retrieval",
         "ds_colbert_enabled",
+        "ds_cad_vector_enabled",
+        "ds_cad_relational_enabled",
     ]
     for f in ds_fields:
         if f in kwargs and kwargs[f] is not None:
@@ -792,7 +820,7 @@ async def datasource_browse(
         if effective_config.get(field) == PASSWORD_MASK:
             return AdminResult.fail("Passwort erforderlich")
 
-    if type in ("imap", "exchange_online"):
+    if type in ("imap", "exchange_online", "pst"):
         try:
             folders = connector_cls.list_folders(effective_config)
         except Exception as exc:

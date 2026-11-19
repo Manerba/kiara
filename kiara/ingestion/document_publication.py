@@ -152,6 +152,39 @@ def pending_document_sources(collection: str, sources: list[str]) -> set[str]:
     return {row["source"] for row in rows}
 
 
+def completed_empty_hashes(
+    collection: str, sources: list[str], processing_signature: str | None
+) -> dict[str, str]:
+    """Nur bestaetigte Leer-Ergebnisse derselben Aufbereitung wiederverwenden.
+
+    Quellen sind collectionweit serialisiert. Derselbe unveraenderte Eingang
+    und dieselbe Aufbereitung duerfen auch von einer weiteren DS uebernommen
+    werden; dabei entstehen weder Suchdokumente noch DS-Mitgliedschaften.
+    """
+    if not sources or not processing_signature:
+        return {}
+    with db_query() as conn:
+        rows = conn.execute(
+            "SELECT source, empty_file_hash FROM document_publications "
+            "WHERE collection_name = %s AND source = ANY(%s) "
+            "AND empty_processing_signature = %s AND empty_file_hash IS NOT NULL "
+            "AND completed_at IS NOT NULL AND versions = '{}'::jsonb "
+            "AND cleanup_chunks = '{}'::jsonb",
+            (collection, sources, processing_signature),
+        ).fetchall()
+    return {row["source"]: row["empty_file_hash"] for row in rows}
+
+
+def forget_empty_completions(conn, collection: str, sources: list[str]) -> None:
+    """Explizite Dateiloeschung entwertet auch Abschluesse ohne Index-Hashes."""
+    conn.execute(
+        "UPDATE document_publications SET empty_file_hash = NULL, "
+        "empty_processing_signature = NULL, completed_at = NULL "
+        "WHERE collection_name = %s AND source = ANY(%s) AND empty_file_hash IS NOT NULL",
+        (collection, sources),
+    )
+
+
 def invalidate_documents(
     collection: str,
     sources: list[str],
@@ -177,7 +210,8 @@ def invalidate_documents(
                 "(collection_name, source, generation) VALUES (%s, %s, %s) "
                 "ON CONFLICT (collection_name, source) DO UPDATE SET "
                 "generation = EXCLUDED.generation, versions = '{}'::jsonb, "
-                "started_at = now(), completed_at = NULL",
+                "started_at = now(), completed_at = NULL, "
+                "empty_file_hash = NULL, empty_processing_signature = NULL",
                 (collection, source, generation),
             )
         if cleanup:
@@ -235,6 +269,10 @@ class _Publication:
     completed_owners: set[int] = field(default_factory=set)
     generation: str | None = None
     versions: dict = field(default_factory=dict)
+    # Hausaenderung 18.11.2026: freigegebener Stand vor begin(), damit ein
+    # gescheiterter Ladeversuch eine bereits indexierte Datei nicht entfernt.
+    published_state: dict | None = None
+    published_hash: tuple[str, int | None] | None = None
 
     def begin(self) -> None:
         if self.generation is None:
@@ -244,6 +282,71 @@ class _Publication:
                 self.model,
                 hash_datasource_id=self.datasource_id,
             )
+
+    def restore_after_failed_load(self) -> bool:
+        """Stellt Freigabe und Hash des vorherigen Stands wieder her.
+
+        Nur zulaessig, solange der Versuch nichts in Vektor- oder Suchindex
+        geschrieben hat (Lade-/Chunking-Phase). Ohne vollstaendig freigegebenen
+        Vorstand bleibt die Quelle offen und wird beim naechsten Lauf erneut versucht.
+        """
+        state, old_hash = self.published_state, self.published_hash
+        if old_hash is None:
+            return False
+        if self.generation is None:
+            # Freigabe nie geoeffnet: nur den vom Fehlerpfad entfernten Hash zuruecklegen.
+            with db_transaction() as conn:
+                self._restore_hash(conn, old_hash)
+            return True
+        if state is not None and (state["completed_at"] is None or state["cleanup_chunks"]):
+            return False
+        with db_transaction() as conn:
+            if state is None:
+                # Altbestand ohne Freigabezeile: begin() hat sie erst angelegt.
+                restored = conn.execute(
+                    "DELETE FROM document_publications WHERE collection_name = %s "
+                    "AND source = %s AND generation = %s AND completed_at IS NULL "
+                    "AND cleanup_chunks = '{}'::jsonb RETURNING source",
+                    (self.collection, self.source, self.generation),
+                ).fetchone()
+            else:
+                restored = conn.execute(
+                    "UPDATE document_publications SET generation = %s, versions = %s::jsonb, "
+                    "started_at = %s, completed_at = %s, empty_file_hash = %s, "
+                    "empty_processing_signature = %s "
+                    "WHERE collection_name = %s AND source = %s AND generation = %s "
+                    "AND completed_at IS NULL AND cleanup_chunks = '{}'::jsonb RETURNING source",
+                    (
+                        state["generation"],
+                        json.dumps(state["versions"]),
+                        state["started_at"],
+                        state["completed_at"],
+                        state["empty_file_hash"],
+                        state["empty_processing_signature"],
+                        self.collection,
+                        self.source,
+                        self.generation,
+                    ),
+                ).fetchone()
+            if restored is None:
+                return False
+            self._restore_hash(conn, old_hash)
+        self.generation = None
+        self.versions = {}
+        return True
+
+    def _restore_hash(self, conn, old_hash: tuple[str, int | None]) -> None:
+        from kiara.ingestion.vectordb_ops import _recount_datasource_embeddings
+
+        conn.execute(
+            "INSERT INTO file_hashes "
+            "(datasource_id, embedding_model, file_path, file_hash, file_size) "
+            "VALUES (%s, %s, %s, %s, %s) "
+            "ON CONFLICT (datasource_id, embedding_model, file_path) DO UPDATE SET "
+            "file_hash = EXCLUDED.file_hash, file_size = EXCLUDED.file_size",
+            (self.datasource_id, self.model, self.source, old_hash[0], old_hash[1]),
+        )
+        _recount_datasource_embeddings(conn, self.datasource_id, self.model)
 
 
 @contextmanager
@@ -274,6 +377,20 @@ def document_publication(
                     (model, source),
                 ).fetchall()
             }
+            if not publication.was_pending:
+                publication.published_state = conn.execute(
+                    "SELECT generation, versions, started_at, completed_at, cleanup_chunks, "
+                    "empty_file_hash, empty_processing_signature FROM document_publications "
+                    "WHERE collection_name = %s AND source = %s",
+                    (collection, source),
+                ).fetchone()
+                row = conn.execute(
+                    "SELECT file_hash, file_size FROM file_hashes WHERE datasource_id = %s "
+                    "AND embedding_model = %s AND file_path = %s",
+                    (publication.datasource_id, model, source),
+                ).fetchone()
+                if row is not None:
+                    publication.published_hash = (row["file_hash"], row["file_size"])
         token = _active_publication.set(publication)
         try:
             yield publication
@@ -316,6 +433,39 @@ def complete_document_publication(
     ).fetchone()
     if changed is None:
         raise RuntimeError("Dokumentabschluss wurde durch einen anderen Schreibvorgang entwertet")
+
+
+def complete_empty_publication(
+    conn, source: str, model: str, *, datasource_id: int, file_hash: str, processing_signature: str
+) -> None:
+    """Leere Quelle nach erfolgreichem Parsing und vollstaendigem Cleanup abschliessen.
+
+    Der Aufrufer validiert die geladene Dateiversion und zaehlt die Statistik
+    in derselben Transaktion nach. Leere Ergebnisse gehoeren nicht in die
+    file_hashes-Tabelle der indexierten Dateien.
+    """
+    publication = _active_publication.get()
+    if (
+        publication is None
+        or source != publication.source
+        or model != publication.model
+        or datasource_id != publication.datasource_id
+        or not publication.generation
+        or publication.versions
+        or not file_hash
+        or not processing_signature
+    ):
+        raise RuntimeError("Leerer Dateiabschluss ohne bestaetigte Vorbereitung")
+    changed = conn.execute(
+        "UPDATE document_publications SET completed_at = now(), "
+        "empty_file_hash = %s, empty_processing_signature = %s "
+        "WHERE collection_name = %s AND source = %s AND generation = %s "
+        "AND completed_at IS NULL AND versions = '{}'::jsonb "
+        "AND cleanup_chunks = '{}'::jsonb RETURNING source",
+        (file_hash, processing_signature, publication.collection, source, publication.generation),
+    ).fetchone()
+    if changed is None:
+        raise RuntimeError("Leerer Dateiabschluss entwertet oder Quellen-Cleanup noch offen")
 
 
 def assert_documents_published(collection: str, chunks: list[dict]) -> None:

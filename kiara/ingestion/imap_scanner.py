@@ -29,6 +29,39 @@ logger = logging.getLogger(__name__)
 _MAX_CONSECUTIVE_CONN_ERRORS = 5
 _MAX_RECONNECT_ATTEMPTS = 5
 _UID_REGISTRY_FILE = ".uid_registry.json"
+# Ordner, die im letzten Scan nicht gelesen werden konnten; der Worker zaehlt
+# sie als Jobfehler (Scan laeuft im Hintergrundthread ohne Rueckkanal).
+SCAN_FOLDER_ERRORS_FILE = ".scan_folder_errors.json"
+
+
+def quote_mailbox(name: str) -> str:
+    """Ordnernamen als IMAP-quoted-string (RFC 3501) fuer SELECT/EXAMINE.
+
+    imaplib setzt Mailbox-Argumente nicht in Anfuehrungszeichen; Namen mit
+    Leerzeichen (z. B. "Gesendete Elemente") lehnt der Server sonst mit BAD ab.
+    """
+    escaped = name.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
+
+
+def _unquote_folder(name: str) -> str:
+    """Von Hand gequotete Ordnereintraege auf den Rohnamen zuruecksetzen."""
+    if len(name) >= 2 and name.startswith('"') and name.endswith('"'):
+        return re.sub(r'\\(["\\])', r"\1", name[1:-1])
+    return name
+
+
+def read_scan_folder_errors(cache_dir: str) -> dict[str, str]:
+    """Liest die Ordnerfehler des letzten Scans (Ordner -> Meldung)."""
+    path = os.path.join(cache_dir, SCAN_FOLDER_ERRORS_FILE)
+    try:
+        with open(path) as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        return {}
+    if not isinstance(data, dict):
+        raise ValueError(f"Ungueltige Ordnerfehlerliste: {path}")
+    return {str(k): str(v) for k, v in data.items()}
 
 
 @dataclass(frozen=True)
@@ -81,13 +114,16 @@ class IMAPScanner:
         self._password = config.get("imap_password", "")
         raw_folders = config.get("imap_folders", "INBOX").strip()
         self._all_folders = raw_folders == "*"
-        self._folders = [] if self._all_folders else [f.strip() for f in raw_folders.split(",")]
+        self._folders = (
+            [] if self._all_folders else [_unquote_folder(f.strip()) for f in raw_folders.split(",")]
+        )
         self._since_days = config.get("imap_since_days", IMAP_DEFAULT_SINCE_DAYS)
         self._download_attachments = config.get("imap_download_attachments", True)
         self._max_attachment_bytes = (
             config.get("imap_max_attachment_mb", IMAP_DEFAULT_MAX_ATTACHMENT_MB) * 1024 * 1024
         )
         self._mail_archive = config.get("mail_archive")
+        self._folder_errors: dict[str, str] = {}
 
     def connect(self) -> imaplib.IMAP4_SSL | imaplib.IMAP4:
         """Verbindung zum IMAP-Server herstellen."""
@@ -199,7 +235,7 @@ class IMAPScanner:
             try:
                 new_conn = self.connect()
                 if folder:
-                    new_conn.select(folder, readonly=True)
+                    new_conn.select(quote_mailbox(folder), readonly=True)
                 logger.info(
                     "IMAP-Reconnect erfolgreich (Versuch %d/%d)", attempt, _MAX_RECONNECT_ATTEMPTS
                 )
@@ -242,6 +278,23 @@ class IMAPScanner:
             json.dump(registry, f)
         os.replace(tmp, path)
 
+    def _record_folder_error(self, folder: str, message: str) -> None:
+        logger.error("IMAP-Ordner '%s' uebersprungen: %s", folder, message)
+        self._folder_errors[folder] = message
+
+    def _write_folder_errors(self, output_dir: str) -> None:
+        path = os.path.join(output_dir, SCAN_FOLDER_ERRORS_FILE)
+        if not self._folder_errors:
+            try:
+                os.remove(path)
+            except FileNotFoundError:
+                pass
+            return
+        tmp = path + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(self._folder_errors, f, ensure_ascii=False)
+        os.replace(tmp, path)
+
     def _scan_folder_uids(
         self,
         conn,
@@ -265,11 +318,11 @@ class IMAPScanner:
 
         Returns:
             (unknown_uids, skipped_count) bei Erfolg.
-            None wenn der Ordner nicht selektierbar ist.
+            None wenn der Ordner nicht selektierbar ist (als Ordnerfehler erfasst).
         """
-        status, _ = conn.select(folder, readonly=True)
+        status, data = conn.select(quote_mailbox(folder), readonly=True)
         if status != "OK":
-            logger.warning("IMAP-Ordner nicht selektierbar: %s", folder)
+            self._record_folder_error(folder, f"SELECT {status}: {data}")
             return None
 
         # UIDVALIDITY pruefen — bei Aenderung wird der UID-Cache invalidiert
@@ -292,7 +345,10 @@ class IMAPScanner:
 
         # UID SEARCH (liefert UIDs statt Sequenznummern)
         status, msg_data = conn.uid("search", None, f"(SINCE {since_str})")
-        if status != "OK" or not msg_data[0]:
+        if status != "OK":
+            self._record_folder_error(folder, f"UID SEARCH {status}: {msg_data}")
+            return None
+        if not msg_data[0]:
             return [], 0
 
         all_uids = msg_data[0].split()
@@ -367,7 +423,9 @@ class IMAPScanner:
                 result = self._scan_folder_uids(conn, folder, folder_key, since_str, registry)
             except Exception as exc:
                 if self._is_connection_error(exc):
-                    logger.warning("Verbindungsverlust bei Ordner-Scan '%s', reconnecte...", folder)
+                    logger.warning(
+                        "IMAP-Fehler bei Ordner-Scan '%s' (%s), reconnecte...", folder, exc
+                    )
                     try:
                         conn = self._reconnect(conn)
                     except ConnectionError:
@@ -378,10 +436,10 @@ class IMAPScanner:
                             conn, folder, folder_key, since_str, registry
                         )
                     except Exception as e2:
-                        logger.warning("Fehler bei '%s' auch nach Reconnect: %s", folder, e2)
+                        self._record_folder_error(folder, f"auch nach Reconnect: {e2}")
                         continue
                 else:
-                    logger.warning("Fehler bei IMAP-Ordner '%s': %s", folder, exc)
+                    self._record_folder_error(folder, str(exc))
                     continue
 
             if result is None:
@@ -427,21 +485,22 @@ class IMAPScanner:
                 break
             try:
                 conn = self._ensure_connection_ready(conn, folder=folder)
-                status, _ = conn.select(folder, readonly=True)
+                status, data = conn.select(quote_mailbox(folder), readonly=True)
             except Exception as exc:
                 if self._is_connection_error(exc):
                     try:
                         conn = self._reconnect(conn, folder=folder)
-                    except ConnectionError:
+                    except ConnectionError as reconnect_exc:
                         logger.error("Reconnect fehlgeschlagen bei '%s', breche ab", folder)
+                        abort_reason = f"IMAP-Ordner '{folder}': {reconnect_exc}"
                         break
                 else:
-                    logger.warning("Fehler bei IMAP-Ordner '%s': %s", folder, exc)
+                    self._record_folder_error(folder, str(exc))
                     processed += len(uids)
                     continue
             else:
                 if status != "OK":
-                    logger.warning("IMAP-Ordner nicht selektierbar: '%s', ueberspringe", folder)
+                    self._record_folder_error(folder, f"SELECT {status}: {data}")
                     processed += len(uids)
                     continue
 
@@ -511,6 +570,8 @@ class IMAPScanner:
         Returns:
             Liste der geschriebenen Dateipfade.
         """
+        self._folder_errors = {}
+        self._write_folder_errors(output_dir)  # Stand eines frueheren Scans verwerfen
         conn = self.connect()
         try:
             since_date = datetime.now(timezone.utc) - timedelta(days=self._since_days)
@@ -537,14 +598,16 @@ class IMAPScanner:
             except Exception:
                 pass
 
+        self._write_folder_errors(output_dir)
         if abort_reason:
             raise InterruptedError(abort_reason)
 
-        marker = os.path.join(output_dir, ".scan_done")
-        with open(marker, "w") as f:
-            f.write(datetime.now().isoformat())
-
         self._save_uid_registry(output_dir, registry)
+        # Mit Ordnerfehlern kein Scan-Cache: der naechste Job versucht es erneut.
+        if not self._folder_errors:
+            marker = os.path.join(output_dir, ".scan_done")
+            with open(marker, "w") as f:
+                f.write(datetime.now().isoformat())
         return files
 
     def _fetch_batch(self, conn, batch_uids: list[bytes]) -> list[tuple[bytes, bytes | None]]:

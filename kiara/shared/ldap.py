@@ -5,7 +5,7 @@ Active-Directory-/LDAP-Interaktionen.
 
 Beziehungen:
     - kiara.web.ldap_utils       → Re-Export (Rueckwaertskompatibilitaet)
-    - kiara.anonymization.*      → nutzt get_group_members (Stammdaten)
+    - kiara.anonymization.*      → nutzt get_directory_people (Stammdaten)
     - kiara.web.api_ldap         → nutzt test_connection, get_groups
     - kiara.web.api_auth         → nutzt authenticate_user
     - kiara.web.ldap_sync        → nutzt get_group_members, get_user_groups
@@ -258,6 +258,63 @@ def get_group_members(config: dict) -> list[dict]:
         from kiara.exceptions import AuthenticationError
 
         raise AuthenticationError(f"Gruppenmitglieder konnten nicht geladen werden: {exc}") from exc
+
+
+_PEOPLE_FILTER = "(|(&(objectCategory=person)(objectClass=user))(objectClass=contact))"
+_PEOPLE_PAGE_SIZE = 500
+
+
+def get_directory_people(config: dict) -> list[dict]:
+    """Alle Personen des Verzeichnisses (Benutzer und Kontakte, auch deaktivierte).
+
+    Fuer die Anonymisierung: Namen ehemaliger Mitarbeiter und externer Kontakte
+    stehen ebenso in Dokumenten wie die der aktuellen Gruppenmitglieder. Sucht
+    ab dem Domain-Root von search_base (ersatzweise group_dn), seitenweise.
+    Liefert dieselben Felder wie get_group_members.
+    """
+    base = config.get("search_base") or config.get("group_dn") or ""
+    search_base = _get_domain_root(base)
+    if not search_base:
+        raise ValueError("LDAP: weder search_base noch group_dn konfiguriert")
+    attributes = ["sAMAccountName", "sn", "givenName", "mail", "distinguishedName", "displayName"]
+    try:
+        with _ldap_connection(config, receive_timeout=DEFAULT_TIMEOUTS["ldap_receive"]) as conn:
+            people = []
+            for entry in conn.extend.standard.paged_search(
+                search_base,
+                _PEOPLE_FILTER,
+                search_scope=SUBTREE,
+                attributes=attributes,
+                paged_size=_PEOPLE_PAGE_SIZE,
+                generator=True,
+            ):
+                if entry.get("type") != "searchResEntry":
+                    continue  # Referrals (z.B. DomainDnsZones) uebergehen
+                attrs = entry.get("attributes") or {}
+
+                def first(name, attrs=attrs):
+                    value = attrs.get(name)
+                    if isinstance(value, list):
+                        value = value[0] if value else ""
+                    return str(value or "").strip()
+
+                people.append(
+                    {
+                        "dn": first("distinguishedName") or str(entry.get("dn") or ""),
+                        "sAMAccountName": first("sAMAccountName"),
+                        "sn": first("sn"),
+                        "givenName": first("givenName"),
+                        "mail": first("mail"),
+                        "displayName": first("displayName"),
+                    }
+                )
+            return people
+    except Exception as exc:
+        from kiara.exceptions import AuthenticationError
+
+        raise AuthenticationError(
+            f"Verzeichnis-Personen konnten nicht geladen werden: {exc}"
+        ) from exc
 
 
 def get_user_groups(config: dict, user_dn: str) -> list[str]:

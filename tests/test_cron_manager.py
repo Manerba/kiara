@@ -159,6 +159,21 @@ class TestCronFileOperations:
         schedules = cron_utils.read_schedules()
         assert 1 in schedules
 
+    def test_remove_without_entry_does_not_write(self, cron_file, monkeypatch):
+        """Ohne Eintrag kein Schreibzugriff (Admin-UI-Speichern mit "manuell")."""
+
+        def _fail_write(lines):
+            raise AssertionError("Cron-Datei darf nicht geschrieben werden")
+
+        cron_utils.write_schedule(1, "Test", "0 * * * *")
+        monkeypatch.setattr(cron_utils, "_write_cron_lines", _fail_write)
+        cron_utils.remove_schedule(999)
+        assert 1 in cron_utils.read_schedules()
+
+    def test_remove_without_file_does_not_create(self, cron_file):
+        cron_utils.remove_schedule(3)
+        assert not os.path.exists(cron_file)
+
     def test_invalid_cron_raises(self, cron_file):
         with pytest.raises(ValueError, match="Ungueltig"):
             cron_utils.write_schedule(1, "Test", "invalid")

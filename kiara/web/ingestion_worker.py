@@ -37,7 +37,7 @@ from kiara.shared.constants import (
     INGESTION_WORKER_POLL_INTERVAL,
 )
 from kiara.shared.db import db_query, db_transaction
-from kiara.shared.enums import IngestionStatus
+from kiara.shared.enums import ConnectorType, IngestionStatus
 from kiara.web.api_utils import insert_returning, safe_refresh
 from kiara.web.ingestion_forensics import request_privileged_ingestion_forensics
 from kiara.web.ingestion_stall_detection import (
@@ -152,6 +152,8 @@ _ACTIVE_JOB_STATUSES = (
     IngestionStatus.RUNNING.value,
     IngestionStatus.PAUSED.value,
 )
+# Konnektoren, deren Scan IMAPScanner-Ordnerfehler im Cache hinterlaesst.
+_MAIL_SCAN_TYPES = frozenset({ConnectorType.IMAP.value, ConnectorType.EXCHANGE_ONLINE.value})
 
 
 def _is_heartbeat_alive(stats_json, started_at: str | None) -> bool:
@@ -694,6 +696,26 @@ class IngestionWorker:
             )
             return False
 
+        from kiara.cad.ingestion import job_is_sql_only
+
+        if job_is_sql_only(dict(srow)):
+            from kiara.cad.jobs import enqueue
+            from kiara.config import load_config
+
+            try:
+                enqueue(
+                    ds_id,
+                    "incremental",
+                    "auto-resume",
+                    load_config(),
+                    resumed_from=old_job_id,
+                    selection=dict(srow).get("stats_json"),
+                )
+                return True
+            except ValueError as exc:
+                logger.warning("CAD-Job %s kann nicht fortgesetzt werden: %s", old_job_id, exc)
+                return False
+
         if not emb_model:
             logger.warning(
                 "DS %s: Stale Job #%s hat kein Embedding-Modell — "
@@ -804,6 +826,13 @@ class IngestionWorker:
                 resume_stats = json.dumps(
                     {
                         "resumed_from_job": old_job_id,
+                        **(
+                            {"cad_targets": retry_row["stats_json"]["cad_targets"]}
+                            if retry_row
+                            and isinstance(retry_row["stats_json"], dict)
+                            and "cad_targets" in retry_row["stats_json"]
+                            else {}
+                        ),
                         **html_fields,
                         **({"html_migration": migration} if migration is not None else {}),
                     },
@@ -895,6 +924,12 @@ class IngestionWorker:
         if not candidate:
             return None
         candidate = dict(candidate)
+        from kiara.cad.ingestion import job_is_sql_only
+
+        if job_is_sql_only(candidate):
+            from kiara.cad.jobs import claim
+
+            return claim(candidate["id"])
         config = load_config()
         try:
             with guard_job_contract(
@@ -1030,6 +1065,13 @@ class IngestionWorker:
         stats = None
 
         try:
+            from kiara.cad.ingestion import job_is_sql_only
+
+            if job_is_sql_only(row):
+                from kiara.cad.jobs import execute
+
+                execute(self, row, _check_control)
+                return
             if not embedding_model:
                 raise ValueError(
                     f"Job #{job_id} hat kein Embedding-Modell. "
@@ -1118,7 +1160,7 @@ class IngestionWorker:
                 return  # Abgebrochen oder fehlgeschlagen waehrend Scan
 
             # Phase 5: Full-Reingest-Cleanup (falls noetig)
-            if job_type == "full":
+            if job_type == "full" and ds_row.get("ds_cad_vector_enabled", True):
                 self._prepare_full_reingest(job_id, ds_id, config, embedding_model)
 
             # Phase 6: Resume-Skip ermitteln
@@ -1170,6 +1212,8 @@ class IngestionWorker:
                     flush_fn,
                     scan_info,
                 )
+
+            self._record_mail_scan_errors(scan_info, stats, callbacks)
 
             # Phase 9: Ergebnis auswerten und finalisieren
             duration = int(time.time() - start_time)
@@ -1337,6 +1381,15 @@ class IngestionWorker:
         if not ds_row:
             raise ValueError(f"Datenquelle {ds_id} nicht gefunden")
 
+        ds_row = dict(ds_row)
+        queued_stats = row.get("stats_json") or {}
+        if isinstance(queued_stats, str):
+            queued_stats = json.loads(queued_stats)
+        for key, value in queued_stats.get("cad_targets", {}).items():
+            ds_row["ds_" + key] = value
+        if queued_stats.get("cad_sql_only"):
+            ds_row["ds_file_types"] = json.dumps(queued_stats["cad_file_types"])
+            ds_row["ds_accept_all_text"] = False
         ensure_loaded()
         config = copy.deepcopy(load_config())
         # Marker: persistierte Config — ColBERT Model-Mismatch-Guard aktiv
@@ -1841,7 +1894,12 @@ class IngestionWorker:
         if path is None:
             raise ValueError(f"Vorbereitung fehlgeschlagen fuer Typ {ds_row['type']}")
         config["datasource"]["path"] = path
-        return {"scan_thread": None, "scan_complete": None, "scan_error": [None]}
+        return {
+            "scan_thread": None,
+            "scan_complete": None,
+            "scan_error": [None],
+            "mail_scan_dir": path if ds_row.get("type") in _MAIL_SCAN_TYPES else None,
+        }
 
     def _start_parallel_scan(
         self, job_id, config, connector_cls, conn_config, ds_row, cache_path, check_control
@@ -1912,7 +1970,36 @@ class IngestionWorker:
             "scan_thread": scan_thread,
             "scan_complete": scan_complete,
             "scan_error": scan_error,
+            "mail_scan_dir": cache_path if ds_row.get("type") in _MAIL_SCAN_TYPES else None,
         }
+
+    @staticmethod
+    def _record_mail_scan_errors(scan_info, stats, callbacks):
+        """Im Mailscan uebersprungene Ordner als Jobfehler zaehlen und protokollieren."""
+        scan_dir = scan_info.get("mail_scan_dir")
+        if not scan_dir:
+            return
+        from kiara.ingestion.imap_scanner import IMAPScanner, read_scan_folder_errors
+        from kiara_ingestion_core.models import FileLogEntry
+
+        folder_errors = read_scan_folder_errors(scan_dir)
+        if not folder_errors:
+            return
+        stats["errors"] = stats.get("errors", 0) + len(folder_errors)
+        stats["mail_scan_folder_errors"] = folder_errors
+        for folder, error in folder_errors.items():
+            callbacks["on_file_log"](
+                FileLogEntry(
+                    file_path=f"imap:{folder}",
+                    file_name=IMAPScanner._decode_imap_utf7(folder),
+                    file_size=0,
+                    file_ext="",
+                    status="error",
+                    error_message=error,
+                    error_phase="mail_scan",
+                )
+            )
+        callbacks["flush_file_logs"]()
 
     # --- Phase 5: Full-Reingest-Cleanup ---
 
@@ -2468,6 +2555,9 @@ class IngestionWorker:
             chunk_count: Anzahl Chunks fuer diese DS/Modell-Kombination.
             finished: ISO-Timestamp des Abschlusszeitpunkts.
         """
+        from kiara.cad.jobs import preserve_targets
+
+        preserve_targets(db, job_id, stats)
         preserve_selection(db, job_id, stats)
         _job_repo.update(
             job_id,
@@ -2594,6 +2684,9 @@ class IngestionWorker:
             stats = {}
         stats.update({"error": error, "duration_seconds": duration})
         with db_transaction() as db:
+            from kiara.cad.jobs import preserve_targets
+
+            preserve_targets(db, job_id, stats)
             preserve_selection(db, job_id, stats)
             _job_repo.update(
                 job_id,
@@ -2647,6 +2740,9 @@ class IngestionWorker:
         self._close_progress_cache()
         abort_reason = stats.get("abort_reason", "")
         with db_transaction() as db:
+            from kiara.cad.jobs import preserve_targets
+
+            preserve_targets(db, job_id, stats)
             preserve_selection(db, job_id, stats)
             _job_repo.update(
                 job_id,
@@ -2736,6 +2832,7 @@ def enqueue_job(
         ValueError: Wenn embedding_model leer ist oder ein Job bereits existiert.
     """
     from kiara.backend_selector import normalize_model_name
+    from kiara.cad.ingestion import sql_only_source, targets
     from kiara.config import load_config
     from kiara.retrieval.index_compatibility import (
         IndexOperation,
@@ -2744,8 +2841,20 @@ def enqueue_job(
         raw_qdrant_client,
     )
 
+    config = load_config()
+    with db_query() as read_db:
+        cad_ds = read_db.execute("SELECT * FROM datasources WHERE id=%s", (ds_id,)).fetchone()
+    if (
+        cad_ds
+        and sql_only_source(dict(cad_ds), config)
+        and html_migration is None
+        and html_reingest is None
+    ):
+        from kiara.cad.jobs import enqueue
+
+        return enqueue(ds_id, job_type, triggered_by, config)
     embedding_model = normalize_model_name(embedding_model)
-    initial_stats = {}
+    initial_stats = {"cad_targets": targets(dict(cad_ds))} if cad_ds else {}
     if html_reingest is not None:
         from kiara.ingestion.html_reingest import build_request, validate_target
 
@@ -2791,13 +2900,18 @@ def enqueue_job(
             (INGESTION_DATASOURCE_LOCK_NAMESPACE, ds_id),
         )
         ds_row = db.execute(
-            "SELECT id, is_active FROM datasources WHERE id = %s FOR UPDATE",
+            "SELECT * FROM datasources WHERE id = %s FOR UPDATE",
             (ds_id,),
         ).fetchone()
         if not ds_row:
             raise ValueError(f"DS {ds_id}: Datenquelle nicht gefunden")
         if not ds_row["is_active"]:
             raise ValueError(f"DS {ds_id}: Datenquelle ist deaktiviert")
+        from kiara.connectors.registry import source_unavailable_reason
+
+        unavailable = source_unavailable_reason(dict(ds_row))
+        if unavailable:
+            raise ValueError(f"DS {ds_id}: {unavailable}")
 
         status_placeholders = ", ".join(["%s"] * len(_ACTIVE_JOB_STATUSES))
         existing = db.execute(

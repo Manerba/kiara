@@ -133,6 +133,12 @@ input.config-checkbox:focus-visible,
     background: var(--bg-secondary);
 }
 
+.action-btn-sm:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    background: none;
+}
+
 .action-btn-sm.danger {
     color: var(--accent-danger, #dc3545);
     border-color: var(--accent-danger, #dc3545);

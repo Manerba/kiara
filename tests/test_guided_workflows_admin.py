@@ -10,7 +10,9 @@ import pytest
 # DB-Backend initialisieren (vor allen kiara-Imports)
 import kiara.shared.db as _db
 
-_db._dsn = "postgresql://kiara:kiara@localhost:5432/kiara_test"
+from db_helpers import _TEST_DSN
+
+_db._dsn = _TEST_DSN
 
 # Admin-Registry laden, damit workflows_admin.py Validierung durchlaeuft
 from kiara.admin.registry import load_admin_functions

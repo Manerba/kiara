@@ -96,14 +96,23 @@ def _make_pipeline_mocks(graph_enabled=True):
         "graph": {"enabled": graph_enabled},
         "embedding_model": "nomic-embed-text",
     }
+    # Zustandsbehafteter Dense-Store: Der Cleanup prueft nach delete_by_sources,
+    # dass die Quelle wirklich leer ist (fail-closed).
+    remaining = {"/tmp/test.txt": ["id_1", "id_2"]}
     store = MagicMock()
-    store.get_ids_by_sources.return_value = ["id_1", "id_2"]
-    store.delete_by_sources = MagicMock()
+    store.get_ids_by_sources.side_effect = lambda sources: [
+        cid for source in sources for cid in remaining.get(source, [])
+    ]
+    store.delete_by_sources.side_effect = lambda sources: [
+        remaining.pop(source, None) for source in sources
+    ]
 
     hash_store = MagicMock()
     chunk_ds = MagicMock()
     chunk_ds.get_other_datasources.return_value = []
     chunk_ds.filter_unreferenced_chunk_ids.return_value = ["id_1", "id_2"]
+    # Nach dem PG-Cleanup sind keine Zuordnungen mehr vorhanden.
+    chunk_ds.get_datasource_ids_for_chunks.return_value = {}
 
     return config, store, hash_store, chunk_ds
 
@@ -118,7 +127,6 @@ def test_cleanup_stale_chunks_with_graph():
 
     with (
         patch("kiara.ingestion.pipeline.db_transaction") as mock_tx,
-        patch("kiara.ingestion.pipeline.delete_from_elasticsearch", create=True),
         patch("kiara.graph.store.GraphStore.delete_by_chunk_ids") as mock_graph,
     ):
         mock_tx.return_value.__enter__ = MagicMock(return_value=MagicMock())
@@ -138,6 +146,7 @@ def test_cleanup_stale_chunks_with_graph():
 
     chunk_ds.filter_unreferenced_chunk_ids.assert_called_once_with(["id_1", "id_2"], conn=ANY)
     mock_graph.assert_called_once_with(["id_1", "id_2"], conn=ANY)
+    store.delete_by_sources.assert_called_once_with(["/tmp/test.txt"])
 
 
 def test_cleanup_stale_chunks_graph_cleanup_ignores_disabled_flag():
@@ -146,7 +155,6 @@ def test_cleanup_stale_chunks_graph_cleanup_ignores_disabled_flag():
 
     with (
         patch("kiara.ingestion.pipeline.db_transaction") as mock_tx,
-        patch("kiara.ingestion.pipeline.delete_from_elasticsearch", create=True),
         patch("kiara.graph.store.GraphStore.delete_by_chunk_ids") as mock_graph,
     ):
         mock_tx.return_value.__enter__ = MagicMock(return_value=MagicMock())
@@ -166,6 +174,7 @@ def test_cleanup_stale_chunks_graph_cleanup_ignores_disabled_flag():
 
     chunk_ds.filter_unreferenced_chunk_ids.assert_called_once_with(["id_1", "id_2"], conn=ANY)
     mock_graph.assert_called_once_with(["id_1", "id_2"], conn=ANY)
+    store.delete_by_sources.assert_called_once_with(["/tmp/test.txt"])
 
 
 def test_cleanup_stale_chunks_graph_failure_propagates():
@@ -180,7 +189,6 @@ def test_cleanup_stale_chunks_graph_failure_propagates():
 
     with (
         patch("kiara.ingestion.pipeline.db_transaction") as mock_tx,
-        patch("kiara.ingestion.pipeline.delete_from_elasticsearch", create=True),
         patch(
             "kiara.graph.store.GraphStore.delete_by_chunk_ids",
             side_effect=RuntimeError("Graph kaputt"),

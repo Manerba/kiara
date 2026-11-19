@@ -2785,7 +2785,8 @@ class TestSFCv23Anchor4CacheBusters:
     )
     def test_main_templates_have_v1(self, tpl_path, expected):
         src = tpl_path.read_text(encoding="utf-8")
-        hits = re.findall(r"ui_core/[a-z]+/[a-z_]+\.(?:css|js)\?v=1", src)
+        # Versionsnummer darf steigen, wenn ein Asset geaendert wird (table.js/css: v=2).
+        hits = re.findall(r"ui_core/[a-z]+/[a-z_]+\.(?:css|js)\?v=\d+", src)
         # Sprint 3: tokens.css + theme.css + notifications.css + modal.css
         #           + core.js + theme.js + fetch.js + runtime.js + notifications.js + modal.js = 10
         # Sprint 4: + markdown.css + markdown.js = 12
@@ -2794,7 +2795,7 @@ class TestSFCv23Anchor4CacheBusters:
         # Sprint 6 admin.html: zusaetzlich forms.js = 19
         # V30 Welle 3: + ui_core/js/runtime_style.js = 19 (index) / 20 (admin)
         assert len(hits) == expected, (
-            f"{tpl_path.name}: erwartet {expected} ui_core-Assets mit ?v=1, gefunden {len(hits)}"
+            f"{tpl_path.name}: erwartet {expected} ui_core-Assets mit ?v=N, gefunden {len(hits)}"
         )
         assert len(re.findall(r"kiara_bootstrap\.js\?v=1", src)) == 1, (
             f"{tpl_path.name}: erwartet 1 kiara_bootstrap.js?v=1"
@@ -4468,7 +4469,7 @@ class TestCspPhase2TabJobs:
         Kollisionen)."""
         assert 'data-filter="all"' in tab_jobs_src
         assert 'data-filter="running"' in tab_jobs_src
-        assert 'data-job-id="${v}"' in tab_jobs_src
+        assert re.search(r'data-job-id="\$\{\w+\}"', tab_jobs_src)
 
     def test_handlers_unchanged(self, tab_jobs_src):
         """Die Handler-Funktionen (_filterJobs, _cancelJob, ...) bleiben

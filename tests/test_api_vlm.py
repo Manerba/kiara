@@ -30,127 +30,18 @@ def _reset_vlm_cache():
 
 # -- DB-Schema ----------------------------------------------------------------
 
-_FULL_DS_SCHEMA = """
-    CREATE TABLE datasources (
-        id SERIAL PRIMARY KEY,
-        name TEXT NOT NULL,
-        type TEXT NOT NULL DEFAULT 'local',
-        path TEXT DEFAULT '',
-        is_active BOOLEAN DEFAULT true,
-        created_at TEXT DEFAULT (NOW()),
-        updated_at TEXT DEFAULT (NOW()),
-        webdav_url TEXT DEFAULT '',
-        webdav_username TEXT DEFAULT '',
-        webdav_password TEXT DEFAULT '',
-        webdav_base_path TEXT DEFAULT '/',
-        smb_server TEXT DEFAULT '',
-        smb_share TEXT DEFAULT '',
-        smb_username TEXT DEFAULT '',
-        smb_password TEXT DEFAULT '',
-        smb_domain TEXT DEFAULT '',
-        smb_mount_point TEXT DEFAULT '',
-        imap_server TEXT DEFAULT '',
-        imap_port INTEGER DEFAULT 993,
-        imap_ssl INTEGER DEFAULT 1,
-        imap_username TEXT DEFAULT '',
-        imap_password TEXT DEFAULT '',
-        imap_folders TEXT DEFAULT 'INBOX',
-        imap_since_days INTEGER DEFAULT 90,
-        imap_download_attachments INTEGER DEFAULT 1,
-        imap_max_attachment_mb INTEGER DEFAULT 25,
-        sql_dsn TEXT DEFAULT '',
-        sql_driver TEXT DEFAULT 'auto',
-        sql_query TEXT DEFAULT '',
-        sql_text_columns TEXT DEFAULT '',
-        sql_id_column TEXT DEFAULT 'id',
-        sql_timestamp_column TEXT DEFAULT '',
-        sql_text_template TEXT DEFAULT '',
-        connector_config TEXT DEFAULT '{}',
-        ds_chunk_strategy TEXT DEFAULT 'auto',
-        ds_chunk_size INTEGER DEFAULT NULL,
-        ds_chunk_overlap INTEGER DEFAULT NULL,
-        ds_file_types TEXT DEFAULT NULL,
-        ds_exclude_patterns TEXT DEFAULT NULL,
-        ds_ddu_enabled BOOLEAN DEFAULT false,
-        ds_ddu_ocr_images INTEGER DEFAULT 1,
-        ds_vlm_enabled BOOLEAN DEFAULT false,
-        ds_accept_all_text INTEGER DEFAULT 0,
-        ds_index_attachments INTEGER DEFAULT 1,
-        sync_interval TEXT DEFAULT 'global',
-        restriction_level TEXT DEFAULT 'anonymize',
-        ds_contextual_retrieval INTEGER DEFAULT 0,
-        ds_enrichment_prompt_id INTEGER DEFAULT NULL,
-        ds_enrichment_backend_id INTEGER DEFAULT NULL,
-        ds_colbert_enabled BOOLEAN DEFAULT false,
-        ingestion_status TEXT DEFAULT 'idle',
-        last_ingested_at TEXT DEFAULT NULL,
-        last_error TEXT DEFAULT '',
-        chunk_count INTEGER DEFAULT 0,
-        file_count INTEGER DEFAULT 0,
-        processed_files INTEGER DEFAULT 0
-    );
-
-    CREATE TABLE datasource_groups (
-        id SERIAL PRIMARY KEY,
-        datasource_id INTEGER NOT NULL,
-        group_id INTEGER NOT NULL
-    );
-
-    CREATE TABLE datasource_users (
-        id SERIAL PRIMARY KEY,
-        datasource_id INTEGER NOT NULL,
-        user_id INTEGER NOT NULL
-    );
-
-    CREATE TABLE datasource_embeddings (
-        id SERIAL PRIMARY KEY,
-        datasource_id INTEGER NOT NULL,
-        embedding_model TEXT NOT NULL,
-        chunk_count INTEGER DEFAULT 0,
-        file_count INTEGER DEFAULT 0,
-        last_ingested_at TEXT DEFAULT NULL,
-        UNIQUE(datasource_id, embedding_model)
-    );
-
-    CREATE TABLE ingestion_jobs (
-        id SERIAL PRIMARY KEY,
-        datasource_id INTEGER NOT NULL,
-        status TEXT NOT NULL DEFAULT 'pending',
-        job_type TEXT NOT NULL DEFAULT 'incremental',
-        triggered_by TEXT NOT NULL DEFAULT 'manual',
-        embedding_model TEXT DEFAULT '',
-        requested_action TEXT DEFAULT NULL,
-        progress_processed INTEGER DEFAULT 0,
-        progress_total INTEGER DEFAULT 0,
-        queued_at TEXT DEFAULT (NOW()),
-        started_at TEXT DEFAULT NULL,
-        finished_at TEXT DEFAULT NULL,
-        stats_json TEXT DEFAULT '{}',
-        error_message TEXT DEFAULT '',
-        resumed_from_job INTEGER DEFAULT NULL,
-        FOREIGN KEY (datasource_id) REFERENCES datasources(id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE cache_datasources (
-        datasource_id INTEGER PRIMARY KEY,
-        payload_json TEXT NOT NULL,
-        updated_at TEXT DEFAULT (NOW())
-    );
-"""
 
 
 def _setup_vlm_db():
-    """Erstellt DB-Schema fuer VLM-Tests und gibt Connection zurueck."""
-    conn = get_connection()
-    conn.execute("DROP TABLE IF EXISTS cache_datasources CASCADE")
-    conn.execute("DROP TABLE IF EXISTS ingestion_jobs CASCADE")
-    conn.execute("DROP TABLE IF EXISTS datasource_embeddings CASCADE")
-    conn.execute("DROP TABLE IF EXISTS datasource_users CASCADE")
-    conn.execute("DROP TABLE IF EXISTS datasource_groups CASCADE")
-    conn.execute("DROP TABLE IF EXISTS datasources CASCADE")
-    conn.executescript(_FULL_DS_SCHEMA)
-    conn.commit()
-    return conn
+    """Echtes KIara-Schema mit geleerten Testdaten, gibt Connection zurueck.
+
+    Frueher legte der Test eigene Datasource-Tabellen per DROP ... CASCADE an;
+    ihnen fehlten neuere Spalten, und das CASCADE beschaedigte andere Tests.
+    """
+    from db_helpers import reset_test_data
+
+    reset_test_data()
+    return get_connection()
 
 
 # -- Fixture ------------------------------------------------------------------

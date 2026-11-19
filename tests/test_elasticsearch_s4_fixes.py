@@ -88,6 +88,11 @@ def test_prepare_preflight_preserves_real_venv(tmp_path):
     script = (ROOT / "scripts/elasticsearch_maintenance_prepare.sh").read_text()
     prefix = script.split('marker=$("$python"', 1)[0]
     assert "systemctl" not in prefix and "cp -a" not in prefix
+    # Das Skript ist fuer root und wechselt fest in den Quellbaum /root/kiara.
+    # Der Selbsttest laeuft als kiara aus /opt/kiara; fuer die Pruefung des
+    # venv genuegt das Projektverzeichnis dieses Tests.
+    assert "\ncd /root/kiara\n" in prefix
+    prefix = prefix.replace("\ncd /root/kiara\n", f"\ncd {ROOT}\n", 1)
     preflight = tmp_path / "preflight.sh"
     preflight.write_text(prefix)
     config = tmp_path / "config.yaml"

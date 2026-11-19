@@ -53,6 +53,7 @@ from kiara.generation.adapters.base import (
 )
 from kiara.generation.backends.base import _clean_think_blocks
 from kiara.generation.backends.ollama import build_usage_from_ollama
+from kiara.generation.runner_options import fixed_runner_options
 from kiara.shared.constants import (
     AGENT_RESULT_TRUNCATE_OLLAMA,
     DEFAULT_AGENT_NUM_CTX,
@@ -106,7 +107,10 @@ class OllamaToolAdapter(BaseToolAdapter):
         self._config = config
 
         agent_cfg = config.get("chat", {}).get("agent", {})
-        self._num_ctx = agent_cfg.get("num_ctx", DEFAULT_AGENT_NUM_CTX)
+        self._runner_options = fixed_runner_options(backend["url"], self._model)
+        self._num_ctx = self._runner_options.get(
+            "num_ctx", agent_cfg.get("num_ctx", DEFAULT_AGENT_NUM_CTX)
+        )
         self._temperature = agent_cfg.get("temperature", DEFAULT_LLM_TEMPERATURE)
 
         self._question: str = ""
@@ -142,7 +146,11 @@ class OllamaToolAdapter(BaseToolAdapter):
             response = self._client.generate(
                 model=self._model,
                 prompt=prompt,
-                options={"temperature": self._temperature, "num_ctx": self._num_ctx},
+                options={
+                    "temperature": self._temperature,
+                    "num_ctx": self._num_ctx,
+                    **self._runner_options,
+                },
                 stream=False,
                 think=False,  # Thinking deaktivieren — Tool-Auswahl braucht kein CoT
             )
@@ -213,7 +221,11 @@ class OllamaToolAdapter(BaseToolAdapter):
             stream = self._client.generate(
                 model=self._model,
                 prompt=prompt,
-                options={"temperature": self._temperature, "num_ctx": self._num_ctx},
+                options={
+                    "temperature": self._temperature,
+                    "num_ctx": self._num_ctx,
+                    **self._runner_options,
+                },
                 stream=True,
                 think=think,
             )

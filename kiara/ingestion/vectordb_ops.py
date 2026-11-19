@@ -220,6 +220,7 @@ def delete_files(
         {"deleted_files", "deleted_chunks", "orphan_chunks_deleted",
          "shared_chunks_updated"}
     """
+    from kiara.ingestion.document_publication import forget_empty_completions
     from kiara.retrieval.colbert import ColBERTStore, colbert_ds_model_key
 
     # 1. Guard
@@ -262,6 +263,7 @@ def delete_files(
     # aus SoT muessen trotzdem laufen.
     if not chunk_ids:
         with db_transaction() as conn:
+            forget_empty_completions(conn, str(store.get_collection_name()), file_paths)
             hash_store.remove_files(datasource_id, embedding_model, file_paths, conn=conn)
             _recount_datasource_embeddings(conn, datasource_id, embedding_model)
             for colbert_model in colbert_models:
@@ -304,6 +306,7 @@ def delete_files(
     # 7. DB-/Hash-Mutation in EINER Transaktion — chunk_datasources (Dense+
     # ColBERT), Graph-Cleanup, file_hashes und datasource_embeddings-Recount atomar.
     with db_transaction() as conn:
+        forget_empty_completions(conn, str(store.get_collection_name()), file_paths)
         chunk_ds.acquire_graph_cleanup_lock(conn)
         chunk_ds.remove_chunks_for_datasource(datasource_id, embedding_model, chunk_ids, conn=conn)
         hash_store.remove_files(datasource_id, embedding_model, file_paths, conn=conn)

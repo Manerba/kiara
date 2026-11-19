@@ -69,8 +69,14 @@ def test_mtime_scan_and_diff_use_two_metadata_queries_not_three(tmp_path):
     ):
         files = scan_files(config(tmp_path), file_stats=metadata)
         _, hashes, _ = file_diff._compute_file_diff(files, False, {}, file_stats=metadata)
-    assert lstat_call.call_count == 1
-    assert stat_call.call_count == 1
+    # Gezaehlt werden die Metadatenabfragen je Datei. Einmalige Aufloesungen
+    # der Wurzeln (Mailarchiv-Ausschluss via Path.resolve) sind pro Scan
+    # konstant und keine dateibezogenen Abfragen.
+    def per_file(mock_call):
+        return sum(1 for call in mock_call.call_args_list if os.fspath(call.args[0]) == str(path))
+
+    assert per_file(lstat_call) == 1
+    assert per_file(stat_call) == 1
     info = path.stat()
     expected = hashlib.md5(f"{path}:{info.st_size}:{info.st_mtime}".encode()).hexdigest()
     assert hashes[str(path)] == (expected, info.st_size)

@@ -1,0 +1,2847 @@
+{
+  "provenance": {
+    "repository": "cad-pkg-reverse",
+    "commit": "8fd54971d4434c4327b2726aef22ccf3da9e88fb",
+    "fixture": "tests/test_kantenbeschriftungen.py:fixture",
+    "synthetic": true
+  },
+  "segment": {
+    "eintrag": "PRIVATE_ENTRY",
+    "start": 0,
+    "ende": -1,
+    "klasse": "part_struct",
+    "id": "PRIVATE_SEGMENT",
+    "objekte": {
+      "0": {
+        "nr": 0,
+        "klasse": "part_struct",
+        "offset": 0,
+        "felder": [
+          {
+            "offset": 0,
+            "art": "ID",
+            "wert": "1:0"
+          },
+          {
+            "offset": 1,
+            "art": "D",
+            "wert": 1
+          },
+          {
+            "offset": 2,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 3,
+            "art": "D",
+            "wert": 1
+          },
+          {
+            "offset": 4,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 5,
+            "art": "v",
+            "wert": 1
+          }
+        ]
+      },
+      "1": {
+        "nr": 1,
+        "klasse": "ATTRIBUTE_LINK",
+        "offset": 100,
+        "felder": [
+          {
+            "offset": 100,
+            "art": "ID",
+            "wert": "1:1"
+          },
+          {
+            "offset": 101,
+            "art": "B",
+            "wert": 1
+          },
+          {
+            "offset": 102,
+            "art": "v",
+            "wert": 0
+          },
+          {
+            "offset": 103,
+            "art": "z",
+            "wert": "A3D_SET"
+          },
+          {
+            "offset": 104,
+            "art": "B",
+            "wert": 1
+          },
+          {
+            "offset": 105,
+            "art": "v",
+            "wert": 2
+          }
+        ]
+      },
+      "2": {
+        "nr": 2,
+        "klasse": "A3D_SET",
+        "offset": 200,
+        "felder": [
+          {
+            "offset": 200,
+            "art": "ID",
+            "wert": "1:2"
+          },
+          {
+            "offset": 201,
+            "art": "B",
+            "wert": 1
+          },
+          {
+            "offset": 202,
+            "art": "v",
+            "wert": 0
+          },
+          {
+            "offset": 203,
+            "art": "NIL",
+            "wert": 1
+          },
+          {
+            "offset": 204,
+            "art": "NIL",
+            "wert": 1
+          },
+          {
+            "offset": 205,
+            "art": "B",
+            "wert": 3
+          },
+          {
+            "offset": 206,
+            "art": "v",
+            "wert": 3
+          },
+          {
+            "offset": 1,
+            "art": "v",
+            "wert": 103
+          },
+          {
+            "offset": 2,
+            "art": "v",
+            "wert": 203
+          },
+          {
+            "offset": 207,
+            "art": "B",
+            "wert": 1
+          },
+          {
+            "offset": 208,
+            "art": "B",
+            "wert": 2147483647
+          },
+          {
+            "offset": 209,
+            "art": "B",
+            "wert": 1
+          },
+          {
+            "offset": 210,
+            "art": "B",
+            "wert": 0
+          }
+        ]
+      },
+      "3": {
+        "nr": 3,
+        "klasse": "A3D_TAG",
+        "offset": 300,
+        "felder": [
+          {
+            "offset": 300,
+            "art": "ID",
+            "wert": "1:3"
+          },
+          {
+            "offset": 301,
+            "art": "D",
+            "wert": 1
+          },
+          {
+            "offset": 302,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 303,
+            "art": "D",
+            "wert": 1
+          },
+          {
+            "offset": 304,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 305,
+            "art": "NIL",
+            "wert": 1
+          },
+          {
+            "offset": 306,
+            "art": "v",
+            "wert": 2
+          },
+          {
+            "offset": 307,
+            "art": "B",
+            "wert": 1
+          },
+          {
+            "offset": 308,
+            "art": "v",
+            "wert": 12
+          },
+          {
+            "offset": 309,
+            "art": "B",
+            "wert": 0
+          },
+          {
+            "offset": 310,
+            "art": "NIL",
+            "wert": 1
+          },
+          {
+            "offset": 311,
+            "art": "v",
+            "wert": 4
+          },
+          {
+            "offset": 312,
+            "art": "B",
+            "wert": 0
+          },
+          {
+            "offset": 313,
+            "art": "NIL",
+            "wert": 1
+          },
+          {
+            "offset": 314,
+            "art": "NIL",
+            "wert": 1
+          },
+          {
+            "offset": 315,
+            "art": "o",
+            "wert": null
+          },
+          {
+            "offset": 316,
+            "art": "B",
+            "wert": 0
+          },
+          {
+            "offset": 317,
+            "art": "B",
+            "wert": 1
+          },
+          {
+            "offset": 318,
+            "art": "B",
+            "wert": 4
+          },
+          {
+            "offset": 319,
+            "art": "o",
+            "wert": null
+          }
+        ]
+      },
+      "4": {
+        "nr": 4,
+        "klasse": "A3D_LBL_TAG",
+        "offset": 400,
+        "felder": [
+          {
+            "offset": 400,
+            "art": "ID",
+            "wert": "1:4"
+          },
+          {
+            "offset": 401,
+            "art": "D",
+            "wert": 1
+          },
+          {
+            "offset": 402,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 403,
+            "art": "D",
+            "wert": 1
+          },
+          {
+            "offset": 404,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 405,
+            "art": "NIL",
+            "wert": 1
+          },
+          {
+            "offset": 406,
+            "art": "v",
+            "wert": 5
+          },
+          {
+            "offset": 407,
+            "art": "v",
+            "wert": 8
+          },
+          {
+            "offset": 408,
+            "art": "v",
+            "wert": 9
+          },
+          {
+            "offset": 409,
+            "art": "v",
+            "wert": 10
+          },
+          {
+            "offset": 410,
+            "art": "v",
+            "wert": 3
+          },
+          {
+            "offset": 411,
+            "art": "B",
+            "wert": 123456
+          },
+          {
+            "offset": 412,
+            "art": "B",
+            "wert": 0
+          },
+          {
+            "offset": 413,
+            "art": "B",
+            "wert": 0
+          },
+          {
+            "offset": 414,
+            "art": "F",
+            "wert": 5.0
+          },
+          {
+            "offset": 415,
+            "art": "F",
+            "wert": 7.0
+          },
+          {
+            "offset": 416,
+            "art": "F",
+            "wert": 9.0
+          },
+          {
+            "offset": 417,
+            "art": "F",
+            "wert": 1.0
+          },
+          {
+            "offset": 418,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 419,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 420,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 421,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 422,
+            "art": "F",
+            "wert": 1.0
+          },
+          {
+            "offset": 423,
+            "art": "B",
+            "wert": 0
+          },
+          {
+            "offset": 424,
+            "art": "B",
+            "wert": 1
+          },
+          {
+            "offset": 425,
+            "art": "v",
+            "wert": 11
+          },
+          {
+            "offset": 426,
+            "art": "B",
+            "wert": 0
+          },
+          {
+            "offset": 427,
+            "art": "F",
+            "wert": 1.0
+          },
+          {
+            "offset": 428,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 429,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 430,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 431,
+            "art": "F",
+            "wert": -1.0
+          },
+          {
+            "offset": 432,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 433,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 434,
+            "art": "F",
+            "wert": 4.0
+          },
+          {
+            "offset": 435,
+            "art": "F",
+            "wert": 5.0
+          },
+          {
+            "offset": 436,
+            "art": "F",
+            "wert": 6.0
+          },
+          {
+            "offset": 437,
+            "art": "B",
+            "wert": 1
+          },
+          {
+            "offset": 438,
+            "art": "NIL",
+            "wert": 1
+          },
+          {
+            "offset": 439,
+            "art": "B",
+            "wert": 3
+          },
+          {
+            "offset": 440,
+            "art": "B",
+            "wert": 255
+          },
+          {
+            "offset": 441,
+            "art": "B",
+            "wert": 0
+          }
+        ]
+      },
+      "5": {
+        "nr": 5,
+        "klasse": "PLAIN_TEXT",
+        "offset": 500,
+        "felder": [
+          {
+            "offset": 500,
+            "art": "ID",
+            "wert": "1:5"
+          },
+          {
+            "offset": 501,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 502,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 503,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 504,
+            "art": "F",
+            "wert": 2.5
+          },
+          {
+            "offset": 505,
+            "art": "F",
+            "wert": -0.8
+          },
+          {
+            "offset": 506,
+            "art": "v",
+            "wert": 6
+          },
+          {
+            "offset": 507,
+            "art": "v",
+            "wert": 4
+          },
+          {
+            "offset": 508,
+            "art": "NIL",
+            "wert": 1
+          },
+          {
+            "offset": 509,
+            "art": "B",
+            "wert": 1
+          },
+          {
+            "offset": 510,
+            "art": "c",
+            "wert": "NEUTRAL TEXT 1"
+          },
+          {
+            "offset": 511,
+            "art": "v",
+            "wert": 7
+          }
+        ]
+      },
+      "6": {
+        "nr": 6,
+        "klasse": "FRAME_PARAM",
+        "offset": 600,
+        "felder": [
+          {
+            "offset": 600,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 601,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 602,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 603,
+            "art": "B",
+            "wert": 0
+          },
+          {
+            "offset": 604,
+            "art": "F",
+            "wert": 0.5
+          },
+          {
+            "offset": 605,
+            "art": "F",
+            "wert": 0.5
+          },
+          {
+            "offset": 606,
+            "art": "F",
+            "wert": 0.5
+          },
+          {
+            "offset": 607,
+            "art": "F",
+            "wert": 0.5
+          }
+        ]
+      },
+      "7": {
+        "nr": 7,
+        "klasse": "text_param",
+        "offset": 700,
+        "felder": [
+          {
+            "offset": 700,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 701,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 702,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 703,
+            "art": "c",
+            "wert": "PRIVATE_FONT"
+          },
+          {
+            "offset": 704,
+            "art": "B",
+            "wert": 1
+          },
+          {
+            "offset": 705,
+            "art": "F",
+            "wert": 2.5
+          },
+          {
+            "offset": 706,
+            "art": "F",
+            "wert": 1.0
+          },
+          {
+            "offset": 707,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 708,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 709,
+            "art": "F",
+            "wert": 2.0
+          },
+          {
+            "offset": 710,
+            "art": "B",
+            "wert": -1
+          }
+        ]
+      },
+      "8": {
+        "nr": 8,
+        "klasse": "line_param",
+        "offset": 800,
+        "felder": [
+          {
+            "offset": 800,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 801,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 802,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 803,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 804,
+            "art": "F",
+            "wert": 2.0
+          },
+          {
+            "offset": 805,
+            "art": "B",
+            "wert": 1
+          },
+          {
+            "offset": 806,
+            "art": "B",
+            "wert": 0
+          },
+          {
+            "offset": 807,
+            "art": "B",
+            "wert": 0
+          }
+        ]
+      },
+      "9": {
+        "nr": 9,
+        "klasse": "label_param",
+        "offset": 900,
+        "felder": [
+          {
+            "offset": 900,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 901,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 902,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 903,
+            "art": "F",
+            "wert": 2.0
+          },
+          {
+            "offset": 904,
+            "art": "F",
+            "wert": 2.0
+          },
+          {
+            "offset": 905,
+            "art": "B",
+            "wert": 0
+          },
+          {
+            "offset": 906,
+            "art": "B",
+            "wert": 0
+          },
+          {
+            "offset": 907,
+            "art": "B",
+            "wert": 0
+          }
+        ]
+      },
+      "10": {
+        "nr": 10,
+        "klasse": "arrow_param",
+        "offset": 1000,
+        "felder": [
+          {
+            "offset": 1000,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 1001,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 1002,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 1003,
+            "art": "F",
+            "wert": 1.25
+          },
+          {
+            "offset": 1004,
+            "art": "B",
+            "wert": 1
+          },
+          {
+            "offset": 1005,
+            "art": "B",
+            "wert": 1
+          }
+        ]
+      },
+      "11": {
+        "nr": 11,
+        "klasse": "arrow_param",
+        "offset": 1100,
+        "felder": [
+          {
+            "offset": 1100,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 1101,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 1102,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 1103,
+            "art": "F",
+            "wert": 3.5
+          },
+          {
+            "offset": 1104,
+            "art": "B",
+            "wert": 1
+          },
+          {
+            "offset": 1105,
+            "art": "B",
+            "wert": 0
+          }
+        ]
+      },
+      "12": {
+        "nr": 12,
+        "klasse": "A3D_REF",
+        "offset": 1200,
+        "felder": [
+          {
+            "offset": 1200,
+            "art": "ID",
+            "wert": "1:c"
+          },
+          {
+            "offset": 1201,
+            "art": "B",
+            "wert": 1
+          },
+          {
+            "offset": 1202,
+            "art": "v",
+            "wert": 14
+          },
+          {
+            "offset": 1203,
+            "art": "v",
+            "wert": 13
+          },
+          {
+            "offset": 1204,
+            "art": "F",
+            "wert": 0.5
+          },
+          {
+            "offset": 1205,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 1206,
+            "art": "B",
+            "wert": 0
+          },
+          {
+            "offset": 1207,
+            "art": "NIL",
+            "wert": 1
+          },
+          {
+            "offset": 1208,
+            "art": "v",
+            "wert": 3
+          },
+          {
+            "offset": 1209,
+            "art": "B",
+            "wert": 1
+          },
+          {
+            "offset": 1210,
+            "art": "F",
+            "wert": 1.0
+          },
+          {
+            "offset": 1211,
+            "art": "F",
+            "wert": 2.0
+          },
+          {
+            "offset": 1212,
+            "art": "F",
+            "wert": 3.0
+          },
+          {
+            "offset": 1213,
+            "art": "F",
+            "wert": 1.0
+          },
+          {
+            "offset": 1214,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 1215,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 1216,
+            "art": "B",
+            "wert": 0
+          },
+          {
+            "offset": 1217,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 1218,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 1219,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 1220,
+            "art": "NIL",
+            "wert": 1
+          },
+          {
+            "offset": 1221,
+            "art": "B",
+            "wert": 0
+          }
+        ]
+      },
+      "13": {
+        "nr": 13,
+        "klasse": "CLUSTER_PATH",
+        "offset": 1300,
+        "felder": [
+          {
+            "offset": 1300,
+            "art": "ID",
+            "wert": "1:d"
+          },
+          {
+            "offset": 1301,
+            "art": "B",
+            "wert": 0
+          },
+          {
+            "offset": 1302,
+            "art": "B",
+            "wert": 0
+          },
+          {
+            "offset": 1303,
+            "art": "v",
+            "wert": 2
+          }
+        ]
+      },
+      "14": {
+        "nr": 14,
+        "klasse": "edge",
+        "offset": 1400,
+        "felder": [
+          {
+            "offset": 1400,
+            "art": "ID",
+            "wert": "1:e"
+          },
+          {
+            "offset": 1401,
+            "art": "D",
+            "wert": 1
+          },
+          {
+            "offset": 1402,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 1403,
+            "art": "D",
+            "wert": 1
+          },
+          {
+            "offset": 1404,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 1405,
+            "art": "v",
+            "wert": 15
+          }
+        ]
+      },
+      "15": {
+        "nr": 15,
+        "klasse": "ATTRIBUTE_LINK",
+        "offset": 1500,
+        "felder": [
+          {
+            "offset": 1500,
+            "art": "ID",
+            "wert": "1:f"
+          },
+          {
+            "offset": 1501,
+            "art": "B",
+            "wert": 1
+          },
+          {
+            "offset": 1502,
+            "art": "v",
+            "wert": 14
+          },
+          {
+            "offset": 1503,
+            "art": "z",
+            "wert": "A3D_REF"
+          },
+          {
+            "offset": 1504,
+            "art": "B",
+            "wert": 1
+          },
+          {
+            "offset": 1505,
+            "art": "v",
+            "wert": 12
+          }
+        ]
+      },
+      "103": {
+        "nr": 103,
+        "klasse": "A3D_TAG",
+        "offset": 300,
+        "felder": [
+          {
+            "offset": 300,
+            "art": "ID",
+            "wert": "1:67"
+          },
+          {
+            "offset": 301,
+            "art": "D",
+            "wert": 1
+          },
+          {
+            "offset": 302,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 303,
+            "art": "D",
+            "wert": 1
+          },
+          {
+            "offset": 304,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 305,
+            "art": "NIL",
+            "wert": 1
+          },
+          {
+            "offset": 306,
+            "art": "v",
+            "wert": 2
+          },
+          {
+            "offset": 307,
+            "art": "B",
+            "wert": 1
+          },
+          {
+            "offset": 308,
+            "art": "v",
+            "wert": 112
+          },
+          {
+            "offset": 309,
+            "art": "B",
+            "wert": 0
+          },
+          {
+            "offset": 310,
+            "art": "NIL",
+            "wert": 1
+          },
+          {
+            "offset": 311,
+            "art": "v",
+            "wert": 104
+          },
+          {
+            "offset": 312,
+            "art": "B",
+            "wert": 0
+          },
+          {
+            "offset": 313,
+            "art": "NIL",
+            "wert": 1
+          },
+          {
+            "offset": 314,
+            "art": "NIL",
+            "wert": 1
+          },
+          {
+            "offset": 315,
+            "art": "o",
+            "wert": null
+          },
+          {
+            "offset": 316,
+            "art": "B",
+            "wert": 0
+          },
+          {
+            "offset": 317,
+            "art": "B",
+            "wert": 1
+          },
+          {
+            "offset": 318,
+            "art": "B",
+            "wert": 4
+          },
+          {
+            "offset": 319,
+            "art": "o",
+            "wert": null
+          }
+        ]
+      },
+      "104": {
+        "nr": 104,
+        "klasse": "A3D_LBL_TAG",
+        "offset": 400,
+        "felder": [
+          {
+            "offset": 400,
+            "art": "ID",
+            "wert": "1:68"
+          },
+          {
+            "offset": 401,
+            "art": "D",
+            "wert": 1
+          },
+          {
+            "offset": 402,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 403,
+            "art": "D",
+            "wert": 1
+          },
+          {
+            "offset": 404,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 405,
+            "art": "NIL",
+            "wert": 1
+          },
+          {
+            "offset": 406,
+            "art": "v",
+            "wert": 105
+          },
+          {
+            "offset": 407,
+            "art": "v",
+            "wert": 8
+          },
+          {
+            "offset": 408,
+            "art": "v",
+            "wert": 9
+          },
+          {
+            "offset": 409,
+            "art": "v",
+            "wert": 110
+          },
+          {
+            "offset": 410,
+            "art": "v",
+            "wert": 103
+          },
+          {
+            "offset": 411,
+            "art": "B",
+            "wert": 123456
+          },
+          {
+            "offset": 412,
+            "art": "B",
+            "wert": 0
+          },
+          {
+            "offset": 413,
+            "art": "B",
+            "wert": 0
+          },
+          {
+            "offset": 414,
+            "art": "F",
+            "wert": 5.0
+          },
+          {
+            "offset": 415,
+            "art": "F",
+            "wert": 7.0
+          },
+          {
+            "offset": 416,
+            "art": "F",
+            "wert": 9.0
+          },
+          {
+            "offset": 417,
+            "art": "F",
+            "wert": 1.0
+          },
+          {
+            "offset": 418,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 419,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 420,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 421,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 422,
+            "art": "F",
+            "wert": 1.0
+          },
+          {
+            "offset": 423,
+            "art": "B",
+            "wert": 0
+          },
+          {
+            "offset": 424,
+            "art": "B",
+            "wert": 1
+          },
+          {
+            "offset": 425,
+            "art": "v",
+            "wert": 11
+          },
+          {
+            "offset": 426,
+            "art": "B",
+            "wert": 0
+          },
+          {
+            "offset": 427,
+            "art": "F",
+            "wert": 1.0
+          },
+          {
+            "offset": 428,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 429,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 430,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 431,
+            "art": "F",
+            "wert": -1.0
+          },
+          {
+            "offset": 432,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 433,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 434,
+            "art": "F",
+            "wert": 4.0
+          },
+          {
+            "offset": 435,
+            "art": "F",
+            "wert": 5.0
+          },
+          {
+            "offset": 436,
+            "art": "F",
+            "wert": 6.0
+          },
+          {
+            "offset": 437,
+            "art": "B",
+            "wert": 1
+          },
+          {
+            "offset": 438,
+            "art": "NIL",
+            "wert": 1
+          },
+          {
+            "offset": 439,
+            "art": "B",
+            "wert": 3
+          },
+          {
+            "offset": 440,
+            "art": "B",
+            "wert": 255
+          },
+          {
+            "offset": 441,
+            "art": "B",
+            "wert": 0
+          }
+        ]
+      },
+      "105": {
+        "nr": 105,
+        "klasse": "PLAIN_TEXT",
+        "offset": 500,
+        "felder": [
+          {
+            "offset": 500,
+            "art": "ID",
+            "wert": "1:69"
+          },
+          {
+            "offset": 501,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 502,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 503,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 504,
+            "art": "F",
+            "wert": 2.5
+          },
+          {
+            "offset": 505,
+            "art": "F",
+            "wert": -0.8
+          },
+          {
+            "offset": 506,
+            "art": "v",
+            "wert": 106
+          },
+          {
+            "offset": 507,
+            "art": "v",
+            "wert": 104
+          },
+          {
+            "offset": 508,
+            "art": "NIL",
+            "wert": 1
+          },
+          {
+            "offset": 509,
+            "art": "B",
+            "wert": 1
+          },
+          {
+            "offset": 510,
+            "art": "c",
+            "wert": "NEUTRAL TEXT 2"
+          },
+          {
+            "offset": 511,
+            "art": "v",
+            "wert": 107
+          }
+        ]
+      },
+      "106": {
+        "nr": 106,
+        "klasse": "FRAME_PARAM",
+        "offset": 600,
+        "felder": [
+          {
+            "offset": 600,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 601,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 602,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 603,
+            "art": "B",
+            "wert": 0
+          },
+          {
+            "offset": 604,
+            "art": "F",
+            "wert": 0.5
+          },
+          {
+            "offset": 605,
+            "art": "F",
+            "wert": 0.5
+          },
+          {
+            "offset": 606,
+            "art": "F",
+            "wert": 0.5
+          },
+          {
+            "offset": 607,
+            "art": "F",
+            "wert": 0.5
+          }
+        ]
+      },
+      "107": {
+        "nr": 107,
+        "klasse": "text_param",
+        "offset": 700,
+        "felder": [
+          {
+            "offset": 700,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 701,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 702,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 703,
+            "art": "c",
+            "wert": "PRIVATE_FONT"
+          },
+          {
+            "offset": 704,
+            "art": "B",
+            "wert": 1
+          },
+          {
+            "offset": 705,
+            "art": "F",
+            "wert": 2.5
+          },
+          {
+            "offset": 706,
+            "art": "F",
+            "wert": 1.0
+          },
+          {
+            "offset": 707,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 708,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 709,
+            "art": "F",
+            "wert": 2.0
+          },
+          {
+            "offset": 710,
+            "art": "B",
+            "wert": -1
+          }
+        ]
+      },
+      "110": {
+        "nr": 110,
+        "klasse": "arrow_param",
+        "offset": 1000,
+        "felder": [
+          {
+            "offset": 1000,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 1001,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 1002,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 1003,
+            "art": "F",
+            "wert": 1.25
+          },
+          {
+            "offset": 1004,
+            "art": "B",
+            "wert": 1
+          },
+          {
+            "offset": 1005,
+            "art": "B",
+            "wert": 1
+          }
+        ]
+      },
+      "112": {
+        "nr": 112,
+        "klasse": "A3D_REF",
+        "offset": 1200,
+        "felder": [
+          {
+            "offset": 1200,
+            "art": "ID",
+            "wert": "1:70"
+          },
+          {
+            "offset": 1201,
+            "art": "B",
+            "wert": 1
+          },
+          {
+            "offset": 1202,
+            "art": "v",
+            "wert": 114
+          },
+          {
+            "offset": 1203,
+            "art": "v",
+            "wert": 13
+          },
+          {
+            "offset": 1204,
+            "art": "F",
+            "wert": 0.5
+          },
+          {
+            "offset": 1205,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 1206,
+            "art": "B",
+            "wert": 0
+          },
+          {
+            "offset": 1207,
+            "art": "NIL",
+            "wert": 1
+          },
+          {
+            "offset": 1208,
+            "art": "v",
+            "wert": 103
+          },
+          {
+            "offset": 1209,
+            "art": "B",
+            "wert": 1
+          },
+          {
+            "offset": 1210,
+            "art": "F",
+            "wert": 1.0
+          },
+          {
+            "offset": 1211,
+            "art": "F",
+            "wert": 2.0
+          },
+          {
+            "offset": 1212,
+            "art": "F",
+            "wert": 3.0
+          },
+          {
+            "offset": 1213,
+            "art": "F",
+            "wert": 1.0
+          },
+          {
+            "offset": 1214,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 1215,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 1216,
+            "art": "B",
+            "wert": 0
+          },
+          {
+            "offset": 1217,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 1218,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 1219,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 1220,
+            "art": "NIL",
+            "wert": 1
+          },
+          {
+            "offset": 1221,
+            "art": "B",
+            "wert": 0
+          }
+        ]
+      },
+      "114": {
+        "nr": 114,
+        "klasse": "edge",
+        "offset": 1400,
+        "felder": [
+          {
+            "offset": 1400,
+            "art": "ID",
+            "wert": "1:72"
+          },
+          {
+            "offset": 1401,
+            "art": "D",
+            "wert": 1
+          },
+          {
+            "offset": 1402,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 1403,
+            "art": "D",
+            "wert": 1
+          },
+          {
+            "offset": 1404,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 1405,
+            "art": "v",
+            "wert": 115
+          }
+        ]
+      },
+      "115": {
+        "nr": 115,
+        "klasse": "ATTRIBUTE_LINK",
+        "offset": 1500,
+        "felder": [
+          {
+            "offset": 1500,
+            "art": "ID",
+            "wert": "1:73"
+          },
+          {
+            "offset": 1501,
+            "art": "B",
+            "wert": 1
+          },
+          {
+            "offset": 1502,
+            "art": "v",
+            "wert": 114
+          },
+          {
+            "offset": 1503,
+            "art": "z",
+            "wert": "A3D_REF"
+          },
+          {
+            "offset": 1504,
+            "art": "B",
+            "wert": 1
+          },
+          {
+            "offset": 1505,
+            "art": "v",
+            "wert": 112
+          }
+        ]
+      },
+      "203": {
+        "nr": 203,
+        "klasse": "A3D_TAG",
+        "offset": 300,
+        "felder": [
+          {
+            "offset": 300,
+            "art": "ID",
+            "wert": "1:cb"
+          },
+          {
+            "offset": 301,
+            "art": "D",
+            "wert": 1
+          },
+          {
+            "offset": 302,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 303,
+            "art": "D",
+            "wert": 1
+          },
+          {
+            "offset": 304,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 305,
+            "art": "NIL",
+            "wert": 1
+          },
+          {
+            "offset": 306,
+            "art": "v",
+            "wert": 2
+          },
+          {
+            "offset": 307,
+            "art": "B",
+            "wert": 2
+          },
+          {
+            "offset": 308,
+            "art": "v",
+            "wert": 212
+          },
+          {
+            "offset": 3,
+            "art": "v",
+            "wert": 400
+          },
+          {
+            "offset": 309,
+            "art": "B",
+            "wert": 0
+          },
+          {
+            "offset": 310,
+            "art": "NIL",
+            "wert": 1
+          },
+          {
+            "offset": 311,
+            "art": "v",
+            "wert": 204
+          },
+          {
+            "offset": 312,
+            "art": "B",
+            "wert": 0
+          },
+          {
+            "offset": 313,
+            "art": "NIL",
+            "wert": 1
+          },
+          {
+            "offset": 314,
+            "art": "NIL",
+            "wert": 1
+          },
+          {
+            "offset": 315,
+            "art": "o",
+            "wert": null
+          },
+          {
+            "offset": 316,
+            "art": "B",
+            "wert": 0
+          },
+          {
+            "offset": 317,
+            "art": "B",
+            "wert": 1
+          },
+          {
+            "offset": 318,
+            "art": "B",
+            "wert": 4
+          },
+          {
+            "offset": 319,
+            "art": "o",
+            "wert": null
+          }
+        ]
+      },
+      "204": {
+        "nr": 204,
+        "klasse": "A3D_LBL_TAG",
+        "offset": 400,
+        "felder": [
+          {
+            "offset": 400,
+            "art": "ID",
+            "wert": "1:cc"
+          },
+          {
+            "offset": 401,
+            "art": "D",
+            "wert": 1
+          },
+          {
+            "offset": 402,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 403,
+            "art": "D",
+            "wert": 1
+          },
+          {
+            "offset": 404,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 405,
+            "art": "NIL",
+            "wert": 1
+          },
+          {
+            "offset": 406,
+            "art": "v",
+            "wert": 205
+          },
+          {
+            "offset": 407,
+            "art": "v",
+            "wert": 8
+          },
+          {
+            "offset": 408,
+            "art": "v",
+            "wert": 9
+          },
+          {
+            "offset": 409,
+            "art": "v",
+            "wert": 210
+          },
+          {
+            "offset": 410,
+            "art": "v",
+            "wert": 203
+          },
+          {
+            "offset": 411,
+            "art": "B",
+            "wert": 123456
+          },
+          {
+            "offset": 412,
+            "art": "B",
+            "wert": 0
+          },
+          {
+            "offset": 413,
+            "art": "B",
+            "wert": 0
+          },
+          {
+            "offset": 414,
+            "art": "F",
+            "wert": 5.0
+          },
+          {
+            "offset": 415,
+            "art": "F",
+            "wert": 7.0
+          },
+          {
+            "offset": 416,
+            "art": "F",
+            "wert": 9.0
+          },
+          {
+            "offset": 417,
+            "art": "F",
+            "wert": 1.0
+          },
+          {
+            "offset": 418,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 419,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 420,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 421,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 422,
+            "art": "F",
+            "wert": 1.0
+          },
+          {
+            "offset": 423,
+            "art": "B",
+            "wert": 0
+          },
+          {
+            "offset": 424,
+            "art": "B",
+            "wert": 1
+          },
+          {
+            "offset": 425,
+            "art": "v",
+            "wert": 11
+          },
+          {
+            "offset": 426,
+            "art": "B",
+            "wert": 0
+          },
+          {
+            "offset": 427,
+            "art": "F",
+            "wert": 1.0
+          },
+          {
+            "offset": 428,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 429,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 430,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 431,
+            "art": "F",
+            "wert": -1.0
+          },
+          {
+            "offset": 432,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 433,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 434,
+            "art": "F",
+            "wert": 4.0
+          },
+          {
+            "offset": 435,
+            "art": "F",
+            "wert": 5.0
+          },
+          {
+            "offset": 436,
+            "art": "F",
+            "wert": 6.0
+          },
+          {
+            "offset": 437,
+            "art": "B",
+            "wert": 1
+          },
+          {
+            "offset": 438,
+            "art": "NIL",
+            "wert": 1
+          },
+          {
+            "offset": 439,
+            "art": "B",
+            "wert": 3
+          },
+          {
+            "offset": 440,
+            "art": "B",
+            "wert": 255
+          },
+          {
+            "offset": 441,
+            "art": "B",
+            "wert": 0
+          }
+        ]
+      },
+      "205": {
+        "nr": 205,
+        "klasse": "PLAIN_TEXT",
+        "offset": 500,
+        "felder": [
+          {
+            "offset": 500,
+            "art": "ID",
+            "wert": "1:cd"
+          },
+          {
+            "offset": 501,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 502,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 503,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 504,
+            "art": "F",
+            "wert": 2.5
+          },
+          {
+            "offset": 505,
+            "art": "F",
+            "wert": -0.8
+          },
+          {
+            "offset": 506,
+            "art": "v",
+            "wert": 206
+          },
+          {
+            "offset": 507,
+            "art": "v",
+            "wert": 204
+          },
+          {
+            "offset": 508,
+            "art": "NIL",
+            "wert": 1
+          },
+          {
+            "offset": 509,
+            "art": "B",
+            "wert": 1
+          },
+          {
+            "offset": 510,
+            "art": "c",
+            "wert": "NEUTRAL TEXT 3"
+          },
+          {
+            "offset": 511,
+            "art": "v",
+            "wert": 207
+          }
+        ]
+      },
+      "206": {
+        "nr": 206,
+        "klasse": "FRAME_PARAM",
+        "offset": 600,
+        "felder": [
+          {
+            "offset": 600,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 601,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 602,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 603,
+            "art": "B",
+            "wert": 0
+          },
+          {
+            "offset": 604,
+            "art": "F",
+            "wert": 0.5
+          },
+          {
+            "offset": 605,
+            "art": "F",
+            "wert": 0.5
+          },
+          {
+            "offset": 606,
+            "art": "F",
+            "wert": 0.5
+          },
+          {
+            "offset": 607,
+            "art": "F",
+            "wert": 0.5
+          }
+        ]
+      },
+      "207": {
+        "nr": 207,
+        "klasse": "text_param",
+        "offset": 700,
+        "felder": [
+          {
+            "offset": 700,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 701,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 702,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 703,
+            "art": "c",
+            "wert": "PRIVATE_FONT"
+          },
+          {
+            "offset": 704,
+            "art": "B",
+            "wert": 1
+          },
+          {
+            "offset": 705,
+            "art": "F",
+            "wert": 2.5
+          },
+          {
+            "offset": 706,
+            "art": "F",
+            "wert": 1.0
+          },
+          {
+            "offset": 707,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 708,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 709,
+            "art": "F",
+            "wert": 2.0
+          },
+          {
+            "offset": 710,
+            "art": "B",
+            "wert": -1
+          }
+        ]
+      },
+      "210": {
+        "nr": 210,
+        "klasse": "arrow_param",
+        "offset": 1000,
+        "felder": [
+          {
+            "offset": 1000,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 1001,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 1002,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 1003,
+            "art": "F",
+            "wert": 1.25
+          },
+          {
+            "offset": 1004,
+            "art": "B",
+            "wert": 1
+          },
+          {
+            "offset": 1005,
+            "art": "B",
+            "wert": 1
+          }
+        ]
+      },
+      "212": {
+        "nr": 212,
+        "klasse": "A3D_REF",
+        "offset": 1200,
+        "felder": [
+          {
+            "offset": 1200,
+            "art": "ID",
+            "wert": "1:d4"
+          },
+          {
+            "offset": 1201,
+            "art": "B",
+            "wert": 1
+          },
+          {
+            "offset": 1202,
+            "art": "v",
+            "wert": 214
+          },
+          {
+            "offset": 1203,
+            "art": "v",
+            "wert": 13
+          },
+          {
+            "offset": 1204,
+            "art": "F",
+            "wert": 0.5
+          },
+          {
+            "offset": 1205,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 1206,
+            "art": "B",
+            "wert": 0
+          },
+          {
+            "offset": 1207,
+            "art": "NIL",
+            "wert": 1
+          },
+          {
+            "offset": 1208,
+            "art": "v",
+            "wert": 203
+          },
+          {
+            "offset": 1209,
+            "art": "B",
+            "wert": 1
+          },
+          {
+            "offset": 1210,
+            "art": "F",
+            "wert": 1.0
+          },
+          {
+            "offset": 1211,
+            "art": "F",
+            "wert": 2.0
+          },
+          {
+            "offset": 1212,
+            "art": "F",
+            "wert": 3.0
+          },
+          {
+            "offset": 1213,
+            "art": "F",
+            "wert": 1.0
+          },
+          {
+            "offset": 1214,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 1215,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 1216,
+            "art": "B",
+            "wert": 0
+          },
+          {
+            "offset": 1217,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 1218,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 1219,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 1220,
+            "art": "NIL",
+            "wert": 1
+          },
+          {
+            "offset": 1221,
+            "art": "B",
+            "wert": 0
+          }
+        ]
+      },
+      "214": {
+        "nr": 214,
+        "klasse": "edge",
+        "offset": 1400,
+        "felder": [
+          {
+            "offset": 1400,
+            "art": "ID",
+            "wert": "1:d6"
+          },
+          {
+            "offset": 1401,
+            "art": "D",
+            "wert": 1
+          },
+          {
+            "offset": 1402,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 1403,
+            "art": "D",
+            "wert": 1
+          },
+          {
+            "offset": 1404,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 1405,
+            "art": "v",
+            "wert": 215
+          }
+        ]
+      },
+      "215": {
+        "nr": 215,
+        "klasse": "ATTRIBUTE_LINK",
+        "offset": 1500,
+        "felder": [
+          {
+            "offset": 1500,
+            "art": "ID",
+            "wert": "1:d7"
+          },
+          {
+            "offset": 1501,
+            "art": "B",
+            "wert": 1
+          },
+          {
+            "offset": 1502,
+            "art": "v",
+            "wert": 214
+          },
+          {
+            "offset": 1503,
+            "art": "z",
+            "wert": "A3D_REF"
+          },
+          {
+            "offset": 1504,
+            "art": "B",
+            "wert": 1
+          },
+          {
+            "offset": 1505,
+            "art": "v",
+            "wert": 212
+          }
+        ]
+      },
+      "400": {
+        "nr": 400,
+        "klasse": "A3D_REF",
+        "offset": 1200,
+        "felder": [
+          {
+            "offset": 1200,
+            "art": "ID",
+            "wert": "1:190"
+          },
+          {
+            "offset": 1201,
+            "art": "B",
+            "wert": 1
+          },
+          {
+            "offset": 1202,
+            "art": "v",
+            "wert": 401
+          },
+          {
+            "offset": 1203,
+            "art": "v",
+            "wert": 13
+          },
+          {
+            "offset": 1204,
+            "art": "F",
+            "wert": 0.5
+          },
+          {
+            "offset": 1205,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 1206,
+            "art": "B",
+            "wert": 0
+          },
+          {
+            "offset": 1207,
+            "art": "NIL",
+            "wert": 1
+          },
+          {
+            "offset": 1208,
+            "art": "v",
+            "wert": 203
+          },
+          {
+            "offset": 1209,
+            "art": "B",
+            "wert": 1
+          },
+          {
+            "offset": 1210,
+            "art": "F",
+            "wert": 1.0
+          },
+          {
+            "offset": 1211,
+            "art": "F",
+            "wert": 2.0
+          },
+          {
+            "offset": 1212,
+            "art": "F",
+            "wert": 3.0
+          },
+          {
+            "offset": 1213,
+            "art": "F",
+            "wert": 1.0
+          },
+          {
+            "offset": 1214,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 1215,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 1216,
+            "art": "B",
+            "wert": 0
+          },
+          {
+            "offset": 1217,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 1218,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 1219,
+            "art": "F",
+            "wert": 0.0
+          },
+          {
+            "offset": 1220,
+            "art": "NIL",
+            "wert": 1
+          },
+          {
+            "offset": 1221,
+            "art": "B",
+            "wert": 0
+          }
+        ]
+      },
+      "401": {
+        "nr": 401,
+        "klasse": "edge",
+        "offset": 1400,
+        "felder": [
+          {
+            "offset": 1400,
+            "art": "ID",
+            "wert": "1:191"
+          },
+          {
+            "offset": 1401,
+            "art": "D",
+            "wert": 1
+          },
+          {
+            "offset": 1402,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 1403,
+            "art": "D",
+            "wert": 1
+          },
+          {
+            "offset": 1404,
+            "art": "D",
+            "wert": 0
+          },
+          {
+            "offset": 1405,
+            "art": "v",
+            "wert": 402
+          }
+        ]
+      },
+      "402": {
+        "nr": 402,
+        "klasse": "ATTRIBUTE_LINK",
+        "offset": 1500,
+        "felder": [
+          {
+            "offset": 1500,
+            "art": "ID",
+            "wert": "1:192"
+          },
+          {
+            "offset": 1501,
+            "art": "B",
+            "wert": 1
+          },
+          {
+            "offset": 1502,
+            "art": "v",
+            "wert": 401
+          },
+          {
+            "offset": 1503,
+            "art": "z",
+            "wert": "A3D_REF"
+          },
+          {
+            "offset": 1504,
+            "art": "B",
+            "wert": 1
+          },
+          {
+            "offset": 1505,
+            "art": "v",
+            "wert": 400
+          }
+        ]
+      },
+      "600": {
+        "nr": 600,
+        "klasse": "body",
+        "offset": 10600,
+        "felder": [
+          {
+            "offset": 10600,
+            "art": "v",
+            "wert": 0
+          },
+          {
+            "offset": 10600,
+            "art": "v",
+            "wert": 601
+          }
+        ]
+      },
+      "601": {
+        "nr": 601,
+        "klasse": "shell",
+        "offset": 10601,
+        "felder": [
+          {
+            "offset": 10601,
+            "art": "v",
+            "wert": 600
+          },
+          {
+            "offset": 10601,
+            "art": "v",
+            "wert": 602
+          }
+        ]
+      },
+      "602": {
+        "nr": 602,
+        "klasse": "face",
+        "offset": 10602,
+        "felder": [
+          {
+            "offset": 10602,
+            "art": "v",
+            "wert": 601
+          },
+          {
+            "offset": 10602,
+            "art": "v",
+            "wert": 603
+          }
+        ]
+      },
+      "603": {
+        "nr": 603,
+        "klasse": "loop",
+        "offset": 10603,
+        "felder": [
+          {
+            "offset": 10603,
+            "art": "v",
+            "wert": 610
+          },
+          {
+            "offset": 10603,
+            "art": "v",
+            "wert": 611
+          },
+          {
+            "offset": 10603,
+            "art": "v",
+            "wert": 612
+          },
+          {
+            "offset": 10603,
+            "art": "v",
+            "wert": 613
+          }
+        ]
+      },
+      "610": {
+        "nr": 610,
+        "klasse": "coedge",
+        "offset": 10610,
+        "felder": [
+          {
+            "offset": 10610,
+            "art": "v",
+            "wert": 603
+          },
+          {
+            "offset": 10610,
+            "art": "v",
+            "wert": 14
+          }
+        ]
+      },
+      "611": {
+        "nr": 611,
+        "klasse": "coedge",
+        "offset": 10611,
+        "felder": [
+          {
+            "offset": 10611,
+            "art": "v",
+            "wert": 603
+          },
+          {
+            "offset": 10611,
+            "art": "v",
+            "wert": 114
+          }
+        ]
+      },
+      "612": {
+        "nr": 612,
+        "klasse": "coedge",
+        "offset": 10612,
+        "felder": [
+          {
+            "offset": 10612,
+            "art": "v",
+            "wert": 603
+          },
+          {
+            "offset": 10612,
+            "art": "v",
+            "wert": 214
+          }
+        ]
+      },
+      "613": {
+        "nr": 613,
+        "klasse": "coedge",
+        "offset": 10613,
+        "felder": [
+          {
+            "offset": 10613,
+            "art": "v",
+            "wert": 603
+          },
+          {
+            "offset": 10613,
+            "art": "v",
+            "wert": 401
+          }
+        ]
+      }
+    }
+  }
+}

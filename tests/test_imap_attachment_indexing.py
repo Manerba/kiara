@@ -21,6 +21,11 @@ def _make_file(tmp_path, name, content="Dummy content for testing"):
     f.parent.mkdir(parents=True, exist_ok=True)
     if isinstance(content, bytes):
         f.write_bytes(content)
+    elif f.suffix == ".pdf" and not content.startswith("%PDF"):
+        # Der Loader bestimmt das Format aus dem Inhalt; ein .pdf mit reinem
+        # Text waere eine Textdatei. Die Tests ersetzen den PDF-Loader und
+        # brauchen deshalb eine echte PDF-Signatur.
+        f.write_bytes(b"%PDF-1.4\n" + content.encode())
     else:
         f.write_text(content)
     return str(f)

@@ -8,7 +8,6 @@ import asyncio
 import logging
 import threading
 import time
-from typing import Sequence
 
 logger = logging.getLogger(__name__)
 
@@ -16,149 +15,60 @@ import httpx
 from fastapi import APIRouter, Depends, Query
 
 from kiara.config import DEFAULT_TIMEOUTS, load_config
-from kiara.shared.http_pinning import (
-    PinningConfigError,
-    PinningError,
-    pinned_request_async,
-    validate_allowed_private_cidrs,
-)
 from kiara.web.auth import get_admin_user
 
 router = APIRouter(tags=["datasource-features"])
 
 # ---------------------------------------------------------------------------
-# DDU-Availability Cache (30s TTL — konsistent mit backend_selector._CACHE_TTL)
+# DDU-Verfuegbarkeit
 # ---------------------------------------------------------------------------
-_DDU_CACHE_TTL = 30  # Sekunden
-_ddu_lock = threading.Lock()
-_ddu_cache_result: dict | None = None
-_ddu_cache_ts: float = 0.0
+# Hausaenderung (30.10.2026): Keine Netzwerkprobe beim Oeffnen der Maske und
+# kein IP-Pinning/Allowlist (``ddu.internal_cidrs``). Grund: Ein ``/health`` am
+# Kiron-Proxy startet Docling und sperrt die GPU; das Pinning wurde nur hier
+# verwendet, der Ingest (``check_ddu_health``) prueft ohne. Ob ein Backend
+# erreichbar ist, entscheidet der Ingest-Preflight bzw. der explizite
+# Test-Button der Backend-Verwaltung.
 
 
 def invalidate_ddu_cache() -> None:
-    """Invalidiert den DDU-Availability-Cache (nach Backend-CRUD aufrufen)."""
-    global _ddu_cache_result, _ddu_cache_ts
-    with _ddu_lock:
-        _ddu_cache_result = None
-        _ddu_cache_ts = 0.0
-
-
-async def _check_ddu_remote(
-    ddu_backend: dict,
-    *,
-    allowed_private_cidrs: Sequence[str] | None = None,
-) -> dict | None:
-    """Prueft, ob docling-serve unter ``ddu_backend['url']`` erreichbar ist.
-
-    Nutzt den zentralen Pinning-Helper, damit DNS-Rebinding/SSRF-TOCTOU
-    konsistent mit dem Webcrawler-Pfad blockiert werden. ``PinningConfigError``
-    bleibt fuer den Aufrufer (Backend-Iteration) sichtbar; ``PinningError`` und
-    sonstige ``httpx.RequestError`` enden als DEBUG-Log + ``None``.
-    """
-    url = f"{ddu_backend['url'].rstrip('/')}/health"
-    try:
-        resp = await pinned_request_async(
-            "GET",
-            url,
-            allowed_private_cidrs=allowed_private_cidrs,
-            timeout=DEFAULT_TIMEOUTS["http_health"],
-        )
-        if resp.status_code == 200:
-            return {
-                "available": True,
-                "mode": "remote",
-                "url": ddu_backend["url"],
-            }
-    except PinningConfigError:
-        raise
-    except (PinningError, httpx.RequestError) as exc:
-        logger.debug("DDU-Remote-Check fehlgeschlagen: %s", exc)
-    return None
+    """Kompatibilitaets-Stub: Es gibt keinen DDU-Cache mehr (keine Netzwerkprobe)."""
 
 
 @router.get("/api/admin/ddu-available")
 async def ddu_available(
     user: dict = Depends(get_admin_user),
-    url: str | None = Query(None, description="Optionale URL zum direkten Testen"),
+    url: str | None = Query(None, description="Optionale URL zum expliziten Health-Test"),
 ) -> dict:
-    """Prueft ob DDU verfuegbar ist (mindestens ein aktives Backend erreichbar).
+    """DDU-Status fuer die UI.
 
-    Iteriert ueber alle konfigurierten DDU-Backends (sortiert nach Prioritaet).
-    Ergebnis wird 30s gecached. Bei uebergebenem ``url``-Parameter wird
-    stattdessen direkt diese URL geprueft (kein Cache, kein Allowlist-Bonus).
+    Ohne ``url``: reine Konfigurationspruefung (mindestens ein aktives Remote-Backend
+    mit URL), **keine** Netzwerkanfrage. Mit ``url``: expliziter Health-Test dieser
+    URL (``GET <url>/health``) ueber denselben Check wie der Ingest-Preflight; das
+    kann ein ruhendes Docling starten.
     """
     if url:
-        # Probe-Pfad: keine Allowlist - nur globale Ziele duerfen geprobt werden.
-        result = await _check_ddu_remote({"url": url.strip()}, allowed_private_cidrs=None)
-        return result or {
-            "available": False,
-            "message": "DDU unter dieser URL nicht erreichbar",
-        }
-
-    global _ddu_cache_result, _ddu_cache_ts
-
-    now = time.time()
-    with _ddu_lock:
-        if _ddu_cache_result is not None and (now - _ddu_cache_ts) < _DDU_CACHE_TTL:
-            return _ddu_cache_result
-
-    from kiara.config import get_ddu_backends, get_ddu_internal_cidrs
-
-    config = load_config()
-    backends = get_ddu_backends(config)
-
-    if not backends:
-        result = {
-            "available": False,
-            "message": "Kein aktives DDU-Backend konfiguriert",
-        }
-        with _ddu_lock:
-            _ddu_cache_result = result
-            _ddu_cache_ts = now
-        return result
-
-    cache_skip = False
-    try:
-        # CIDR-Validierung VOR der Backend-Schleife: ungueltige Config wird
-        # fail-closed bevor ein Remote-Healthcheck ausgefuehrt wird.
-        cidrs = get_ddu_internal_cidrs(config)
-        validate_allowed_private_cidrs(cidrs)
-
-        result = None
-        has_failover = len(backends) > 1
-
-        selected_backend_index = None
-        for idx, backend in enumerate(backends):
-            if backend.get("is_local") or not backend.get("url"):
-                logger.info("DDU-Backend ohne URL ignoriert: KIara nutzt Docling remote-only")
-                continue
-            remote_result = await _check_ddu_remote(backend, allowed_private_cidrs=cidrs)
-            if remote_result:
-                result = remote_result
-                selected_backend_index = idx
-                break
-
-        if result is None:
-            result = {
+        probe = url.strip()
+        if not probe.lower().startswith(("http://", "https://")):
+            return {
                 "available": False,
-                "message": "Alle konfigurierten DDU-Backends nicht erreichbar",
+                "message": "DDU-URL muss mit http:// oder https:// beginnen",
             }
-        elif has_failover and selected_backend_index not in (None, 0):
-            result["failover"] = True
-    except PinningConfigError as exc:
-        logger.warning("ungueltige DDU-Pinning-Konfiguration: %s", exc)
-        result = {
+        from kiara.ingestion.ddu_client import check_ddu_health
+
+        ok, err = await asyncio.to_thread(check_ddu_health, [{"url": probe}])
+        if ok:
+            return {"available": True, "mode": "remote", "url": probe}
+        return {"available": False, "message": f"DDU unter dieser URL nicht erreichbar: {err}"}
+
+    from kiara.config import get_ddu_backends
+
+    backends = [b for b in get_ddu_backends(load_config()) if b.get("url") and not b.get("is_local")]
+    if not backends:
+        return {
             "available": False,
-            "message": "ungueltige ddu.internal_cidrs-Konfiguration",
+            "message": "Kein aktives DDU-Backend mit URL konfiguriert (KI-Modelle, Kategorie DDU)",
         }
-        cache_skip = True
-
-    if not cache_skip:
-        with _ddu_lock:
-            _ddu_cache_result = result
-            _ddu_cache_ts = now
-
-    return result
+    return {"available": True, "mode": "remote", "url": backends[0]["url"]}
 
 
 # ---------------------------------------------------------------------------

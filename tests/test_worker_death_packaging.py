@@ -10,8 +10,20 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 
 
+_LOCAL_DEPLOY = "deploy.sh"
+
+
 def _read(relpath: str) -> str:
-    return (ROOT / relpath).read_text()
+    path = ROOT / relpath
+    if relpath == _LOCAL_DEPLOY and not path.exists():
+        # Lokales Entwickler-Deploy-Skript; nicht Teil des oeffentlichen Exports.
+        pytest.skip("deploy.sh liegt nicht vor (lokales Entwicklerwerkzeug)")
+    return path.read_text()
+
+
+def _scripts(*relpaths: str) -> list[str]:
+    """Pruefziele ohne fehlendes lokales deploy.sh; postinst wird immer geprueft."""
+    return [r for r in relpaths if r != _LOCAL_DEPLOY or (ROOT / r).exists()]
 
 
 def _lines(text: str) -> set[str]:
@@ -58,7 +70,7 @@ def test_deploy_keeps_root_executed_code_root_owned():
 
 
 def test_postinst_and_deploy_protect_worker_death_state_directory():
-    for relpath in ("debian/postinst", "deploy.sh"):
+    for relpath in _scripts("debian/postinst", "deploy.sh"):
         script = _read(relpath)
         lines = _lines(script)
         assert "chown root:kiara /var/lib/kiara" in script
@@ -66,6 +78,12 @@ def test_postinst_and_deploy_protect_worker_death_state_directory():
         assert "chown -R root:root /var/lib/kiara/worker_death_watcher" in script
         assert "chmod 0700 /var/lib/kiara/worker_death_watcher" in script
         assert "chown -R kiara:kiara /var/lib/kiara" not in lines
+
+
+# Hausaenderung (postinst-python312.patch): Ubuntu 26.04 liefert nur Python 3.14,
+# die Lockdatei verlangt < 3.13. deploy.sh und postinst bauen das venv daher
+# ausdruecklich mit python3.12.
+_VENV_CREATE = 'python3.12 -m venv "$VENV_BUILD"'
 
 
 def test_worker_death_watcher_unit_only_writes_own_state_dir():
@@ -127,7 +145,7 @@ def test_privileged_stall_collector_sudoers_is_narrow_and_versioned():
         "kiara ALL=(root) NOPASSWD: /opt/kiara/venv/bin/kiara "
         "^collect-ingestion-stall-forensics [0-9]{1,7} [0-9]{1,7}$"
     )
-    for relpath in ("debian/postinst", "deploy.sh"):
+    for relpath in _scripts("debian/postinst", "deploy.sh"):
         script = _read(relpath)
         assert expected in script
         assert "chmod 0440 /etc/sudoers.d/kiara-ingestion-forensics" in script
@@ -154,19 +172,19 @@ def test_deploy_rebuilds_trusted_venv_before_final_venv_execution():
 
     assert "/opt/kiara/venv/bin/pip" not in deploy
     assert "VENV_BUILD=/opt/kiara/venv.build.$$" in deploy
-    assert 'python3 -m venv "$VENV_BUILD"' in deploy
+    assert _VENV_CREATE in deploy
     assert 'PIP="$VENV_BUILD/bin/pip"' in deploy
     assert "rewrite_venv_shebangs()" in deploy
     assert 'sed -i "1s|^#!$VENV_BUILD/bin/python' in deploy
     assert "systemctl stop kiara-worker-death-watcher.service" in deploy
     assert "protect_opt_tree_without_venv()" in deploy
     assert _last_pos(deploy, "protect_opt_tree_without_venv") < _pos(
-        deploy, 'python3 -m venv "$VENV_BUILD"'
+        deploy, _VENV_CREATE
     )
     assert _pos(deploy, "systemctl stop kiara-worker-death-watcher.service") < _pos(
-        deploy, 'python3 -m venv "$VENV_BUILD"'
+        deploy, _VENV_CREATE
     )
-    assert _pos(deploy, 'python3 -m venv "$VENV_BUILD"') < _pos(
+    assert _pos(deploy, _VENV_CREATE) < _pos(
         deploy, 'mv "$VENV_BUILD" "$VENV_FINAL"'
     )
     assert _pos(deploy, "stoppe Services fuer venv-Swap") < _pos(
@@ -322,18 +340,18 @@ def test_postinst_rebuilds_trusted_venv_before_final_venv_execution():
 
     assert "/opt/kiara/venv/bin/pip" not in postinst
     assert "VENV_BUILD=/opt/kiara/venv.build.$$" in postinst
-    assert 'python3 -m venv "$VENV_BUILD"' in postinst
+    assert _VENV_CREATE in postinst
     assert 'PIP="$VENV_BUILD/bin/pip"' in postinst
     assert "rewrite_venv_shebangs()" in postinst
     assert 'sed -i "1s|^#!$VENV_BUILD/bin/python' in postinst
     assert "systemctl stop kiara-worker-death-watcher.service" in postinst
     assert _pos(postinst, "chown -R root:root /opt/kiara") < _pos(
-        postinst, 'python3 -m venv "$VENV_BUILD"'
+        postinst, _VENV_CREATE
     )
     assert _pos(postinst, "systemctl stop kiara-worker-death-watcher.service") < _pos(
-        postinst, 'python3 -m venv "$VENV_BUILD"'
+        postinst, _VENV_CREATE
     )
-    assert _pos(postinst, 'python3 -m venv "$VENV_BUILD"') < _pos(
+    assert _pos(postinst, _VENV_CREATE) < _pos(
         postinst, 'mv "$VENV_BUILD" "$VENV_FINAL"'
     )
     assert _pos(postinst, "kiara-worker-death-watcher.service; do") < _pos(

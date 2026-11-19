@@ -82,6 +82,8 @@ async def create_datasource(
     ds_enrichment_prompt_id: int | None = None,
     ds_enrichment_backend_id: int | None = None,
     ds_colbert_enabled: bool = False,
+    ds_cad_vector_enabled: bool = True,
+    ds_cad_relational_enabled: bool = True,
 ) -> dict:
     """Erstellt eine neue Datenquelle mit verschluesselten Credentials.
 
@@ -159,6 +161,8 @@ async def create_datasource(
         ds_enrichment_prompt_id=ds_enrichment_prompt_id,
         ds_enrichment_backend_id=ds_enrichment_backend_id,
         ds_colbert_enabled=bool(ds_colbert_enabled),
+        ds_cad_vector_enabled=bool(ds_cad_vector_enabled),
+        ds_cad_relational_enabled=bool(ds_cad_relational_enabled),
     )
 
     from kiara.web.api_utils import safe_refresh

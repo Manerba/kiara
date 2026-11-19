@@ -16,6 +16,11 @@
  * CSP-Stufe 1: Inline-Handler wurden durch `data-table-action`/
  * `data-table-id`/`data-table-page`/`data-table-column` + Document-Level-
  * Event-Delegation ersetzt (analog Sprint-4/5-`data-copy-*`-Delegation).
+ *
+ * Spaltenbreiten: Jede Kopfzelle traegt einen Ziehgriff (`data-table-resize`).
+ * Ziehen setzt pro Tabelle eine eigene runtimeStyle-Regel mit Pixelspuren
+ * (CSP-konform, keine Inline-Styles); die Breiten bleiben pro `config.id` im
+ * localStorage. Doppelklick auf einen Griff stellt das gridTemplate wieder her.
  */
 (function () {
     'use strict';
@@ -38,6 +43,9 @@
 
     const _instances = {};
     let _detailIdSeq = 0;
+    let _colRuleSeq = 0;
+    const COL_MIN_WIDTH = 40;
+    const COL_STORAGE_PREFIX = 'sharedui.table.colwidths.v1:';
 
     class ExpandableTable {
         constructor(config, containerId, options = {}) {
@@ -55,6 +63,8 @@
             this._requestSeq = 0;
             this._rowStableIds = new WeakMap();
             this._stableIdSeq = 0;
+            this._colClass = `u-tbl-cols-${++_colRuleSeq}`;
+            this._colWidths = null;
 
             this.pagination = {
                 enabled: config.pagination?.enabled || false,
@@ -73,6 +83,7 @@
             };
 
             this.init();
+            this._restoreColumnWidths();
 
             if (this.config && this.config.id) {
                 if (_instances[this.config.id] && _instances[this.config.id] !== this
@@ -91,6 +102,7 @@
             if (this.config && this.config.id && _instances[this.config.id] === this) {
                 delete _instances[this.config.id];
             }
+            this._removeColumnRules();
             this.data = [];
             this.filteredData = [];
         }
@@ -326,7 +338,7 @@
             }
             let html = '';
             if (this.config.showHeader) html += this.renderHeader();
-            html += '<div class="table-body">';
+            html += `<div class="table-body ${this._colWidths ? this._colClass + '-w' : ''}">`;
             this.filteredData.forEach((row, index) => { html += this.renderRow(row, index); });
             html += '</div>';
             if (this.pagination.enabled) html += this.renderPagination();
@@ -373,18 +385,23 @@
         renderHeader() {
             const tableId = SharedUi.runtime.escapeAttr(this.config.id);
             const gridCls = this._gridTemplateClass();
-            let html = `<div class="table-header ${gridCls}">`;
+            const colCls = this._colWidths ? `${this._colClass} ${this._colClass}-w` : '';
+            let html = `<div class="table-header ${gridCls} ${colCls}">`;
             if (this.config.expandable) html += '<span class="header-cell header-expand"></span>';
-            this.config.columns.forEach(col => {
+            const offset = this.config.expandable ? 1 : 0;
+            this.config.columns.forEach((col, i) => {
                 const sortIcon = this.getSortIcon(col.field);
                 const labelHtml = col.rawLabel ? col.label : SharedUi.runtime.escapeHtml(col.label);
+                const handle = `<span class="col-resize-handle" data-table-resize="${i + offset}" `
+                     + `data-table-id="${tableId}" role="separator" aria-orientation="vertical" `
+                     + `title="Spaltenbreite ziehen, Doppelklick setzt zurueck"></span>`;
                 if (col.sortable) {
                     const field = SharedUi.runtime.escapeAttr(col.field);
                     html += `<button type="button" class="header-cell sortable" `
                          + `data-table-action="sortBy" data-table-id="${tableId}" data-table-column="${field}">`
-                         + `${labelHtml} ${sortIcon}</button>`;
+                         + `<span class="header-label">${labelHtml} ${sortIcon}</span>${handle}</button>`;
                 } else {
-                    html += `<span class="header-cell">${labelHtml}</span>`;
+                    html += `<span class="header-cell"><span class="header-label">${labelHtml}</span>${handle}</span>`;
                 }
             });
             html += '</div>';
@@ -409,7 +426,7 @@
             // Stabile ID pro Row (nicht ++_detailIdSeq) — sonst wechselt aria-controls bei jedem Re-Render
             const detailId = `tbl-detail-${this.config.id}-${safeRowId}`;
             const safeDetailId = SharedUi.runtime.escapeAttr(detailId);
-            const gridCls = this._gridTemplateClass();
+            const gridCls = `${this._gridTemplateClass()} ${this._colWidths ? this._colClass : ''}`;
             let html = `<div class="table-row-wrapper" data-row-id="${safeRowId}" data-table-id="${tableId}">`;
             const cursorClass = this.config.expandable ? 'clickable' : '';
             if (this.config.expandable) {
@@ -591,6 +608,105 @@
             detail.addEventListener('transitionend', expandHandler);
         }
 
+        // ── Spaltenbreiten ───────────────────────────────────────────
+        _trackCount() {
+            return this.config.columns.length + (this.config.expandable ? 1 : 0);
+        }
+
+        _storageKey() {
+            return this.config && this.config.id ? COL_STORAGE_PREFIX + this.config.id : null;
+        }
+
+        _restoreColumnWidths() {
+            const key = this._storageKey();
+            if (!key) return;
+            let widths = null;
+            try { widths = JSON.parse(window.localStorage.getItem(key) || 'null'); } catch (_) { widths = null; }
+            // Geaenderte Spaltenzahl oder ungueltige Werte: Standardlayout behalten.
+            if (!Array.isArray(widths) || widths.length !== this._trackCount()
+                    || !widths.every(w => Number.isFinite(w) && w > 0)) return;
+            this._colWidths = widths;
+            this._applyColumnRules();
+        }
+
+        _applyColumnRules() {
+            const rs = window.SharedUi && window.SharedUi.runtimeStyle;
+            if (!rs || !this._colWidths) return;
+            const cls = this._colClass;
+            // Doppelte Klasse: schlaegt die spaeter angelegte gridTemplate-Klasse.
+            // Letzte Spur 1fr-Rest fuellt die Breite, wenn die Summe schmaler ist.
+            rs.setRule(`.${cls}.${cls}`, {
+                gridTemplateColumns: this._colWidths.map(w => `${Math.round(w)}px`).join(' ') + ' minmax(0, 1fr)'
+            });
+            // Breitere Tabellen scrollen im table-container statt in den Zeilen abgeschnitten zu werden.
+            const gap = 8, padding = 24, border = 2;
+            const total = this._colWidths.reduce((a, w) => a + Math.round(w), 0) + gap * this._colWidths.length + padding + border;
+            rs.setRule(`.${cls}-w`, { minWidth: `${total}px` });
+        }
+
+        _removeColumnRules() {
+            const rs = window.SharedUi && window.SharedUi.runtimeStyle;
+            if (!rs) return;
+            rs.removeRule(`.${this._colClass}.${this._colClass}`);
+            rs.removeRule(`.${this._colClass}-w`);
+        }
+
+        _setColumnClasses(container, active) {
+            if (!container) return;
+            const cls = this._colClass;
+            container.querySelectorAll('.table-header, .table-row').forEach(el => el.classList.toggle(cls, active));
+            container.querySelectorAll('.table-header, .table-body').forEach(el => el.classList.toggle(`${cls}-w`, active));
+        }
+
+        startColumnResize(handle, ev) {
+            const header = handle.closest('.table-header');
+            const container = document.getElementById(this.containerId);
+            const index = parseInt(handle.getAttribute('data-table-resize'), 10);
+            if (!header || !container || !Number.isFinite(index)) return;
+            const cells = Array.from(header.children).filter(el => el.classList.contains('header-cell'));
+            if (cells.length !== this._trackCount() || index < 0 || index >= cells.length) return;
+            // Ausgangsbreiten messen: auch fr/minmax-Spuren werden so zu festen Pixeln.
+            this._colWidths = cells.map(el => el.getBoundingClientRect().width);
+            this._applyColumnRules();
+            this._setColumnClasses(container, true);
+            const startX = ev.clientX;
+            const startWidth = this._colWidths[index];
+            document.body.classList.add('table-col-resizing');
+            handle.classList.add('active');
+            if (handle.setPointerCapture && ev.pointerId != null) {
+                try { handle.setPointerCapture(ev.pointerId); } catch (_) { /* ignore */ }
+            }
+            const move = (e) => {
+                this._colWidths[index] = Math.max(COL_MIN_WIDTH, startWidth + (e.clientX - startX));
+                this._applyColumnRules();
+            };
+            const end = () => {
+                handle.removeEventListener('pointermove', move);
+                handle.removeEventListener('pointerup', end);
+                handle.removeEventListener('pointercancel', end);
+                document.body.classList.remove('table-col-resizing');
+                handle.classList.remove('active');
+                const key = this._storageKey();
+                if (key) {
+                    try { window.localStorage.setItem(key, JSON.stringify(this._colWidths.map(w => Math.round(w)))); }
+                    catch (_) { /* Speicher voll/gesperrt: Breite gilt nur fuer diese Sitzung */ }
+                }
+            };
+            handle.addEventListener('pointermove', move);
+            handle.addEventListener('pointerup', end);
+            handle.addEventListener('pointercancel', end);
+        }
+
+        resetColumnWidths() {
+            const key = this._storageKey();
+            if (key) {
+                try { window.localStorage.removeItem(key); } catch (_) { /* ignore */ }
+            }
+            this._colWidths = null;
+            this._setColumnClasses(document.getElementById(this.containerId), false);
+            this._removeColumnRules();
+        }
+
         getSortIcon(field) {
             if (this.sortColumn !== field) return '<span class="sort-icon" aria-hidden="true">\u21C5</span>';
             return this.sortDirection === 'asc'
@@ -739,7 +855,31 @@
         }
     }
 
+    // Spaltenbreite: Ziehgriff in der Kopfzelle. Der Klick danach darf nicht sortieren.
+    document.addEventListener('pointerdown', function (ev) {
+        const handle = ev.target.closest('[data-table-resize]');
+        if (!handle || ev.button !== 0) return;
+        const instance = _instances[handle.getAttribute('data-table-id')];
+        if (!instance) return;
+        ev.preventDefault();
+        ev.stopPropagation();
+        instance.startColumnResize(handle, ev);
+    });
+
+    document.addEventListener('dblclick', function (ev) {
+        const handle = ev.target.closest('[data-table-resize]');
+        if (!handle) return;
+        const instance = _instances[handle.getAttribute('data-table-id')];
+        if (!instance) return;
+        ev.preventDefault();
+        instance.resetColumnWidths();
+    });
+
     document.addEventListener('click', function (ev) {
+        if (ev.target.closest('[data-table-resize]')) {
+            ev.preventDefault();
+            return;
+        }
         const actionEl = ev.target.closest('[data-table-action]');
         if (!actionEl) return;
         const action = actionEl.getAttribute('data-table-action');

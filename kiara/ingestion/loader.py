@@ -12,7 +12,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from kiara_document_loaders.content_detect import detect_file_format
+
 from kiara.config import DEFAULT_TIMEOUTS
+from kiara.ingestion.ddu_client import is_infrastructure_error
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +46,7 @@ from kiara_document_loaders.general import (  # noqa: F401
     _load_pdf,
     _load_plaintext,
     _load_pptx,
+    _load_xls,
     _load_xlsx,
 )
 from kiara_document_loaders.vision import (  # noqa: F401
@@ -109,13 +113,14 @@ def _sanitize_text(text: str, source: str, parser: str) -> str | None:
 
 
 def _load_with_docling(
-    path: str, ddu_backends: list[dict] | None = None
+    path: str, ddu_backends: list[dict] | None = None, *, metadata: dict | None = None
 ) -> tuple[str | None, str, str]:
     """Load document using remote Docling-DDU backends with failover.
 
     Args:
         path: Dateipfad.
         ddu_backends: Liste von Backend-Dicts (sortiert nach Prioritaet).
+        metadata: Erhaelt bei Fehlschlag den konkreten Grund fuer das Dateilog.
 
     Returns:
         Tuple (markdown_text, remote_error, source).
@@ -129,6 +134,7 @@ def _load_with_docling(
         return None, "", ""
 
     first_remote_error = ""
+    first_remote_detail = ""
     last_error = ""
 
     for backend in ddu_backends:
@@ -141,6 +147,7 @@ def _load_with_docling(
             continue
 
         from kiara.ingestion.ddu_client import convert_document
+        from kiara.shared.constants import DDU_IMAGE_MAX_PIXELS, DDU_IMAGE_MIN_SIDE
 
         result = convert_document(
             path,
@@ -150,12 +157,24 @@ def _load_with_docling(
             ocr_lang=backend.get("ocr_lang", ["de", "en"]),
             timeout=backend.get("timeout", DEFAULT_TIMEOUTS["ddu_convert"]),
             concurrency_limit=backend.get("concurrency_limit"),
+            image_min_side=backend.get("image_min_side", DDU_IMAGE_MIN_SIDE),
+            image_max_pixels=backend.get("image_max_pixels", DDU_IMAGE_MAX_PIXELS),
         )
         if result.content is not None:
             return result.content, "", "docling-remote"
 
         if not first_remote_error:
             first_remote_error = result.error
+            first_remote_detail = result.detail
+
+        if not is_infrastructure_error(result.error):
+            if metadata is not None:
+                if result.error == "image_too_small":
+                    metadata["skip_reason"] = result.detail
+                else:
+                    metadata["ddu_error_detail"] = result.detail
+            # Derselbe Inhalt wird auf dem naechsten Backend nicht repariert.
+            return None, "" if result.error == "image_too_small" else result.error, ""
 
         # Timeout: Kein Remote-Failover. Der Standard-Loader darf unten
         # trotzdem versuchen, verwertbaren Text aus der Datei zu holen.
@@ -178,6 +197,8 @@ def _load_with_docling(
         continue
 
     # Alle Backends erschoepft
+    if metadata is not None and first_remote_detail:
+        metadata["ddu_error_detail"] = first_remote_detail
     return None, first_remote_error or last_error, ""
 
 
@@ -192,6 +213,7 @@ def load_file(
     ddu_backends: list[dict] | None = None,
     *,
     mail_archive: dict | None = None,
+    ddu_ocr_images: bool = True,
 ) -> dict[str, Any] | None:
     """Load a file and return its text content with metadata.
 
@@ -204,7 +226,8 @@ def load_file(
         Dict with 'text' and 'metadata' keys, or None if loading fails.
     """
     path = Path(file_path)
-    ext = path.suffix.lower()
+    source_ext = path.suffix.lower()
+    ext = source_ext
     try:
         stat = path.stat()
     except OSError as exc:
@@ -216,27 +239,95 @@ def load_file(
         "directory": str(path.parent),
         "filename": path.name,
         "file_type": ext,
+        "source_extension": source_ext,
         "modified": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
         "size_bytes": stat.st_size,
     }
 
+    if ext == ".pkg":
+        from kiara.cad.adapter import document, load_pkg
+
+        return document(load_pkg(file_path), metadata)
+
+    try:
+        detected = detect_file_format(file_path)
+    except Exception as exc:
+        metadata.update(
+            parser="format-detection", load_error=f"Formaterkennung fehlgeschlagen: {exc}"
+        )
+        return {"text": "", "metadata": metadata}
+    ext = detected.extension
+    metadata.update(file_type=ext, detected_format=ext, mime_type=detected.mime_type)
+    if detected.encoding:
+        metadata["encoding"] = detected.encoding
+    aliases = {".jpeg": ".jpg", ".tif": ".tiff", ".htm": ".html"}
+    if aliases.get(source_ext, source_ext) != ext:
+        metadata["format_mismatch"] = True
+        logger.info(
+            "Dateiformat-Abweichung fuer %s: Endung %s, Inhalt %s", file_path, source_ext, ext
+        )
+    if ext in {".doc", ".ppt", ".ods", ".odp", ".ole", ".zip", ".rtf", ".svg", ".encrypted-office"}:
+        reason = (
+            "Verschluesseltes Office-Dokument; ohne Kennwort nicht lesbar"
+            if ext == ".encrypted-office"
+            else f"Nicht unterstuetzter Inhalt {ext.lstrip('.').upper()}"
+        )
+        metadata.update(
+            parser="format-detection",
+            skip_category="unsupported_format",
+            skip_reason=f"{reason} (Endung {source_ext or 'ohne'})",
+        )
+        return {"text": "", "metadata": metadata}
+    if ext == ".binary":
+        metadata.update(
+            parser="format-detection",
+            load_error=f"Binaeres Dateiformat nicht erkennbar (Endung {source_ext or 'ohne'})",
+        )
+        return {"text": "", "metadata": metadata}
+    if ext in IMAGE_FORMATS and not ddu_ocr_images:
+        ddu_enabled = False
+
+    # Hausaenderung 02.11.2026: vor dem DDU-Zweig belegen; der Standard-Pfad
+    # liest ddu_error im except-Zweig auch fuer Formate ohne Docling (UnboundLocalError).
+    ddu_error = ""
+
     # DDU-Pfad: Docling fuer layout-aware Extraktion
     if ddu_enabled and ddu_backends and ext in _DOCLING_FORMATS:
         text = None
-        ddu_error = ""
         ddu_source = ""
         try:
-            text, ddu_error, ddu_source = _load_with_docling(file_path, ddu_backends=ddu_backends)
+            text, ddu_error, ddu_source = _load_with_docling(
+                file_path, ddu_backends=ddu_backends, metadata=metadata
+            )
             if ddu_source:
                 metadata["parser"] = ddu_source
         except Exception as exc:
-            logger.warning("Docling failed for %s, falling back: %s", file_path, exc)
+            logger.warning("Docling failed for %s: %s", file_path, exc)
             text = None
+            ddu_error = "parser_error"
+            metadata["ddu_error_detail"] = str(exc)
 
         # Fehlerinfo fuer Stats-Tracking in Pipeline
         # remote_error wird auch bei erfolgreichem Fallback gesetzt
         if ddu_error:
             metadata["ddu_error"] = ddu_error
+
+        if metadata.get("skip_reason"):
+            metadata.update(parser="image-preflight", no_content=True)
+            return {"text": "", "metadata": metadata}
+
+        # Hausaenderung 18.11.2026: Ein endgueltiger Docling-Dokumentfehler sagt
+        # nichts ueber pypdf/python-docx aus (36 Plaene in DS 1 las pypdf, Docling
+        # nicht). Der Standard-Loader unten versucht es; scheitert auch er, nennt
+        # das Dateilog beide Ursachen. Nur Bilder haben keinen Standard-Loader.
+        # Client-/Anfragefehler (parser_error, request_error) bleiben Fehler ohne Fallback.
+        if (
+            ddu_error
+            and not is_infrastructure_error(ddu_error)
+            and (ddu_error != "document_error" or ext in _IMAGE_ONLY_FORMATS)
+        ):
+            metadata.setdefault("parser", "docling-remote")
+            return {"text": "", "metadata": metadata}
 
         if text and text.strip():
             text = _sanitize_text(text, file_path, metadata.get("parser", "docling"))
@@ -274,7 +365,7 @@ def load_file(
             parser_name = metadata["parser"]
         else:
             text = loader(file_path)
-        if ext == ".txt" and text is not None:
+        if source_ext == ".txt" and ext == ".txt" and text is not None:
             from kiara.config import get_mail_archive_config, load_config
             from kiara.ingestion.mail_archive import read_mail_metadata
 
@@ -285,11 +376,14 @@ def load_file(
             parser_name = metadata.get("parser", parser_name)
     except Exception as exc:
         logger.warning("Failed to load %s: %s", file_path, exc)
-        if ddu_enabled and ddu_error in ("timeout", "connection", "http_error"):
+        metadata.update(
+            parser=parser_name,
+            load_error=f"{ext.lstrip('.').upper()}-Loader: {type(exc).__name__}: {exc}",
+        )
+        if ddu_error:
             metadata["ddu_error"] = ddu_error
             metadata["parser_fallback"] = True
-            return {"text": "", "metadata": metadata}
-        return None
+        return {"text": "", "metadata": metadata}
 
     if text is None:
         # Loader konnte die Datei nicht verarbeiten (z.B. fehlende Abhaengigkeit)
@@ -318,6 +412,7 @@ _LOADERS = {
     ".docx": _load_docx,
     ".pdf": _load_pdf,
     ".xlsx": _load_xlsx,
+    ".xls": _load_xls,
     ".xlsm": _load_xlsx,
     ".odt": _load_odt,
     ".pptx": _load_pptx,

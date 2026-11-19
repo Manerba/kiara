@@ -34,6 +34,8 @@ _ACCEPT_ALL_BLOCKLIST = ACCEPT_ALL_BLOCKLIST_DEFAULT
 _INTERNAL_DATASOURCE_FILES = frozenset(
     {
         ".scan_done",
+        ".scan_folder_errors.json",
+        ".scan_folder_errors.json.tmp",
         ".uid_registry.json",
         ".uid_registry.json.tmp",
     }
